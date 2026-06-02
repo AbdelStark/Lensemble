@@ -23,6 +23,7 @@ EXPECTED_CODES = {
     "PROVENANCE_FAILED": "provenance_failed",
     "COMMITMENT_MISMATCH": "commitment_mismatch",
     "MERKLE_VERIFY_FAILED": "merkle_verify_failed",
+    "ARTIFACT_INVALID": "artifact_invalid",
     "SCHEMA_VERSION_MISMATCH": "schema_version_mismatch",
     "CHECKPOINT_INTEGRITY": "checkpoint_integrity",
     "ROUND_FAILED": "round_failed",
@@ -76,7 +77,9 @@ def test_all_errors_subclass_base() -> None:
 
 def test_leaves_subclass_category_parent() -> None:
     for leaf, parent in CATEGORY.items():
-        assert issubclass(getattr(E, leaf), getattr(E, parent)), f"{leaf} not under {parent}"
+        assert issubclass(getattr(E, leaf), getattr(E, parent)), (
+            f"{leaf} not under {parent}"
+        )
 
 
 def test_construction_requires_code_and_remediation() -> None:
