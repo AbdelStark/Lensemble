@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from .action_head import build_action_head
 from .encoder import Encoder, build_encoder, load_warmstart, snapshot_reference
-from .objective import Objective
-from .predictor import build_predictor
+from .objective import AnchorTerm, LossTerms, Objective
+from .predictor import Predictor, build_predictor
 from .sigreg import build_sketch, sigreg_statistic
 
 __all__ = [
@@ -14,8 +14,11 @@ __all__ = [
     "load_warmstart",
     "snapshot_reference",
     "build_predictor",
+    "Predictor",
     "build_action_head",
     "Objective",
+    "LossTerms",
+    "AnchorTerm",
     "build_sketch",
     "sigreg_statistic",
 ]
