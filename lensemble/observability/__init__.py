@@ -15,10 +15,16 @@ from lensemble.observability.logging import (
     parse_log_record,
 )
 from lensemble.observability.metrics import (
+    FRAME_DRIFT_RECORD_SCHEMA_VERSION,
     METRIC_SCHEMA_VERSION,
+    FrameDriftRecord,
     MetricSample,
+    PairAngle,
+    PairResidual,
     canonical_unit,
+    emit_diagnostic,
     emit_metric,
+    parse_frame_drift_record,
     parse_metric_sample,
 )
 from lensemble.observability.redaction import redact, redact_record
@@ -37,4 +43,10 @@ __all__ = [
     "parse_metric_sample",
     "canonical_unit",
     "METRIC_SCHEMA_VERSION",
+    "FrameDriftRecord",
+    "PairAngle",
+    "PairResidual",
+    "emit_diagnostic",
+    "parse_frame_drift_record",
+    "FRAME_DRIFT_RECORD_SCHEMA_VERSION",
 ]
