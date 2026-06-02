@@ -6,6 +6,23 @@ passes before a sink write. Structured logging and the metric taxonomy land with
 
 from __future__ import annotations
 
+from lensemble.observability.logging import (
+    LOG_SCHEMA_VERSION,
+    JsonFormatter,
+    LogLevel,
+    LogRecord,
+    emit_log,
+    parse_log_record,
+)
 from lensemble.observability.redaction import redact, redact_record
 
-__all__ = ["redact", "redact_record"]
+__all__ = [
+    "redact",
+    "redact_record",
+    "LogRecord",
+    "LogLevel",
+    "emit_log",
+    "parse_log_record",
+    "JsonFormatter",
+    "LOG_SCHEMA_VERSION",
+]
