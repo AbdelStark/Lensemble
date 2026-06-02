@@ -9,7 +9,6 @@ import pytest
 from lensemble.config import LensembleConfig, load_config, validate_config
 from lensemble.errors import ConfigError, LensembleErrorCode
 
-
 # --- T1: load, freeze, resolve, override ---
 
 

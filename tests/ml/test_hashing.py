@@ -6,6 +6,7 @@ import hashlib
 import json
 import pickle
 from pathlib import Path
+from typing import Any
 
 import pytest
 import torch
@@ -40,7 +41,7 @@ def _fields(round_index: int = 0) -> StructuralFields:
     )
 
 
-def _save(d: Path, w: dict[str, torch.Tensor], **kw: object) -> str:
+def _save(d: Path, w: dict[str, torch.Tensor], **kw: Any) -> str:
     return save_checkpoint(
         d,
         w,

@@ -1,4 +1,5 @@
 """lensemble.provenance.ledger — see docs/rfcs/RFC-0014. Stub scaffolded by #2."""
+
 from __future__ import annotations
 
 

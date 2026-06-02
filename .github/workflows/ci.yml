@@ -1,0 +1,83 @@
+# Blocking CI gates for `lensemble` (docs/spec/07-testing-strategy.md §8). Every push and pull
+# request runs the ordered, fail-fast gate below on a CPU runner: lint, type-check, the CPU test
+# suite, and the coverage threshold. No model/dataset/probe is downloaded and no GPU is used — a GPU
+# is never required for a blocking gate (07 §8). The bitwise-determinism gate (#68), the docs
+# link-check (#70), and the performance smoke (#69) are separate jobs wired on top of this pipeline.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same ref cancels the in-flight run; main is never cancelled.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    name: gates (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false # report 3.11 and 3.12 independently; one red version still blocks merge
+      matrix:
+        python-version: ["3.11", "3.12"]
+    env:
+      # Provision the project venv that `[tool.pyright].venv` points at, so the import graph pyright
+      # resolves in CI is identical to a contributor's local `.venv`.
+      VIRTUAL_ENV: ${{ github.workspace }}/.venv
+      HYPOTHESIS_PROFILE: lensemble # fixed profile (deadline off, derandomized) — also set in conftest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: pyproject.toml
+
+      - name: Create the project venv
+        run: |
+          uv venv .venv --python ${{ matrix.python-version }}
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Install torch (CPU wheel — no CUDA on a blocking gate)
+        run: uv pip install "torch>=2.4,<3" --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install lensemble + dev tools
+        run: uv pip install -e ".[dev]"
+
+      # --- Gate 1: lint (07 §8.1) — zero findings ---
+      - name: Lint — ruff check
+        run: ruff check .
+      - name: Lint — ruff format --check
+        run: ruff format --check .
+
+      # --- Gate 2: type-check (07 §8.2) — zero errors on lensemble/ and tests/ ---
+      - name: Type-check — pyright
+        run: pyright
+
+      # --- Gate 3: unit + property on CPU (07 §8.3); coverage is accumulated across gates 3–4 ---
+      - name: Test — unit + property
+        run: coverage run -m pytest tests/unit tests/property
+
+      # --- Gate 4: integration + ml + e2e + regression on CPU (07 §8.4). `tests/regression` is the
+      #     sixth pyramid layer (tests/README.md); §8 lists it in the pyramid but not in a gate, so it
+      #     is folded in here rather than left unrun. ---
+      - name: Test — integration + ml + e2e + regression
+        run: coverage run --append -m pytest tests/integration tests/ml tests/e2e tests/regression
+
+      # --- Gate 6: coverage threshold (07 §8.6). Overall ≥ 85%, then 100% on the four
+      #     security-critical modules (residency, secure-agg reveal, provenance commit, DP). ---
+      - name: Coverage — overall ≥ 85%
+        run: coverage report --fail-under=85
+      - name: Coverage — security-critical modules == 100%
+        run: |
+          coverage report \
+            --include='*/lensemble/data/residency.py,*/lensemble/aggregation/secure_agg.py,*/lensemble/provenance/commit.py,*/lensemble/privacy/dp.py' \
+            --fail-under=100

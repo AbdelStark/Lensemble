@@ -1,5 +1,7 @@
 """lensemble.gauge.procrustes — see docs/rfcs/RFC-0002. Stub scaffolded by #2."""
+
 from __future__ import annotations
+
 from typing import Any
 
 
