@@ -9,12 +9,8 @@ from lensemble.data import guard_egress
 from lensemble.errors import ResidencyViolation
 from lensemble.model import build_sketch, sigreg_statistic
 
-# Tolerances (LeJEPA-scale defaults). #65 hoists these to tests/conftest.py.
-SIGREG_NULL_TOL = 2e-4
-SIGREG_SIGNAL_FLOOR = 5e-4
 
-
-def test_sigreg_statistic_against_known_samples() -> None:
+def test_sigreg_statistic_against_known_samples(tol: object) -> None:
     torch.manual_seed(0)
     sketch = build_sketch(seed=123, d=8, sketch_dim=64)
     normal = torch.randn(8192, 8)
@@ -23,8 +19,8 @@ def test_sigreg_statistic_against_known_samples() -> None:
     )  # +-1: unit variance, strongly non-normal
     null = sigreg_statistic(normal, sketch)
     signal = sigreg_statistic(two_point, sketch)
-    assert float(null) < SIGREG_NULL_TOL, float(null)
-    assert float(signal) > SIGREG_SIGNAL_FLOOR, float(signal)
+    assert float(null) < tol.SIGREG_NULL_TOL, float(null)  # type: ignore[attr-defined]
+    assert float(signal) > tol.SIGREG_SIGNAL_FLOOR, float(signal)  # type: ignore[attr-defined]
     assert null.dtype == torch.float32 and null.ndim == 0
 
 
