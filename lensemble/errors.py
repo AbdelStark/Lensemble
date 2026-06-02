@@ -70,6 +70,7 @@ class LensembleErrorCode(str, Enum):
     COMMITMENT_MISMATCH = "commitment_mismatch"  # security-critical
     MERKLE_VERIFY_FAILED = "merkle_verify_failed"
     # artifacts
+    ARTIFACT_INVALID = "artifact_invalid"
     SCHEMA_VERSION_MISMATCH = "schema_version_mismatch"
     CHECKPOINT_INTEGRITY = "checkpoint_integrity"
     # round lifecycle
@@ -87,7 +88,9 @@ class LensembleError(Exception):
     code: LensembleErrorCode
     remediation: str
 
-    def __init__(self, message: str, *, code: LensembleErrorCode, remediation: str) -> None:
+    def __init__(
+        self, message: str, *, code: LensembleErrorCode, remediation: str
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.remediation = remediation
