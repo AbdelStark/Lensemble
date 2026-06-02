@@ -19,6 +19,10 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `lensemble.eval`: the evaluation metric bodies (RFC-0005 §3-4) — `success_rate`, `planning_cost`,
+  `effective_dim` (the participation-ratio collapse guard), `linear_probe_accuracy`, `comm_bytes`, and
+  `quant_ratio`. Each carries a documented unit and an in-range contract (an out-of-range value raises
+  `EvaluationError`); consumed by the eval harness (#52).
 - `lensemble.observability`: the frame-drift diagnostic emission contract (RFC-0015 §3) —
   `FrameDriftRecord` / `PairAngle` / `PairResidual`, `emit_diagnostic`, and `parse_frame_drift_record`.
   One `record_kind="frame_drift"` JSONL record per round, byte-stable (repr-float canonicalization),

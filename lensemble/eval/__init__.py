@@ -3,6 +3,23 @@
 from __future__ import annotations
 
 from .harness import evaluate
+from .metrics import (
+    comm_bytes,
+    effective_dim,
+    linear_probe_accuracy,
+    planning_cost,
+    quant_ratio,
+    success_rate,
+)
 from .mpc import Planner
 
-__all__ = ["evaluate", "Planner"]
+__all__ = [
+    "evaluate",
+    "Planner",
+    "success_rate",
+    "planning_cost",
+    "effective_dim",
+    "linear_probe_accuracy",
+    "comm_bytes",
+    "quant_ratio",
+]
