@@ -13,10 +13,18 @@ from .metrics import (
     success_rate,
 )
 from .mpc import Planner
+from .report import EVAL_REPORT_SCHEMA_VERSION, EvalReport, parse_eval_report
+from .world import EvalWorld, register_env, resolve_env
 
 __all__ = [
     "evaluate",
     "Planner",
+    "EvalReport",
+    "EVAL_REPORT_SCHEMA_VERSION",
+    "parse_eval_report",
+    "EvalWorld",
+    "register_env",
+    "resolve_env",
     "success_rate",
     "planning_cost",
     "effective_dim",

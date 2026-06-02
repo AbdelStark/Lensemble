@@ -19,6 +19,17 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `lensemble.eval`: the evaluation harness (RFC-0005 §3) — `evaluate(checkpoint, env_id, *, cfg) ->
+  EvalReport` runs seed-pinned latent-MPC episodes on a held-out env and the `EvalReport` reporting type
+  (03 §13.1; frozen, `extra="forbid"`, `parse_eval_report` with a `schema_version`-first
+  `SchemaVersionMismatch` gate; out-of-range fields raise `EvaluationError`). The report carries only
+  scalars / hashes / counts — no tensor reaches the sink (`INV-RESIDENCY`); it loads a hash-verified
+  checkpoint read-only (`INV-CHECKPOINT-HASH`) and binds itself to an eval-mode `RunManifest` hash. The
+  eval-world seam — the `EvalWorld` protocol plus `register_env` / `resolve_env` — resolves `env_id` from
+  config rather than a hard-coded list; the real `stable-worldmodel` suite is deferred to #96 (a
+  `stable-worldmodel://` id fails closed with remediation until then). `build_action_head` is implemented
+  (continuous MLP / discrete per-dim embedding head, `INV-ACTIONHEAD-LOCAL`), filling the orphaned
+  substrate of the closed issue #8 that the harness requires. (#52)
 - `lensemble.aggregation`: the default secure-aggregation backend — `PairwiseMaskAggregator` (Bonawitz-style
   pairwise additive masking with self-masks, RFC-0011 §2), `DropoutRecovery` + Shamir threshold secret
   sharing for dropout robustness (RFC-0011 §4), and `build_masked_update`. Masks cancel over the integer
