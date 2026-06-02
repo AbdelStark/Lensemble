@@ -84,6 +84,9 @@ class RunManifest(BaseModel):
     ]  # python/torch/CUDA/OS/seed_derivation/determinism + config_hash_algo
     dependency_versions: dict[str, str]
     probe_hash: str | None = None  # pinned probe content hash (INV-PROBE-PIN)
+    probe_version: int | None = (
+        None  # the re-anchoring epoch of the pinned probe (RFC-0004 §3.1)
+    )
     dataset_roots: dict[str, str] = Field(
         default_factory=dict
     )  # participant -> R_c (RFC-0014)
@@ -173,13 +176,16 @@ def build_manifest(
     *,
     run_mode: str | None = None,
     probe_hash: str | None = None,
+    probe_version: int | None = None,
     dataset_roots: dict[str, str] | None = None,
     created_at: datetime | None = None,
 ) -> RunManifest:
     """Generate a :class:`RunManifest` from a resolved config (never hand-authored; RFC-0009 6).
 
     Records the full seed lineage, source/env/dependency fingerprint, and the canonical ``config_hash``.
-    ``run_mode`` defaults to ``cfg.run_mode``; ``created_at`` defaults to the current UTC time.
+    ``run_mode`` defaults to ``cfg.run_mode``; ``created_at`` defaults to the current UTC time. The pinned
+    probe is recorded by both ``probe_hash`` and ``probe_version`` (its re-anchoring epoch, RFC-0004 §3.1)
+    so a run is reproducible against the exact probe it used.
     """
     resolved = _json_native(_config_to_dict(cfg))
     root_seed = cfg.determinism.root_seed
@@ -195,6 +201,7 @@ def build_manifest(
         env=_env(cfg),
         dependency_versions=_dependency_versions(),
         probe_hash=probe_hash,
+        probe_version=probe_version,
         dataset_roots=dict(dataset_roots or {}),
         wmcp_version=cfg.model.wmcp_version,
         run_mode=run_mode or cfg.run_mode,

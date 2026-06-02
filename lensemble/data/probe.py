@@ -87,6 +87,31 @@ def build_probe(
     )
 
 
+def reanchor_probe(
+    previous: PublicProbe,
+    f_ref: "ReferenceEncoder",
+    *,
+    points: Tensor | None = None,
+    landmark_idx: Tensor | None = None,
+) -> PublicProbe:
+    """Re-anchor a probe — a deliberate, recorded, federation-wide event (RFC-0004 §3.1).
+
+    Changing the probe's content (``points`` / ``landmark_idx``) or the reference encoder ``f_ref`` is not
+    a free edit: it redefines the reference frame and forces re-anchoring. In one operation this **bumps**
+    ``probe_version`` (``previous.probe_version + 1``), **recomputes** ``content_hash`` over the
+    (possibly new) ``points + landmark_idx``, and **recomputes** the landmark targets
+    ``t_i = f_ref(p_i)`` against the *current* ``f_ref`` (``INV-PROBE-PIN``). It cannot happen mid-run; a
+    new ``probe_version`` invalidates comparability with runs that used an earlier one and must be
+    recorded in the run manifest. Defaults reuse the previous ``points`` / ``landmark_idx`` so a pure
+    warm-start (``f_ref``) change is expressible.
+    """
+    new_points = previous.points if points is None else points
+    new_idx = previous.landmark_idx if landmark_idx is None else landmark_idx
+    return build_probe(
+        new_points, new_idx, f_ref, probe_version=previous.probe_version + 1
+    )
+
+
 def verify_probe_pin(probe: PublicProbe, broadcast_hash: bytes) -> None:
     """Check the ``RoundOpen`` broadcast probe hash equals the pinned content hash (``INV-PROBE-PIN``).
 

@@ -19,6 +19,9 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `lensemble.data.probe.reanchor_probe`: the probe re-anchoring procedure (RFC-0004 §3.1) — bumps
+  `probe_version`, recomputes `content_hash`, and recomputes landmark targets against the current `f_ref`
+  in one operation. `RunManifest` gains `probe_version` so a run is reproducible against the exact probe.
 - `lensemble.data`: declared data-quality metadata — `DataQualityMetadata` (modality, embodiment id,
   `ActionSpec`, episode count, collection conditions; non-resident) and `validate_join_precondition`, the
   federation-join precondition that validates the `ActionSpec` and gates `wmcp_version` on exact equality
