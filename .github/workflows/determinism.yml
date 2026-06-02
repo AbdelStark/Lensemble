@@ -1,0 +1,55 @@
+# Gate 5 — aggregation determinism (bitwise), the Phase-1 proof-ready requirement (07 §8 gate 5).
+#
+# A dedicated, build-blocking gate that asserts INV-AGG-DETERMINISM: the outer/aggregation step is a
+# pure, bitwise-reproducible function of (committed deltas, round seed, prior global params). It runs
+# the determinism suite — repeated in-process runs and a fresh subprocess agree byte-for-byte
+# (torch.equal AND identical safetensors content hash), a shuffled delta order yields the same result,
+# and an injected non-deterministic reduction raises NonDeterministicAggregation (fail-closed, never a
+# silent average). Wall time is subordinate to determinism (08 §5.1): the aggregation path may not use
+# non-deterministic fast reductions to meet a budget. Tied to RFC-0006 §3 / RFC-0003 §7. CPU only.
+name: determinism
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: determinism-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  bitwise:
+    name: aggregation determinism (bitwise)
+    runs-on: ubuntu-latest
+    env:
+      VIRTUAL_ENV: ${{ github.workspace }}/.venv
+      HYPOTHESIS_PROFILE: lensemble
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: pyproject.toml
+
+      - name: Create the project venv
+        run: |
+          uv venv .venv --python 3.11
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Install torch (CPU wheel — no CUDA on a blocking gate)
+        run: uv pip install "torch>=2.4,<3" --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install lensemble + dev tools
+        run: uv pip install -e ".[dev]"
+
+      # Gate 5: the bitwise-determinism suite. Exact equality, no tolerance (07 §6). A red run here
+      # blocks merge — a non-reproducible aggregation step is a proof-readiness failure, not a flake.
+      - name: Determinism — outer step is bitwise-reproducible
+        run: pytest tests/ml/test_aggregation_determinism.py -q

@@ -52,8 +52,13 @@ implemented (e.g. `provenance.commit` before its issue lands), a contract test p
 failure so the gate stays load-bearing rather than silently satisfied.
 
 Gates wired on top of this pipeline but tracked separately: bitwise-determinism (`INV-AGG-DETERMINISM`),
-docs link-check, and the performance smoke. The non-blocking nightly CUDA suite and the
-x86-64/arm64 cross-platform hash check do not block merges ([07 §8](docs/spec/07-testing-strategy.md#8-ci-gates)).
+docs link-check, and the performance smoke. The bitwise-determinism gate ([07 §8](docs/spec/07-testing-strategy.md#8-ci-gates)
+gate 5) runs in its own workflow ([`.github/workflows/determinism.yml`](.github/workflows/determinism.yml)):
+it executes `tests/ml/test_aggregation_determinism.py` and is **build-blocking and fail-closed** — a
+non-reproducible aggregation step is a Phase-1 proof-readiness failure ([RFC-0006 §3](docs/rfcs/RFC-0006-verifiable-contribution.md)),
+not a flake, so it aborts the round (`NonDeterministicAggregation`) rather than averaging silently. The
+non-blocking nightly CUDA suite and the x86-64/arm64 cross-platform hash check do not block merges
+([07 §8](docs/spec/07-testing-strategy.md#8-ci-gates)).
 
 ## Pull request expectations
 
