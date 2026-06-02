@@ -19,6 +19,11 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `lensemble.artifacts.migrate_header`: the forward-compatible `CheckpointHeader` schema-migration chain
+  and dispatcher (RFC-0010 §7). A reader accepts `schema_version <= SCHEMA_VERSION` via ordered
+  `migrate_vN_to_vN1` steps and fails closed with `SchemaVersionMismatch`
+  (`file_schema_version`/`reader_max_version`) on an unknown/too-new version; wired into the checkpoint
+  load boundary.
 - `lensemble.privacy`: the `(eps, delta)` accountant — the `Accountant` protocol with `RDPAccountant`
   (sampled-Gaussian Rényi-DP) and `PRVAccountant` (exact analytic-Gaussian) backends and `build_accountant`
   (RFC-0012 §3). Self-contained (no opacus dependency); fail-closed `would_exceed`/`step` lifecycle so a

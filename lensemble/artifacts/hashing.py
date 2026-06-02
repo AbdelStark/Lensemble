@@ -32,12 +32,11 @@ from typing import TYPE_CHECKING, Mapping
 
 import torch
 
-from lensemble.artifacts.schema import SCHEMA_VERSION, CheckpointHeader
+from lensemble.artifacts.schema import CheckpointHeader, migrate_header
 from lensemble.errors import (
     ArtifactError,
     CheckpointIntegrityError,
     LensembleErrorCode,
-    SchemaVersionMismatch,
 )
 
 if TYPE_CHECKING:
@@ -128,13 +127,9 @@ def read_header(artifact_dir: Path) -> CheckpointHeader:
             remediation="point at a directory written by save_checkpoint",
         )
     raw = json.loads(path.read_text(encoding="utf-8"))
-    version = raw.get("schema_version")
-    if isinstance(version, int) and version > SCHEMA_VERSION:
-        raise SchemaVersionMismatch(
-            f"header schema_version {version} is newer than this reader ({SCHEMA_VERSION})",
-            code=LensembleErrorCode.SCHEMA_VERSION_MISMATCH,
-            remediation="upgrade lensemble to read this artifact, or re-export at the supported schema",
-        )
+    # Gate the version first: a too-new / unknown version raises SchemaVersionMismatch (a version problem,
+    # distinct from a bytes/field problem); an older known version is migrated up the chain (#33).
+    raw = migrate_header(raw)
     try:
         return CheckpointHeader.model_validate(raw)
     except (

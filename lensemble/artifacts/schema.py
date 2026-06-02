@@ -8,10 +8,16 @@ header fail closed. The canonical data-model definition is 03-data-model 10.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-# Current on-disk header schema version (conventions 10). The migration chain is #33.
+from lensemble.errors import LensembleErrorCode, SchemaVersionMismatch
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+# Current on-disk header schema version (conventions 10).
 SCHEMA_VERSION: int = 1
 
 _HEX64 = set("0123456789abcdef")
@@ -81,3 +87,66 @@ class CheckpointHeader(BaseModel):
         if v is not None and not _is_hex64(v):
             raise ValueError("parent_hash must be None or 64 lowercase hex characters")
         return v
+
+
+# --- the ordered, forward-compatible migration chain (RFC-0010 §7 / 03 §15; #33) ---
+
+# Ordered, append-only chain: `_HEADER_MIGRATIONS[N]` upgrades a schema-version-N header dict to N+1. It
+# is empty at SCHEMA_VERSION == 1 (no prior versions). A reader is forward-compatible: it accepts any
+# `schema_version <= SCHEMA_VERSION` by running the chain, and fails closed on an unknown/too-new version.
+#
+# To bump the schema (e.g. v1 -> v2), in one PR:
+#   1. def migrate_v1_to_v2(header: dict) -> dict: ...    # transform fields; do NOT set schema_version
+#   2. _HEADER_MIGRATIONS[1] = migrate_v1_to_v2
+#   3. SCHEMA_VERSION = 2
+#   4. a round-trip migration test (07 §2.10), and a Keep-a-Changelog `Changed` entry, e.g.:
+#        ### Changed
+#        - `artifacts`: `CheckpointHeader` schema_version 1 -> 2 (<field>); readers migrate v1 on load
+#          (`INV-CHECKPOINT-HASH` unaffected). [area:artifacts]
+_HEADER_MIGRATIONS: dict[int, "Callable[[dict[str, Any]], dict[str, Any]]"] = {}
+
+
+def _schema_mismatch(file_version: object, reader_max: int) -> SchemaVersionMismatch:
+    err = SchemaVersionMismatch(
+        f"checkpoint header schema_version {file_version!r} is unreadable by this reader "
+        f"(supported: 1..{reader_max})",
+        code=LensembleErrorCode.SCHEMA_VERSION_MISMATCH,
+        remediation=f"upgrade lensemble to read this artifact, or re-export at schema_version <= {reader_max}",
+    )
+    err.file_schema_version = file_version  # type: ignore[attr-defined]
+    err.reader_max_version = reader_max  # type: ignore[attr-defined]
+    return err
+
+
+def migrate_header(
+    raw: dict[str, Any],
+    *,
+    target: int = SCHEMA_VERSION,
+    migrations: dict[int, "Callable[[dict[str, Any]], dict[str, Any]]"] | None = None,
+) -> dict[str, Any]:
+    """Bring an older header dict up to ``target`` via the ordered migration chain (RFC-0010 §7).
+
+    Fail-closed: a non-integer / unknown (``< 1``) / too-new (``> target``) version, or a missing chain
+    link, raises :class:`~lensemble.errors.SchemaVersionMismatch` (``file_schema_version`` /
+    ``reader_max_version`` set); the header body is never best-effort parsed. An at-target header passes
+    through unchanged. Returns a header dict at ``target`` (each step bumps ``schema_version``).
+    """
+    chain = _HEADER_MIGRATIONS if migrations is None else migrations
+    version = raw.get("schema_version")
+    if (
+        not isinstance(version, int)
+        or isinstance(version, bool)
+        or version < 1
+        or version > target
+    ):
+        raise _schema_mismatch(version, target)
+    out = dict(raw)
+    current = version
+    while current < target:
+        migrate = chain.get(current)
+        if migrate is None:
+            raise _schema_mismatch(version, target)  # the chain is missing a step
+        out = dict(migrate(out))
+        current += 1
+        out["schema_version"] = current
+    return out
