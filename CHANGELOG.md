@@ -19,6 +19,12 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `lensemble.aggregation`: the default secure-aggregation backend — `PairwiseMaskAggregator` (Bonawitz-style
+  pairwise additive masking with self-masks, RFC-0011 §2), `DropoutRecovery` + Shamir threshold secret
+  sharing for dropout robustness (RFC-0011 §4), and `build_masked_update`. Masks cancel over the integer
+  field (`INV-AGG-DETERMINISM`); each masked update is hiding and the aggregator returns only the sum
+  (`INV-RESIDENCY`); below the threshold it fails closed with no partial sum. The DH key-agreement /
+  transport is the control plane's (#45); a toy prime-field DH stands in for the production X25519.
 - `lensemble.eval`: the evaluation metric bodies (RFC-0005 §3-4) — `success_rate`, `planning_cost`,
   `effective_dim` (the participation-ratio collapse guard), `linear_probe_accuracy`, `comm_bytes`, and
   `quant_ratio`. Each carries a documented unit and an in-range contract (an out-of-range value raises

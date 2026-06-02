@@ -10,6 +10,15 @@ from lensemble.aggregation.determinism import (
     assert_outer_step_deterministic,
     flat_content_hash,
 )
+from lensemble.aggregation.masking import (
+    DropoutRecovery,
+    PairwiseMaskAggregator,
+    build_masked_update,
+    dh_keypair,
+    key_agreement,
+    shamir_reconstruct,
+    shamir_split,
+)
 from lensemble.aggregation.secure_agg import (
     FieldParams,
     MaskedUpdate,
@@ -28,4 +37,11 @@ __all__ = [
     "assert_field_sum_reproducible",
     "assert_outer_step_deterministic",
     "flat_content_hash",
+    "PairwiseMaskAggregator",
+    "DropoutRecovery",
+    "build_masked_update",
+    "dh_keypair",
+    "key_agreement",
+    "shamir_split",
+    "shamir_reconstruct",
 ]
