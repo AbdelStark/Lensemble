@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from .manifest import RunManifest
+from .manifest import (
+    MANIFEST_SCHEMA_VERSION,
+    RunManifest,
+    build_manifest,
+    config_hash,
+    load_manifest,
+    to_json,
+    write_manifest,
+)
 from .schema import (
     DataConfig,
     DeterminismConfig,
@@ -23,6 +31,12 @@ from .seed import SEED_DERIVATION, derive, round_sketch_seed, seed_everything
 __all__ = [
     "LensembleConfig",
     "RunManifest",
+    "MANIFEST_SCHEMA_VERSION",
+    "build_manifest",
+    "config_hash",
+    "to_json",
+    "write_manifest",
+    "load_manifest",
     "load",
     "load_config",
     "validate_config",
