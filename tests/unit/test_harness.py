@@ -20,6 +20,8 @@ _EXPECTED_TOLERANCES = {
     "RTOL_BF16",
     "ATOL_BF16",
     "RTOL_AGG",
+    "RTOL_EFFDIM",
+    "ATOL_EFFDIM",
 }
 
 

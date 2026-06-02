@@ -45,6 +45,10 @@ class Tolerances:
     RTOL_AGG: float = (
         0.0  # aggregation/outer-step path is bitwise-exact (INV-AGG-DETERMINISM)
     )
+    RTOL_EFFDIM: float = (
+        1e-4  # effective-dimension participation ratio (fp32, RFC-0005 4)
+    )
+    ATOL_EFFDIM: float = 1e-5
 
 
 TOLERANCES = Tolerances()
