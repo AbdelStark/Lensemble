@@ -19,6 +19,10 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `lensemble.observability`: the frame-drift diagnostic emission contract (RFC-0015 §3) —
+  `FrameDriftRecord` / `PairAngle` / `PairResidual`, `emit_diagnostic`, and `parse_frame_drift_record`.
+  One `record_kind="frame_drift"` JSONL record per round, byte-stable (repr-float canonicalization),
+  canonical `c < c'` pairing, fail-closed probe/checkpoint pin bindings, routed through the redaction guard.
 - `lensemble.data.probe.reanchor_probe`: the probe re-anchoring procedure (RFC-0004 §3.1) — bumps
   `probe_version`, recomputes `content_hash`, and recomputes landmark targets against the current `f_ref`
   in one operation. `RunManifest` gains `probe_version` so a run is reproducible against the exact probe.
