@@ -1,0 +1,80 @@
+# Documentation site (09 §1 v1.0 hardening; #77). Renders the spec/RFC corpus and the generated API docs.
+# Builds offline: `mkdocs build --strict`. The toc slugify is GitHub-faithful (docs_slug.slugify) so the
+# corpus' GitHub-style cross-references resolve on the rendered site (the same anchors the docs link-check
+# gate validates). The link-check gate (scripts/check_docs_links.py) is the authoritative cross-reference
+# check over docs/ + SPEC.md.
+site_name: Lensemble
+site_description: Federated, end-to-end JEPA world models — trained across sovereign data, verifiable by construction.
+repo_url: https://github.com/AbdelStark/Lensemble
+docs_dir: docs
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - content.code.copy
+
+hooks:
+  - docs_hooks.py
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            show_source: false
+            show_root_heading: true
+            members_order: source
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+      slugify: !!python/name:docs_slug.slugify
+  - pymdownx.superfences
+
+# The corpus' GitHub-style anchors resolve via the slugify above. Links to repo-root files (README.md,
+# SPEC.md) point outside docs_dir — they are repo-level entries, not site pages, so they are not validated
+# as site links. The docs link-check gate validates every intra-corpus reference against GitHub slugs.
+validation:
+  omitted_files: warn
+  links:
+    absolute_links: ignore
+    unrecognized_links: ignore
+    anchors: warn
+
+nav:
+  - Home: index.md
+  - API Reference: reference.md
+  - Roadmap: roadmap/IMPLEMENTATION.md
+  - Specification:
+      - Overview: spec/00-overview.md
+      - Architecture: spec/01-architecture.md
+      - Public API: spec/02-public-api.md
+      - Data Model: spec/03-data-model.md
+      - Error Model: spec/04-error-model.md
+      - Observability: spec/05-observability.md
+      - Security: spec/06-security.md
+      - Testing Strategy: spec/07-testing-strategy.md
+      - Performance Budget: spec/08-performance-budget.md
+      - Release & Versioning: spec/09-release-and-versioning.md
+      - Glossary: spec/10-glossary.md
+      - Conventions: spec/conventions.md
+  - RFCs:
+      - RFC-0001 Architecture: rfcs/RFC-0001-architecture.md
+      - RFC-0002 Gauge & Aggregation: rfcs/RFC-0002-gauge-and-aggregation.md
+      - RFC-0003 Federated Protocol: rfcs/RFC-0003-federated-protocol.md
+      - RFC-0004 Data & Provenance: rfcs/RFC-0004-data-provenance.md
+      - RFC-0005 Evaluation: rfcs/RFC-0005-evaluation.md
+      - RFC-0006 Verifiable Contribution: rfcs/RFC-0006-verifiable-contribution.md
+      - RFC-0007 WMCP Latent Contract: rfcs/RFC-0007-wmcp-latent-contract.md
+      - RFC-0008 Model & Numerics: rfcs/RFC-0008-model-objective-numerics.md
+      - RFC-0009 Configuration: rfcs/RFC-0009-configuration-reproducibility.md
+      - RFC-0010 Artifact Format: rfcs/RFC-0010-artifact-checkpoint-format.md
+      - RFC-0011 Secure Aggregation: rfcs/RFC-0011-secure-aggregation.md
+      - RFC-0012 Differential Privacy: rfcs/RFC-0012-differential-privacy.md
+      - RFC-0013 Coordinator Runtime: rfcs/RFC-0013-coordinator-runtime.md
+      - RFC-0014 Provenance Commitments: rfcs/RFC-0014-provenance-commitments.md
+      - RFC-0015 Observability: rfcs/RFC-0015-observability-diagnostics.md
+      - RFC-0016 Deployment & Vendoring: rfcs/RFC-0016-deployment-vendoring-topology.md

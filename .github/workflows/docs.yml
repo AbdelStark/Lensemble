@@ -31,3 +31,19 @@ jobs:
           python-version: "3.11"
       - name: Docs — intra-corpus link check
         run: python scripts/check_docs_links.py docs/ SPEC.md
+
+  site:
+    name: docs site build (mkdocs --strict)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # mkdocstrings analyzes the source statically; the CPU torch wheel keeps imports resolvable.
+      - name: Install docs deps
+        run: |
+          pip install "torch>=2.4,<3" --index-url https://download.pytorch.org/whl/cpu
+          pip install -e ".[docs]"
+      - name: Build the site (zero warnings)
+        run: mkdocs build --strict
