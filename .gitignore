@@ -1,0 +1,17 @@
+*.pyc
+__pycache__/
+*.egg-info/
+.venv/
+.env
+.DS_Store
+node_modules/
+dist/
+.artifacts/
+.runs/
+target/
+docs/papers/arxiv/
+data/raw/
+
+# Local automation and scratch workspaces
+.agents/harness/
+.tldr/
