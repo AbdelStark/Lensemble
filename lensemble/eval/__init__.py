@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .baselines import BASELINES, gap_recovery_fraction, load_baseline
 from .harness import evaluate
 from .metrics import (
     comm_bytes,
@@ -22,4 +23,7 @@ __all__ = [
     "linear_probe_accuracy",
     "comm_bytes",
     "quant_ratio",
+    "BASELINES",
+    "load_baseline",
+    "gap_recovery_fraction",
 ]

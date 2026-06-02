@@ -1,0 +1,8 @@
+# Naive end-to-end FedAvg — the negative control (RFC-0005 §5). The DiLoCo outer loop with the anchor off
+# (lambda_anc = 0) and no Procrustes backstop, run through the Coordinator. This exhibits the latent-frame
+# collapse / divergence the gauge design fixes (RFC-0002 §2.1).
+run_mode: coordinator
+objective:
+  lambda_anc: 0.0
+data:
+  probe_path: probes/vjepa2-2.0-public.safetensors

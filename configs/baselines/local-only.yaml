@@ -1,0 +1,7 @@
+# Local-only baseline — the lower bound (RFC-0005 §5). One train_local per silo, no federation; the eval
+# runner reports best / mean per the §7 protocol. Config-identical to centralized (no outer loop); the
+# distinction is operational (per-silo runs), not in the config. Shares the public probe with every
+# baseline so the eval is comparable.
+run_mode: train_local
+data:
+  probe_path: probes/vjepa2-2.0-public.safetensors

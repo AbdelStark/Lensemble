@@ -1,0 +1,8 @@
+# Fork A — the reference / safe-degrade baseline (RFC-0002 Fork A fallback). The encoder is frozen at the
+# warm-start and only the predictor g_phi is federated, so the latent gauge cannot drift. Anchored
+# federation run through the Coordinator (the anchor stays on; only the encoder is held fixed).
+run_mode: coordinator
+model:
+  encoder_frozen: true
+data:
+  probe_path: probes/vjepa2-2.0-public.safetensors

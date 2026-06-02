@@ -12,8 +12,10 @@ from dataclasses import asdict
 from lensemble.config import config_hash, load
 
 # SHA-256 over the canonical bytes of the default LensembleConfig (algo sha256-canon-v1).
+# Re-pinned for #54: ModelConfig gained `encoder_frozen: bool = False` (Fork A baseline), an intentional,
+# reviewed schema addition that shifts the default config's canonical encoding.
 _GOLDEN_DEFAULT_CONFIG_HASH = (
-    "28500c2f652e6d892da28432b4702a9464d07173dc66f46d44f724162ad356ae"
+    "d2ad8a4fb7fd0c594c196a36dc84ad8e0a6a9ababd53b97965c2609eb11e99c0"
 )
 
 

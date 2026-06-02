@@ -1,0 +1,7 @@
+# Centralized-pooled baseline — the upper bound (RFC-0005 §5). train_local on pooled data, no outer loop,
+# no federation boundaries; INV-RESIDENCY is enforced only at the dataset-commit / eval boundary. Shares
+# the warm-start, public probe, env suite, seeds, and reporting discipline with every other baseline so
+# the gap-recovery fraction rho is well-defined.
+run_mode: train_local
+data:
+  probe_path: probes/vjepa2-2.0-public.safetensors

@@ -35,6 +35,7 @@ class ModelConfig:
     predictor_depth: int = 12
     predictor_width: int = 1024
     wmcp_version: str = "wmcp-1.0.0"  # gated at federation join (INV-WMCP)
+    encoder_frozen: bool = False  # Fork A (RFC-0002): freeze the encoder at warm-start, federate g_phi only
 
 
 @dataclass(frozen=True)
