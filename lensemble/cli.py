@@ -42,6 +42,7 @@ from lensemble.data.probe import (
     verify_probe_pin,
 )
 from lensemble.errors import ConfigError, LensembleError, LensembleErrorCode
+from lensemble.verify import stark
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -266,15 +267,14 @@ def verify_prove(
 ) -> None:
     """Produce a succinct proof of correct contribution (Phase 2; not available in Phase 1)."""
     with _supervise():
-        _compose(config, overrides)  # still validate config at the boundary
-    typer.echo(
-        "verify prove is a Phase-2 capability and is not built in this release.",
-        err=True,
-    )
-    typer.echo(
-        "remediation: use `verify recompute` for Phase-1 recomputation.", err=True
-    )
-    raise typer.Exit(code=1)
+        cfg = _compose(config, overrides)  # still validate config at the boundary
+    try:
+        stark.prove_round(
+            cfg
+        )  # the Phase-2 seam; raises NotImplementedError in Phase 1
+    except NotImplementedError as exc:
+        typer.echo(f"verify prove: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
 
 
 @app.command("doctor")
