@@ -1,1 +1,12 @@
-"""lensemble.data — see docs/rfcs/RFC-0004. Stub scaffolded by core-package-skeleton (#2)."""
+"""lensemble.data — the per-participant data layer (docs/rfcs/RFC-0004).
+
+Episodes/transitions/windows are residency-bound (``INV-RESIDENCY``); only pseudo-gradients leave a
+boundary. Backend adapters (``lance``/``hdf5``/``lerobot``) and the egress guard land with #22 and #23.
+"""
+
+from __future__ import annotations
+
+from lensemble.data.dataset import EpisodeDataset
+from lensemble.data.episode import Episode, Transition, Window
+
+__all__ = ["Transition", "Episode", "Window", "EpisodeDataset"]
