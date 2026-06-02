@@ -96,6 +96,12 @@ A reference implementation (`lensemble/`, Python; warm-starting V-JEPA 2, wrappi
 [`CONTRIBUTING.md`](CONTRIBUTING.md) covers the dev setup and the blocking CI gates (lint, type-check,
 the CPU test suite, and the coverage thresholds) that must be green before any pull request merges.
 
+## Documentation site
+
+The spec/RFC corpus and the generated API reference render as a browsable site: `pip install -e ".[docs]"`
+then `mkdocs serve` (or `mkdocs build`). The site indexes the [specification sections](docs/spec/00-overview.md)
+and [RFCs](docs/rfcs/RFC-0001-architecture.md); the API reference covers the 1.0-frozen public surface.
+
 ## License
 
 Lensemble splits its license by asset class (09 §7), and every release ships each file:

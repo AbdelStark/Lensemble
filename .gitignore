@@ -16,6 +16,7 @@ coverage.xml
 node_modules/
 dist/
 build/
+site/
 # The large-binary research-artifact release bundle (09 §5.4) is never committed; CI never downloads it.
 release-bundle/
 .artifacts/

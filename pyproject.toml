@@ -55,6 +55,8 @@ dev = [
 ]
 # Phase-2 verifiable layer (Stwo / Circle-STARK prover, out-of-tree, RFC-0006). Declared, stubbed.
 verify = []
+# Documentation site (mkdocs-material) + generated API docs (mkdocstrings) — `mkdocs build` (RFC-0009, #77).
+docs = ["mkdocs>=1.6", "mkdocs-material", "mkdocstrings[python]"]
 
 [project.urls]
 Homepage = "https://github.com/AbdelStark/Lensemble"
