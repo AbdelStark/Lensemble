@@ -19,6 +19,10 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `lensemble.privacy`: the `(eps, delta)` accountant — the `Accountant` protocol with `RDPAccountant`
+  (sampled-Gaussian Rényi-DP) and `PRVAccountant` (exact analytic-Gaussian) backends and `build_accountant`
+  (RFC-0012 §3). Self-contained (no opacus dependency); fail-closed `would_exceed`/`step` lifecycle so a
+  refused round never spends budget; PRV reports `eps` no looser than RDP.
 - `lensemble.federation`: optional int8 pseudo-gradient wire quantization — `quantize_int8`,
   `dequantize_int8`, `int8_roundtrip_l2_bound`, `wire_roundtrip` (RFC-0003 §6), config-gated by
   `federation.quantize_pseudo_gradient` (default off); orthogonal to the gauge and not credited as
