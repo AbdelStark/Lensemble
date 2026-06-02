@@ -6,6 +6,10 @@ The aggregator returns only the plaintext ``sum_c Delta_c`` and never an individ
 
 from __future__ import annotations
 
+from lensemble.aggregation.determinism import (
+    assert_outer_step_deterministic,
+    flat_content_hash,
+)
 from lensemble.aggregation.secure_agg import (
     FieldParams,
     MaskedUpdate,
@@ -22,4 +26,6 @@ __all__ = [
     "encode_delta",
     "assert_no_wrap",
     "assert_field_sum_reproducible",
+    "assert_outer_step_deterministic",
+    "flat_content_hash",
 ]

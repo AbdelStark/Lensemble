@@ -120,3 +120,63 @@ def test_secure_agg_nondeterministic_field_sum_raises() -> None:
     with pytest.raises(NonDeterministicAggregation) as exc:
         assert_field_sum_reproducible(a, b)
     assert exc.value.code == LensembleErrorCode.AGG_NONDETERMINISTIC
+
+
+# --- the aggregation-layer per-outer-step self-check (#61): the callable the coordinator runs ---
+
+
+def _outer_compute() -> torch.Tensor:
+    # A pure recomputation of one outer step: a fresh optimizer each call (velocity not advanced twice).
+    return OuterOptimizer(lr=0.7, momentum=0.9).step(torch.zeros(10), _deltas())
+
+
+def test_aggregation_self_check_returns_verified_result() -> None:
+    from hashlib import sha256
+
+    from safetensors.torch import save
+
+    from lensemble.aggregation import assert_outer_step_deterministic, flat_content_hash
+
+    verified = assert_outer_step_deterministic(_outer_compute, round_index=5)
+    assert torch.equal(verified, _outer_compute())
+    # Identical safetensors content hash across recomputations (issue acceptance criterion).
+    assert (
+        sha256(save({"r": verified})).hexdigest()
+        == sha256(save({"r": _outer_compute()})).hexdigest()
+    )
+    # ...and the fresh-subprocess outer step reproduces the same canonical content hash.
+    out = subprocess.run(
+        [sys.executable, "-c", _BUILD], capture_output=True, text=True, check=True
+    )
+    assert out.stdout.strip() == flat_content_hash(verified)
+
+
+def test_aggregation_self_check_raises_with_round_and_hashes() -> None:
+    from lensemble.aggregation import assert_outer_step_deterministic
+
+    calls = {"n": 0}
+
+    def _flaky() -> torch.Tensor:
+        calls["n"] += 1
+        t = torch.zeros(4)
+        if calls["n"] == 2:  # the recomputation does not reproduce byte-for-byte
+            t[0] = 1e-9
+        return t
+
+    with pytest.raises(NonDeterministicAggregation) as exc:
+        assert_outer_step_deterministic(_flaky, round_index=7)
+    assert exc.value.code is LensembleErrorCode.AGG_NONDETERMINISTIC
+    assert exc.value.round == 7  # type: ignore[attr-defined]
+    assert exc.value.expected_hash != exc.value.got_hash  # type: ignore[attr-defined]
+    assert exc.value.remediation
+
+
+def test_aggregation_determinism_self_check_never_swallows() -> None:
+    # INV-AGG-DETERMINISM is fail-closed: the self-check module has no try/except that could hide a
+    # nondeterministic step — the error always propagates.
+    from pathlib import Path
+
+    import lensemble.aggregation.determinism as det
+
+    src = Path(det.__file__).read_text(encoding="utf-8")
+    assert "except" not in src and "try:" not in src
