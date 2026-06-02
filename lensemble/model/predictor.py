@@ -1,4 +1,5 @@
 """lensemble.model.predictor — see docs/rfcs/RFC-0008. Stub scaffolded by #2."""
+
 from __future__ import annotations
 from typing import Any
 
