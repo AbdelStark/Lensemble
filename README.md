@@ -73,7 +73,7 @@ This is a v0.1 design corpus, not yet an implementation. Assumptions, all overri
 - **Fork B (end-to-end)** is the target; Fork A (frozen shared encoder) is the documented fallback if gauge control proves unstable at scale ([RFC-0002, Fork A fallback](docs/rfcs/RFC-0002-gauge-and-aggregation.md#fork-a-fallback)).
 - **Verifiability is Phase 2**; Phase 1 ships "proof-ready" ([RFC-0006 §3](docs/rfcs/RFC-0006-verifiable-contribution.md#3-phase-1-proof-ready-requirements-cheap-to-honor-now)) so no rework is needed later.
 - **Warm-start from released V-JEPA 2** — foundation-scale credibility without an INTELLECT-class pretraining bill, and a shared frame at $t{=}0$.
-- **License (proposed)**: code Apache-2.0, docs CC-BY-4.0, data CDLA-Permissive-2.0 — matching ecosystem norms.
+- **License**: code Apache-2.0, docs CC-BY-4.0, data CDLA-Permissive-2.0 — matching ecosystem norms (see [License](#license)).
 
 ## Repo layout
 
@@ -95,3 +95,16 @@ A reference implementation (`lensemble/`, Python; warm-starting V-JEPA 2, wrappi
 
 [`CONTRIBUTING.md`](CONTRIBUTING.md) covers the dev setup and the blocking CI gates (lint, type-check,
 the CPU test suite, and the coverage thresholds) that must be green before any pull request merges.
+
+## License
+
+Lensemble splits its license by asset class (09 §7), and every release ships each file:
+
+- **Code** — the `lensemble/` package, tests, build tooling, and CLI — is [Apache License 2.0](LICENSE)
+  (SPDX `Apache-2.0`).
+- **Docs** — `docs/spec/`, `docs/rfcs/`, and this README — are [CC-BY-4.0](LICENSE-docs).
+- **Data** — released datasets, the public probe `P`, and the landmark targets — are
+  [CDLA-Permissive-2.0](LICENSE-data) (proposed; ratification is gated on the first data release).
+
+Raw participant trajectories are never released or licensed: they never cross a trust boundary
+(`INV-RESIDENCY`).
