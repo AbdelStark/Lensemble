@@ -120,6 +120,7 @@ from lensemble.contracts import (  # noqa: E402
     ActionHead,
     ActionKind,
     ActionSpec,
+    check_wmcp_join,
     validate_action_spec,
 )
 
@@ -274,3 +275,35 @@ def test_local_checkpoint_seam_is_named_state_dict_local() -> None:
     assert set(head.state_dict_local()) == {"weight"}
     # ...and NOT under the shared-serializer name a federation/artifact path would pick up.
     assert not hasattr(head, "state_dict")
+
+
+# --- WMCP federation-join gate (RFC-0007 6), issue #9 ---
+
+
+def test_wmcp_join_admits_matching_version() -> None:
+    assert check_wmcp_join(WMCP_VERSION) is None  # participant default == federation
+    assert check_wmcp_join(WMCP_VERSION, WMCP_VERSION) is None
+
+
+def test_wmcp_join_refuses_mismatch_fail_closed() -> None:
+    refused = False
+    try:
+        check_wmcp_join(
+            "wmcp-9.9.9"
+        )  # federation advertises a version this participant lacks
+    except ContractViolation as exc:
+        refused = True
+        assert exc.code == LensembleErrorCode.WMCP_CONTRACT_VIOLATION
+        # remediation names BOTH versions and the lockstep upgrade
+        assert "wmcp-9.9.9" in exc.remediation and WMCP_VERSION in exc.remediation
+        assert exc.field == "wmcp_version"  # type: ignore[attr-defined]
+    assert refused, (
+        "the join gate must raise on mismatch and never be swallowed (fail-closed)"
+    )
+
+
+def test_wmcp_join_participant_side_mismatch() -> None:
+    # a participant running an old contract is refused against the current federation version
+    with pytest.raises(ContractViolation) as exc:
+        check_wmcp_join(WMCP_VERSION, "wmcp-0.9.0")
+    assert exc.value.code == LensembleErrorCode.WMCP_CONTRACT_VIOLATION

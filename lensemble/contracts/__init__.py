@@ -8,7 +8,11 @@ from __future__ import annotations
 
 from lensemble.contracts.action import ActionKind, ActionSpec
 from lensemble.contracts.action_head import ActionHead
-from lensemble.contracts.conformance import check_latent_state, validate_action_spec
+from lensemble.contracts.conformance import (
+    check_latent_state,
+    check_wmcp_join,
+    validate_action_spec,
+)
 from lensemble.contracts.latent import WMCP_VERSION, LatentState
 
 __all__ = [
@@ -19,4 +23,5 @@ __all__ = [
     "ActionKind",
     "ActionHead",
     "validate_action_spec",
+    "check_wmcp_join",
 ]
