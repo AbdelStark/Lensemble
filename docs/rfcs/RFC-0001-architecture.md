@@ -447,3 +447,6 @@ single $\lambda_{\text{anc}}$ suffices.
 - WMCP (WM-RFC-0001) — the latent/action contract.
 - Project Tapestry (AI Alliance) — the sovereignty/governance framing for federated frontier models.
 - Stwo — Circle-STARK prover for the Phase-2 aggregation-correctness proof.
+- [RFC-0016 — Deployment, Vendoring & Topology](RFC-0016-deployment-vendoring-topology.md) — the
+  Python-first stack decision, the `third_party/` vendoring of the reused ecosystem code, and the
+  one-config-source deployment model (in-process simulation → Docker Compose → Kubernetes).

@@ -74,6 +74,10 @@ lensemble/
 tests/                    # pytest suite (unit, property, integration, ml)
 docs/                     # this specification corpus
 configs/                  # Hydra config groups
+third_party/              # vendored, modifiable upstream subtrees (outside the lensemble import DAG)  [RFC-0016]
+  stable_worldmodel/      # data layer, envs, latent-MPC eval (vendored at a recorded SHA + patch series)
+  stable_pretraining/     # pretraining scaffold (vendored at a recorded SHA + patch series)
+deploy/                   # infrastructure-as-code: compose.yaml, Helm chart, Kustomize overlays  [RFC-0016]
 ```
 
 Area taxonomy (one per major subsystem; used for issue labels): `core`, `contracts`, `model`, `gauge`,
@@ -168,6 +172,7 @@ Files live at `docs/rfcs/RFC-NNNN-<slug>.md`.
 | [0013](../rfcs/RFC-0013-coordinator-runtime.md) | Coordinator & Participant Runtime | coordinator-runtime | Accepted | federation |
 | [0014](../rfcs/RFC-0014-provenance-commitments.md) | Provenance Commitments & Merkle Scheme | provenance-commitments | Accepted | provenance |
 | [0015](../rfcs/RFC-0015-observability-diagnostics.md) | Observability, Diagnostics & Telemetry | observability-diagnostics | Accepted | observability |
+| [0016](../rfcs/RFC-0016-deployment-vendoring-topology.md) | Deployment, Vendoring & Topology | deployment-vendoring-topology | Accepted | core |
 
 Every RFC follows this section order: Summary, Motivation, Goals, Non-Goals, Proposed Design,
 Alternatives Considered, Drawbacks, Migration / Rollout, Testing Strategy, Open Questions, References.
@@ -309,7 +314,8 @@ The authoritative policy is in [09-release-and-versioning.md](09-release-and-ver
 | safetensors | `>=0.4` | safe, mmap-able weight serialization (no pickle) |
 | V-JEPA 2 weights | pinned release | encoder warm-start + AC recipe; the $t{=}0$ frame anchor |
 | LeJEPA / LeWM (SIGReg) | pinned | the objective (random-projection + characteristic-function Gaussianity) |
-| stable-worldmodel | pinned | data layer (`lance`/`hdf5`/`lerobot`), envs, latent-MPC eval |
+| stable-worldmodel | pinned (vendored, [RFC-0016](../rfcs/RFC-0016-deployment-vendoring-topology.md)) | data layer (`lance`/`hdf5`/`lerobot`), envs, latent-MPC eval |
+| stable-pretraining | pinned (vendored, [RFC-0016](../rfcs/RFC-0016-deployment-vendoring-topology.md)) | pretraining scaffold reused alongside stable-worldmodel |
 | lance | `>=0.10` | append-friendly fast indexed episode reads (default format) |
 | h5py | `>=3.10` | portable single-file episode format |
 | hydra-core / omegaconf | `>=1.3` / `>=2.3` | structured config groups + overrides |

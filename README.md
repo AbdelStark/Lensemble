@@ -49,8 +49,9 @@ The normative spec sections live in [`docs/spec/`](docs/spec/) and the decision 
 | [0013](docs/rfcs/RFC-0013-coordinator-runtime.md) | Coordinator & Participant Runtime | Accepted | Round state machine, fault tolerance, control plane |
 | [0014](docs/rfcs/RFC-0014-provenance-commitments.md) | Provenance Commitments & Merkle Scheme | Accepted | Episode hashing, Merkle roots, contribution ledger |
 | [0015](docs/rfcs/RFC-0015-observability-diagnostics.md) | Observability, Diagnostics & Telemetry | Accepted | Logging, metrics, the frame-drift diagnostic, redaction |
+| [0016](docs/rfcs/RFC-0016-deployment-vendoring-topology.md) | Deployment, Vendoring & Topology | Accepted | Python-first stack, third_party vendoring, IaC (Compose/Kubernetes) |
 
-Read order for the paper: 0002 → 0005 → 0001. Read order to build: 0001 → 0003 → 0004 → 0002 → 0005, then the subsystem RFCs 0007–0015, then 0006.
+Read order for the paper: 0002 → 0005 → 0001. Read order to build: 0001 → 0003 → 0004 → 0002 → 0005, then the subsystem RFCs 0007–0016, then 0006.
 
 ## Where it sits in the ecosystem
 
@@ -82,7 +83,7 @@ Lensemble/
     ├── spec/                          # normative spec sections
     │   ├── 00-overview.md … 10-glossary.md
     │   └── conventions.md             # notation, invariants, shared contracts
-    ├── rfcs/                          # RFC-0001 … RFC-0015 (decision records)
+    ├── rfcs/                          # RFC-0001 … RFC-0016 (decision records)
     └── roadmap/                       # implementation tracker (filed alongside issues)
 ```
 
