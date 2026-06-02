@@ -57,6 +57,11 @@ gate 5) runs in its own workflow ([`.github/workflows/determinism.yml`](.github/
 it executes `tests/ml/test_aggregation_determinism.py` and is **build-blocking and fail-closed** — a
 non-reproducible aggregation step is a Phase-1 proof-readiness failure ([RFC-0006 §3](docs/rfcs/RFC-0006-verifiable-contribution.md)),
 not a flake, so it aborts the round (`NonDeterministicAggregation`) rather than averaging silently. The
+docs link-check gate (gate 7, [`.github/workflows/docs.yml`](.github/workflows/docs.yml)) runs
+`python scripts/check_docs_links.py docs/ SPEC.md`: every relative cross-reference `[label](relpath#anchor)`
+must resolve to an existing file and heading. Anchors follow GitHub's heading-slug rule — lowercase, drop
+every character that is not a letter, number, underscore, hyphen, or whitespace, then replace whitespace
+with hyphens (duplicate headings get a `-1`/`-2` suffix). External `http(s)` links are out of scope. The
 non-blocking nightly CUDA suite and the x86-64/arm64 cross-platform hash check do not block merges
 ([07 §8](docs/spec/07-testing-strategy.md#8-ci-gates)).
 
