@@ -19,6 +19,16 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:ci`: the CPU performance smoke (08 §7) — `tests/integration/test_perf_smoke.py` guards the four
+  08 §7 regression checks on a tiny synthetic config (no download): a generous wall-time ceiling on one
+  toy inner+outer cycle (an overrun is a regression SIGNAL, a plain `assert`, not a raised error), the
+  comms-accountant equality `comm_bytes(n) == 4*n` / `comm_bytes(n, quantized=True) == n+4` (08 §4),
+  outer-step bitwise determinism via `assert_outer_step_deterministic` (`INV-AGG-DETERMINISM`, raising
+  `NonDeterministicAggregation` on a violation), and the int8 `quantize_int8` round-trip within the
+  module-documented per-element bound (RFC-0003 §6). It runs under the existing gate-4
+  `pytest tests/integration` step; the wall-time ceiling and its "loose by design (catches 10x, not
+  micro-opt)" note are recorded on the `_WALLTIME_CEILING_S` module constant, which is the config-of-record
+  the 08 §7 OPEN QUESTION asks CI to keep (revisited at v0.1). (#69)
 - `lensemble.eval`: the evaluation harness (RFC-0005 §3) — `evaluate(checkpoint, env_id, *, cfg) ->
   EvalReport` runs seed-pinned latent-MPC episodes on a held-out env and the `EvalReport` reporting type
   (03 §13.1; frozen, `extra="forbid"`, `parse_eval_report` with a `schema_version`-first
