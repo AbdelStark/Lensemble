@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .manifest import RunManifest
+from .seed import SEED_DERIVATION, derive, round_sketch_seed, seed_everything
 from .schema import (
     DataConfig,
     DeterminismConfig,
@@ -34,4 +35,8 @@ __all__ = [
     "EvalConfig",
     "ObservabilityConfig",
     "DeterminismConfig",
+    "derive",
+    "round_sketch_seed",
+    "seed_everything",
+    "SEED_DERIVATION",
 ]
