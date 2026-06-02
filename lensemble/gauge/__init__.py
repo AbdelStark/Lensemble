@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .drift import frame_drift
+from .drift import FrameDriftReport, PairDrift, frame_drift
 from .procrustes import procrustes_align
 
-__all__ = ["frame_drift", "procrustes_align"]
+__all__ = ["frame_drift", "FrameDriftReport", "PairDrift", "procrustes_align"]
