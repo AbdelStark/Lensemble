@@ -56,9 +56,8 @@ def test_sharded_and_unsharded_both_roundtrip(tmp_path: Path) -> None:
     lu, hu = load_checkpoint(tmp_path / "u")
     ls, hs = load_checkpoint(tmp_path / "s")
     assert len(hu.weight_files) == 1 and len(hs.weight_files) > 1
-    # RFC-0010 4: weight_files is bound into the content hash, so the two layouts differ by design;
-    # both must round-trip the weights bitwise-exactly.
-    assert hu.content_hash != hs.content_hash
+    # RFC-0010 4 (#32): the canonical content hash is shard-independent.
+    assert hu.content_hash == hs.content_hash
     for k in w:
         assert torch.equal(lu[k], w[k]) and torch.equal(ls[k], w[k])
 

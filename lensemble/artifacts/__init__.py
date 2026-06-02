@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from lensemble.artifacts.checkpoint import load_checkpoint, save_checkpoint, verify
+from lensemble.artifacts.hashing import StructuralFields, content_hash, verify_hash
 from lensemble.artifacts.schema import SCHEMA_VERSION, CheckpointHeader, TensorEntry
 
 __all__ = [
@@ -12,4 +13,7 @@ __all__ = [
     "save_checkpoint",
     "load_checkpoint",
     "verify",
+    "content_hash",
+    "verify_hash",
+    "StructuralFields",
 ]
