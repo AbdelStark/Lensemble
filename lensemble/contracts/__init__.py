@@ -1,1 +1,12 @@
-"""lensemble.contracts — see docs/rfcs/RFC-0007. Stub scaffolded by core-package-skeleton (#2)."""
+"""lensemble.contracts — the WMCP latent/action contract (docs/rfcs/RFC-0007).
+
+The lowest typed layer that makes heterogeneous-embodiment federation well-posed: it pins the shape,
+dtype, and frame semantics every encoder emits and every predictor consumes (``INV-WMCP``).
+"""
+
+from __future__ import annotations
+
+from lensemble.contracts.conformance import check_latent_state
+from lensemble.contracts.latent import WMCP_VERSION, LatentState
+
+__all__ = ["LatentState", "WMCP_VERSION", "check_latent_state"]
