@@ -28,6 +28,7 @@ from torch import Tensor, nn
 
 from lensemble.contracts import WMCP_VERSION, LatentState
 from lensemble.errors import CheckpointIntegrityError, ConfigError, LensembleErrorCode
+from lensemble.model.numerics import apply_numerics, autocast_forward, resolve_device
 
 
 def _canonical_bytes(state_dict: dict[str, Tensor]) -> bytes:
@@ -51,6 +52,9 @@ class Encoder(nn.Module):
     wmcp_version: str
     d: int
     num_tokens: int
+    compute_dtype: torch.dtype = (
+        torch.float32
+    )  # bf16 on CUDA (set by build_encoder); fp32 default
 
     def __init__(
         self,
@@ -97,19 +101,24 @@ class Encoder(nn.Module):
             raise ValueError(
                 f"clip must be (B, T, C, Hpx, Wpx) rank-5, got rank {clip.ndim} shape {tuple(clip.shape)}"
             )
-        x = clip.movedim(2, 1)  # (B, T, C, H, W) -> (B, C, T, H, W) for Conv3d
-        x = self.patch_embed(x)  # (B, d, T', H', W')
-        b, d = x.shape[0], x.shape[1]
-        x = x.reshape(b, d, -1).transpose(1, 2)  # (B, L, d)
-        if x.shape[1] != self.num_tokens:
-            raise ConfigError(
-                f"patching produced {x.shape[1]} tokens but num_tokens={self.num_tokens}; "
-                "reconcile num_frames/tubelet and image_size/patch_size with num_tokens",
-                code=LensembleErrorCode.CONFIG_INVALID,
-                remediation="set num_tokens = (num_frames//tubelet) * (image_size//patch_size)**2",
-            )
-        x = x + self.pos_embed
-        x = self.norm(self.blocks(x))  # (B, N, d)
+        # bf16 forward on CUDA / fp32 on the CPU fallback (RFC-0008 7); a no-op for fp32 so the CPU path
+        # is unchanged. Master weights stay fp32; loss/statistic accumulation downstream is fp32.
+        with autocast_forward(
+            clip.device, getattr(self, "compute_dtype", torch.float32)
+        ):
+            x = clip.movedim(2, 1)  # (B, T, C, H, W) -> (B, C, T, H, W) for Conv3d
+            x = self.patch_embed(x)  # (B, d, T', H', W')
+            b, d = x.shape[0], x.shape[1]
+            x = x.reshape(b, d, -1).transpose(1, 2)  # (B, L, d)
+            if x.shape[1] != self.num_tokens:
+                raise ConfigError(
+                    f"patching produced {x.shape[1]} tokens but num_tokens={self.num_tokens}; "
+                    "reconcile num_frames/tubelet and image_size/patch_size with num_tokens",
+                    code=LensembleErrorCode.CONFIG_INVALID,
+                    remediation="set num_tokens = (num_frames//tubelet) * (image_size//patch_size)**2",
+                )
+            x = x + self.pos_embed
+            x = self.norm(self.blocks(x))  # (B, N, d)
         return LatentState(
             tokens=x,
             num_tokens=self.num_tokens,
@@ -197,7 +206,7 @@ def build_encoder(cfg: Any) -> Encoder:
             f"model.num_tokens ({declared}) inconsistent with patching (derived {derived_tokens})",
             f"set num_tokens = {derived_tokens} or adjust patch/tubelet/frame/image sizes",
         )
-    return Encoder(
+    encoder = Encoder(
         d=d,
         num_tokens=derived_tokens,
         in_channels=in_channels,
@@ -210,6 +219,10 @@ def build_encoder(cfg: Any) -> Encoder:
         mlp_ratio=mlp_ratio,
         wmcp_version=wmcp_version,
     )
+    apply_numerics(
+        encoder, resolve_device()
+    )  # CUDA primary (bf16 forward) / CPU fallback (fp32)
+    return encoder
 
 
 def load_warmstart(encoder: Encoder, checkpoint: Path, *, expected_hash: str) -> None:
