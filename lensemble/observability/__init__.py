@@ -14,6 +14,13 @@ from lensemble.observability.logging import (
     emit_log,
     parse_log_record,
 )
+from lensemble.observability.metrics import (
+    METRIC_SCHEMA_VERSION,
+    MetricSample,
+    canonical_unit,
+    emit_metric,
+    parse_metric_sample,
+)
 from lensemble.observability.redaction import redact, redact_record
 
 __all__ = [
@@ -25,4 +32,9 @@ __all__ = [
     "parse_log_record",
     "JsonFormatter",
     "LOG_SCHEMA_VERSION",
+    "MetricSample",
+    "emit_metric",
+    "parse_metric_sample",
+    "canonical_unit",
+    "METRIC_SCHEMA_VERSION",
 ]
