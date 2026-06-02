@@ -6,6 +6,7 @@ from .action_head import build_action_head
 from .encoder import Encoder, build_encoder, load_warmstart, snapshot_reference
 from .objective import Objective
 from .predictor import build_predictor
+from .sigreg import build_sketch, sigreg_statistic
 
 __all__ = [
     "build_encoder",
@@ -15,4 +16,6 @@ __all__ = [
     "build_predictor",
     "build_action_head",
     "Objective",
+    "build_sketch",
+    "sigreg_statistic",
 ]
