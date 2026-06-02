@@ -1,0 +1,25 @@
+# Minimal packaging declaration scaffolded by core-package-skeleton (#2).
+# The full dependency-pin set, optional extras, and tool configuration land with
+# packaging: pyproject.toml and dependency pins (#71); see docs/spec/conventions.md (11).
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lensemble"
+description = "Federated, end-to-end JEPA world models — trained across sovereign data, verifiable by construction."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Abdelhamid Bakhta" }]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/AbdelStark/Lensemble"
+Specification = "https://github.com/AbdelStark/Lensemble/blob/main/SPEC.md"
+
+[tool.setuptools.dynamic]
+version = { attr = "lensemble.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["lensemble*"]
