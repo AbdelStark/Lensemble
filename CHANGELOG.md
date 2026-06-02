@@ -19,6 +19,10 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `lensemble.federation`: optional int8 pseudo-gradient wire quantization — `quantize_int8`,
+  `dequantize_int8`, `int8_roundtrip_l2_bound`, `wire_roundtrip` (RFC-0003 §6), config-gated by
+  `federation.quantize_pseudo_gradient` (default off); orthogonal to the gauge and not credited as
+  privacy, with a documented `sqrt(d)·max|Δ|/254` L2 round-trip bound that preserves `INV-AGG-DETERMINISM`.
 - `lensemble.provenance`: canonical episode hashing, the dataset Merkle tree and inclusion proofs,
   `DatasetCommitment` + `commit_dataset` + `verify_binding`, and the append-only hash-chained
   `ContributionLedger` (RFC-0014; `INV-COMMIT-BINDING`).
@@ -27,3 +31,9 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 - Reference-implementation scaffolding toward the v0.1 (Stage A) milestone across `core`, `contracts`,
   `model`, `gauge`, `federation`, `privacy`, `data`, `eval`, `config`, `artifacts`, and `observability`
   ([conventions §12](docs/spec/conventions.md#12-milestones-and-stages)).
+
+### Changed
+
+- `lensemble.federation.build_pseudogradient`: the `quantized` keyword is now `quantize` — the action
+  flag that applies the int8 wire round-trip on the assembled flat delta and sets
+  `PseudoGradient.quantized`. Pre-1.0 minor; no released callers passed the old keyword.
