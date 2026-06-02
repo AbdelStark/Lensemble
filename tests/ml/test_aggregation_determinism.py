@@ -108,3 +108,15 @@ def test_nesterov_stable_across_varying_participant_count() -> None:
 def test_empty_deltas_rejected() -> None:
     with pytest.raises(NonDeterministicAggregation):
         OuterOptimizer(lr=0.7).step(torch.zeros(10), {})
+
+
+def test_secure_agg_nondeterministic_field_sum_raises() -> None:
+    # the secure-aggregation self-check aborts (never silently averages) on a non-reproducing field sum
+    from lensemble.aggregation import assert_field_sum_reproducible
+
+    a = torch.zeros(4, dtype=torch.int64)
+    b = a.clone()
+    b[0] = 1
+    with pytest.raises(NonDeterministicAggregation) as exc:
+        assert_field_sum_reproducible(a, b)
+    assert exc.value.code == LensembleErrorCode.AGG_NONDETERMINISTIC
