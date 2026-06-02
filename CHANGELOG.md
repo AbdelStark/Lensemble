@@ -19,6 +19,10 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `lensemble.data`: declared data-quality metadata — `DataQualityMetadata` (modality, embodiment id,
+  `ActionSpec`, episode count, collection conditions; non-resident) and `validate_join_precondition`, the
+  federation-join precondition that validates the `ActionSpec` and gates `wmcp_version` on exact equality
+  (`INV-WMCP`, RFC-0004 §6 / RFC-0007 §6).
 - `lensemble.artifacts.migrate_header`: the forward-compatible `CheckpointHeader` schema-migration chain
   and dispatcher (RFC-0010 §7). A reader accepts `schema_version <= SCHEMA_VERSION` via ordered
   `migrate_vN_to_vN1` steps and fails closed with `SchemaVersionMismatch`

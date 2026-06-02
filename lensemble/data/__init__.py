@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from lensemble.data.dataset import EpisodeDataset
 from lensemble.data.episode import Episode, Transition, Window
+from lensemble.data.quality import DataQualityMetadata, validate_join_precondition
 from lensemble.data.residency import EgressRole, guard_egress
 
 __all__ = [
@@ -17,4 +18,6 @@ __all__ = [
     "EpisodeDataset",
     "guard_egress",
     "EgressRole",
+    "DataQualityMetadata",
+    "validate_join_precondition",
 ]
