@@ -45,5 +45,7 @@ jobs:
         run: |
           pip install "torch>=2.4,<3" --index-url https://download.pytorch.org/whl/cpu
           pip install -e ".[docs]"
+      # `python -m mkdocs` puts the repo root on sys.path so the config's `!!python/name:docs_slug.slugify`
+      # and the `docs_hooks.py` hook resolve.
       - name: Build the site (zero warnings)
-        run: mkdocs build --strict
+        run: python -m mkdocs build --strict
