@@ -50,8 +50,10 @@ def procrustes_align(
     m = t.transpose(-2, -1) @ s  # (d, d) = T^T S
     u, sigma, vh = torch.linalg.svd(m)
 
-    min_sv = float(sigma.min())
-    max_sv = float(sigma.max())
+    # The singular-value diagnostics are reported scalars, not graph nodes (detach so the differentiable
+    # path — used by the Variant B rotational anchor — does not warn on float() of a grad tensor).
+    min_sv = float(sigma.detach().min())
+    max_sv = float(sigma.detach().max())
     if min_sv < singular_floor:
         condition_number = float("inf") if min_sv == 0.0 else max_sv / min_sv
         err = DegenerateProcrustes(
@@ -75,5 +77,5 @@ def procrustes_align(
         v[:, -1] = -v[:, -1]
         q = v @ u.transpose(-2, -1)
 
-    residual = float(torch.linalg.norm(s @ q - t))
+    residual = float(torch.linalg.norm(s @ q - t).detach())
     return q, residual

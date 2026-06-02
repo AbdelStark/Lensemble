@@ -15,7 +15,12 @@ from torch import Tensor, nn
 
 from lensemble.contracts import WMCP_VERSION, LatentState
 from lensemble.data.probe import probe_content_hash
-from lensemble.errors import FrameDriftExceeded, LensembleErrorCode, ProbeError
+from lensemble.errors import (
+    DegenerateProcrustes,
+    FrameDriftExceeded,
+    LensembleErrorCode,
+    ProbeError,
+)
 from lensemble.gauge import FrameAnchor, procrustes_align
 
 _D, _N = 8, 2
@@ -132,3 +137,65 @@ def test_probe_hash_mismatch_is_rejected(synthetic_probe: SimpleNamespace) -> No
     with pytest.raises(ProbeError) as exc:
         FrameAnchor(synthetic_probe, targets, probe_hash="00" * 32)
     assert exc.value.code == LensembleErrorCode.PROBE_INVALID
+
+
+# --- Variant B rotational-drift anchor (RFC-0002 4), issue #17 ---
+
+
+class _RankDeficientEncoder(nn.Module):
+    """An encoder whose output zeroes the last latent dim -> a rank-deficient Procrustes M."""
+
+    def forward(self, points: Tensor) -> LatentState:
+        tokens = torch.randn(points.shape[0], _N, _D)
+        tokens[..., -1] = 0.0
+        return LatentState(
+            tokens=tokens, num_tokens=_N, dim=_D, wmcp_version=WMCP_VERSION
+        )
+
+
+def test_rotational_anchor_recovers_identity(
+    synthetic_probe: SimpleNamespace, tol: object
+) -> None:
+    angle_tol: float = tol.ANGLE_TOL_DEG  # type: ignore[attr-defined]
+    torch.manual_seed(0)
+    f_ref = _RefEncoder().eval()
+    landmarks = synthetic_probe.points[synthetic_probe.landmark_idx]
+    targets = f_ref(landmarks).tokens.detach()
+
+    anchor = FrameAnchor(
+        synthetic_probe, targets, "rotational", probe_hash=_hash(synthetic_probe)
+    )
+    f_theta = _CorrectedEncoder(f_ref, _rot15())
+    initial_loss = float(
+        anchor.loss(f_theta).detach()
+    )  # ||Q* - I||_F^2 > 0 while drifted
+
+    optimizer = torch.optim.Adam([f_theta.weight], lr=0.05)
+    for _ in range(400):
+        optimizer.zero_grad()
+        loss = anchor.loss(f_theta)  # gradients flow through the differentiable SVD
+        loss.backward()
+        optimizer.step()
+
+    final_loss = float(anchor.loss(f_theta).detach())
+    assert final_loss < initial_loss * 1e-2  # the rotation penalty drives Q* toward I
+
+    with torch.no_grad():
+        aligned = f_theta(landmarks).tokens.reshape(-1, _D)
+    rotation, _ = procrustes_align(aligned, targets.reshape(-1, _D))
+    cos = max(-1.0, min(1.0, (float(torch.trace(rotation)) - (_D - 2)) / 2.0))
+    angle_deg = torch.rad2deg(torch.arccos(torch.tensor(cos)))
+    assert float(angle_deg) < angle_tol
+
+
+def test_rotational_near_degenerate_raises(synthetic_probe: SimpleNamespace) -> None:
+    f_ref = _RefEncoder().eval()
+    targets = f_ref(
+        synthetic_probe.points[synthetic_probe.landmark_idx]
+    ).tokens.detach()
+    anchor = FrameAnchor(
+        synthetic_probe, targets, "rotational", probe_hash=_hash(synthetic_probe)
+    )
+    # a rank-deficient encoder output makes M near-degenerate -> raise, never a NaN gradient
+    with pytest.raises(DegenerateProcrustes):
+        anchor.loss(_RankDeficientEncoder())
