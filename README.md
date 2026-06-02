@@ -25,18 +25,32 @@ A foundation-scale world model wants diverse embodied experience — robot fleet
 
 To our knowledge no prior work federates an end-to-end JEPA world model, nor measures/controls the latent gauge under federation; this corpus specifies both, and the verifiable layer on top.
 
+The canonical entry point is [SPEC.md](SPEC.md): an index and executive summary over the corpus.
+The normative spec sections live in [`docs/spec/`](docs/spec/) and the decision records in
+[`docs/rfcs/`](docs/rfcs/). Shared notation, named invariants, and the API/type/error contracts are in
+[`docs/spec/conventions.md`](docs/spec/conventions.md).
+
 ## RFC index
 
-| RFC | Title | Track | Role |
+| RFC | Title | Status | Role |
 |---|---|---|---|
-| [0001](RFC-0001-architecture.md) | Architecture & System Overview | Standards | What we build: model, federation map, topology, trust boundaries |
-| [0002](RFC-0002-gauge-and-aggregation.md) | The Latent Gauge & Frame-Anchored Aggregation | Standards | **Scientific core**: the gauge problem and its solution |
-| [0003](RFC-0003-federated-protocol.md) | Federated Training Protocol | Standards | How the network runs: rounds, DiLoCo, secure aggregation, DP, fault tolerance |
-| [0004](RFC-0004-data-provenance.md) | Data, Sovereignty & Provenance | Standards | Per-silo data, the public probe, Merkle commitments |
-| [0005](RFC-0005-evaluation.md) | Evaluation & Benchmark Protocol | Standards | How we prove it: diagnostics, ablation ladder, baselines, metrics |
-| [0006](RFC-0006-verifiable-contribution.md) | Verifiable Contribution | Standards · **Phase 2** | The crypto layer; what Phase 1 must satisfy to stay proof-ready |
+| [0001](docs/rfcs/RFC-0001-architecture.md) | Architecture & System Overview | Accepted | What we build: model, federation map, topology, trust boundaries |
+| [0002](docs/rfcs/RFC-0002-gauge-and-aggregation.md) | The Latent Gauge & Frame-Anchored Aggregation | Accepted | **Scientific core**: the gauge problem and its solution |
+| [0003](docs/rfcs/RFC-0003-federated-protocol.md) | Federated Training Protocol | Accepted | How the network runs: rounds, DiLoCo, secure aggregation, DP, fault tolerance |
+| [0004](docs/rfcs/RFC-0004-data-provenance.md) | Data, Sovereignty & Provenance | Accepted | Per-silo data, the public probe, Merkle commitments |
+| [0005](docs/rfcs/RFC-0005-evaluation.md) | Evaluation & Benchmark Protocol | Accepted | How we prove it: diagnostics, ablation ladder, baselines, metrics |
+| [0006](docs/rfcs/RFC-0006-verifiable-contribution.md) | Verifiable Contribution | Draft · **Phase 2** | The crypto layer; what Phase 1 must satisfy to stay proof-ready |
+| [0007](docs/rfcs/RFC-0007-wmcp-latent-contract.md) | WMCP Latent Contract & Embodiment Adapters | Accepted | The shared latent/action contract for heterogeneous embodiments |
+| [0008](docs/rfcs/RFC-0008-model-objective-numerics.md) | Model, Objective & Numerical Contracts | Accepted | Encoder, predictor, SIGReg + anchor objective, numerical contract |
+| [0009](docs/rfcs/RFC-0009-configuration-reproducibility.md) | Configuration, Run Manifest & Reproducibility | Accepted | Hydra configs, seeding, run manifests, reproducibility |
+| [0010](docs/rfcs/RFC-0010-artifact-checkpoint-format.md) | Checkpoint & Artifact Format | Accepted | Schema-versioned, hash-committed model artifacts |
+| [0011](docs/rfcs/RFC-0011-secure-aggregation.md) | Secure Aggregation Protocol | Accepted | Coordinator learns only the sum; dropout robustness |
+| [0012](docs/rfcs/RFC-0012-differential-privacy.md) | Differential Privacy Accounting | Accepted | Per-participant clip+noise and (ε,δ) accounting |
+| [0013](docs/rfcs/RFC-0013-coordinator-runtime.md) | Coordinator & Participant Runtime | Accepted | Round state machine, fault tolerance, control plane |
+| [0014](docs/rfcs/RFC-0014-provenance-commitments.md) | Provenance Commitments & Merkle Scheme | Accepted | Episode hashing, Merkle roots, contribution ledger |
+| [0015](docs/rfcs/RFC-0015-observability-diagnostics.md) | Observability, Diagnostics & Telemetry | Accepted | Logging, metrics, the frame-drift diagnostic, redaction |
 
-Read order for the paper: 0002 → 0005 → 0001. Read order to build: 0001 → 0003 → 0004 → 0002 → 0005, then 0006.
+Read order for the paper: 0002 → 0005 → 0001. Read order to build: 0001 → 0003 → 0004 → 0002 → 0005, then the subsystem RFCs 0007–0015, then 0006.
 
 ## Where it sits in the ecosystem
 
@@ -53,22 +67,23 @@ Read order for the paper: 0002 → 0005 → 0001. Read order to build: 0001 → 
 This is a v0.1 design corpus, not yet an implementation. Assumptions, all overridable:
 
 - **Goal**: a research paper plus an open reference implementation; the corpus is written to be scientifically self-contained.
-- **Fork B (end-to-end)** is the target; Fork A (frozen shared encoder) is the documented fallback if gauge control proves unstable at scale (RFC-0002 §7).
-- **Verifiability is Phase 2**; Phase 1 ships "proof-ready" (RFC-0006 §4) so no rework is needed later.
+- **Fork B (end-to-end)** is the target; Fork A (frozen shared encoder) is the documented fallback if gauge control proves unstable at scale ([RFC-0002, Fork A fallback](docs/rfcs/RFC-0002-gauge-and-aggregation.md#fork-a-fallback)).
+- **Verifiability is Phase 2**; Phase 1 ships "proof-ready" ([RFC-0006 §3](docs/rfcs/RFC-0006-verifiable-contribution.md#3-phase-1-proof-ready-requirements-cheap-to-honor-now)) so no rework is needed later.
 - **Warm-start from released V-JEPA 2** — foundation-scale credibility without an INTELLECT-class pretraining bill, and a shared frame at $t{=}0$.
 - **License (proposed)**: code Apache-2.0, docs CC-BY-4.0, data CDLA-Permissive-2.0 — matching ecosystem norms.
 
 ## Repo layout
 
 ```
-lensemble/
+Lensemble/
 ├── README.md                          # this file
-├── RFC-0001-architecture.md
-├── RFC-0002-gauge-and-aggregation.md
-├── RFC-0003-federated-protocol.md
-├── RFC-0004-data-provenance.md
-├── RFC-0005-evaluation.md
-└── RFC-0006-verifiable-contribution.md
+├── SPEC.md                            # corpus entry point: index + executive summary
+└── docs/
+    ├── spec/                          # normative spec sections
+    │   ├── 00-overview.md … 10-glossary.md
+    │   └── conventions.md             # notation, invariants, shared contracts
+    ├── rfcs/                          # RFC-0001 … RFC-0015 (decision records)
+    └── roadmap/                       # implementation tracker (filed alongside issues)
 ```
 
-A reference implementation (`lensemble/`, Python; warm-starting V-JEPA 2, wrapping stable-worldmodel for data + MPC eval) follows the staged plan in RFC-0001 §6.
+A reference implementation (`lensemble/`, Python; warm-starting V-JEPA 2, wrapping stable-worldmodel for data + MPC eval) follows the staged plan in [RFC-0001](docs/rfcs/RFC-0001-architecture.md) (Migration / Rollout) and the milestones in [conventions §12](docs/spec/conventions.md#12-milestones-and-stages).
