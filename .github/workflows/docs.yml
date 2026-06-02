@@ -1,0 +1,33 @@
+# Gate 7 — documentation link-check (07 §8 gate 7).
+#
+# A build-blocking gate that keeps the corpus' internal cross-references machine-enforced rather than
+# aspirational: every relative link `[label](relpath#anchor)` under docs/ (and SPEC.md) must resolve to
+# an existing file and, where an #anchor is present, an existing heading under GitHub's heading-slug rule
+# (conventions §3). Intra-corpus references only — external (http/https) links are out of scope. The
+# checker is pure-stdlib, so this job needs no torch/dependency install.
+name: docs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: docs-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+permissions:
+  contents: read
+
+jobs:
+  linkcheck:
+    name: docs link-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Docs — intra-corpus link check
+        run: python scripts/check_docs_links.py docs/ SPEC.md
