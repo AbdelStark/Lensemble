@@ -1,6 +1,7 @@
-# Minimal packaging declaration scaffolded by core-package-skeleton (#2).
-# The full dependency-pin set, optional extras, and tool configuration land with
-# packaging: pyproject.toml and dependency pins (#71); see docs/spec/conventions.md (11).
+# Packaging for `lensemble` — a pure-Python source-and-wheel package (no compiled extensions).
+# Runtime dependency constraints are the canonical set in docs/spec/conventions.md (11); pinned-by-content
+# dependencies (V-JEPA 2 weights, LeJEPA/LeWM, stable-worldmodel/stable-pretraining) are vendored/recorded
+# per run in the RunManifest (RFC-0016), not PyPI runtime deps. See docs/spec/09-release-and-versioning.md.
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
@@ -13,10 +14,45 @@ requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Abdelhamid Bakhta" }]
 dynamic = ["version"]
+classifiers = [
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "torch>=2.4,<3",
+    "numpy>=1.26",
+    "safetensors>=0.4",
+    "lance>=0.10",
+    "h5py>=3.10",
+    "hydra-core>=1.3",
+    "omegaconf>=2.3",
+    "pydantic>=2,<3",
+    "blake3>=0.4",
+    "typer",
+    "rich",
+]
+
+[project.optional-dependencies]
+# Swappable DP accountant backend (RFC-0012); abstracted behind privacy.accountant.
+dp = ["opacus"]
+# Optional observability sink adapters (RFC-0015); the canonical sinks are files.
+observability = ["tensorboard", "wandb"]
+# Dev / test stack.
+dev = ["pytest", "hypothesis", "pytest-benchmark", "ruff", "pyright", "build"]
+# Phase-2 verifiable layer (Stwo / Circle-STARK prover, out-of-tree, RFC-0006). Declared, stubbed.
+verify = []
 
 [project.urls]
 Homepage = "https://github.com/AbdelStark/Lensemble"
 Specification = "https://github.com/AbdelStark/Lensemble/blob/main/SPEC.md"
+
+[project.scripts]
+lensemble = "lensemble.cli:main"
 
 [tool.setuptools.dynamic]
 version = { attr = "lensemble.__version__" }
