@@ -1,0 +1,89 @@
+# Release automation: tag -> build -> clean-venv smoke -> publish (09 §5.3; #78).
+#
+# Triggered by an annotated tag `vX.Y.Z`. The version-agreement gate (pyproject == __version__ ==
+# CHANGELOG) and the smoke install run BEFORE any upload, because PyPI publication is irreversible per
+# version (09 §5.3 RISK). The blocking CI gates (lint/types/tests/coverage), the determinism gate, and the
+# docs link-check run on the same commit via their own workflows; this workflow adds the version checks
+# and the build/smoke/publish flow. The large-binary research-artifact bundle is NOT built here (it is not
+# committed and CI never downloads it, 09 §5.4).
+name: release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write # create the GitHub release
+
+jobs:
+  build-and-smoke:
+    name: build + clean-venv smoke (no upload yet)
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Gate: the three version sources agree AND equal the tag, before anything is built (09 §5.2).
+      - name: Version-agreement gate
+        id: version
+        run: |
+          python scripts/release_gates.py version-agreement
+          PKG=$(python scripts/release_gates.py version-agreement | awk '{print $NF}')
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ -n "$TAG" ] && [ "$PKG" != "$TAG" ]; then
+            echo "::error::package version $PKG != tag $TAG"; exit 1
+          fi
+          echo "version=$PKG" >> "$GITHUB_OUTPUT"
+
+      - name: Build sdist + wheel (PEP 517)
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+
+      # Clean-venv smoke install asserting the installed version equals the tag, BEFORE any publish.
+      - name: Clean-venv smoke install
+        run: |
+          python -m venv /tmp/smoke
+          /tmp/smoke/bin/pip install --upgrade pip
+          /tmp/smoke/bin/pip install dist/*.whl
+          /tmp/smoke/bin/python -c "import lensemble, sys; v='${{ steps.version.outputs.version }}'; sys.exit(0 if lensemble.__version__ == v else 1)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+
+  publish:
+    name: publish (immutable; runs only after the smoke passes)
+    needs: build-and-smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      # Immutable PyPI publish — gated on the project token; a release without it builds + smokes only.
+      - name: Publish to PyPI
+        if: ${{ env.PYPI_API_TOKEN != '' }}
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          python -m pip install --upgrade twine
+          python -m twine upload --non-interactive -u __token__ -p "$PYPI_API_TOKEN" dist/*
+
+      - name: GitHub release (references the tag + changelog block)
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "$GITHUB_REF_NAME" \
+            --notes "See CHANGELOG.md for the ${{ needs.build-and-smoke.outputs.version }} release notes."
+        env:
+          GH_TOKEN: ${{ github.token }}

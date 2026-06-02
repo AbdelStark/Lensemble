@@ -76,3 +76,18 @@ non-blocking nightly CUDA suite and the x86-64/arm64 cross-platform hash check d
 - Named numerical tolerances live in `tests/conftest.py` and are cited by id — never inline a magic
   number ([07 §6](docs/spec/07-testing-strategy.md)).
 - New code keeps coverage above the thresholds above; security-critical paths are covered, not excluded.
+
+## Releases
+
+A release is automated by [`.github/workflows/release.yml`](.github/workflows/release.yml), triggered by an
+annotated tag `vX.Y.Z`. It runs the eight release-blocking gates of
+[09 §5.2](docs/spec/09-release-and-versioning.md#52-release-checklist-release-blocking-gates) **in order**
+(`python scripts/release_gates.py plan` prints them) and **fails closed with no waiver** on any
+security-critical gate (`INV-RESIDENCY`, `INV-COMMIT-BINDING`, `INV-AGG-DETERMINISM`). The
+**version-agreement** gate (`python scripts/release_gates.py version-agreement`) asserts
+`pyproject.toml` `[project].version` = `lensemble.__version__` = the newest `CHANGELOG.md` release version
+(a non-empty `## [X.Y.Z] - DATE` block). The flow builds the sdist+wheel, runs a clean-venv smoke install
+asserting the installed `__version__` equals the tag **before** any upload (PyPI publication is
+irreversible per version), then publishes and cuts a GitHub release. The large-binary research-artifact
+bundle ([09 §5.4](docs/spec/09-release-and-versioning.md#54-research-artifact-release)) is never committed
+and CI never downloads it (`release-bundle/` is git-ignored).
