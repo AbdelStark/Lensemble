@@ -117,6 +117,7 @@ from hypothesis import given  # noqa: E402
 from hypothesis import strategies as st  # noqa: E402
 
 from lensemble.contracts import (  # noqa: E402
+    ActionHead,
     ActionKind,
     ActionSpec,
     validate_action_spec,
@@ -221,3 +222,55 @@ def test_discrete_property_valid(counts: list[int]) -> None:
         wmcp_version=WMCP_VERSION,
     )
     assert validate_action_spec(spec) is None
+
+
+# --- ActionHead interface (RFC-0007 5), issue #8 ---
+
+
+class _RefHead(ActionHead):
+    """A minimal conforming head: a fixed linear map (B, spec.dim) -> (B, cond_dim)."""
+
+    def __init__(self, spec: ActionSpec, *, cond_dim: int) -> None:
+        super().__init__(spec, cond_dim=cond_dim)  # validates spec before any params
+        gen = torch.Generator().manual_seed(0)
+        self.weight = torch.randn(spec.dim, cond_dim, generator=gen)
+
+    def encode(self, action: torch.Tensor) -> torch.Tensor:
+        return action.to(self.weight.dtype) @ self.weight  # dtype follows compute dtype
+
+    def state_dict_local(self) -> dict[str, torch.Tensor]:
+        return {"weight": self.weight}
+
+
+def test_cond_dim_seam_is_embodiment_independent() -> None:
+    # Two embodiments with different spec.dim produce encodings of the SAME cond_dim (RFC-0007 5):
+    # this is what lets a 7-DoF arm and a 12-DoF body condition the same shared predictor g_phi.
+    cond_dim = 16
+    head_7 = _RefHead(_continuous(7), cond_dim=cond_dim)
+    head_12 = _RefHead(_continuous(12), cond_dim=cond_dim)
+    out_7 = head_7.encode(torch.zeros(4, 7))
+    out_12 = head_12.encode(torch.zeros(4, 12))
+    assert out_7.shape == (4, cond_dim)
+    assert out_12.shape == (4, cond_dim)
+    assert head_7.cond_dim == head_12.cond_dim == cond_dim
+    assert head_7.spec.dim != head_12.spec.dim  # the input side is free
+
+
+def test_init_validates_spec_before_allocating() -> None:
+    bad = dataclasses.replace(_continuous(3), wmcp_version="wmcp-9.9.9")
+    with pytest.raises(ContractViolation) as exc:
+        _RefHead(bad, cond_dim=8)  # super().__init__ must validate first (INV-WMCP)
+    assert exc.value.code == LensembleErrorCode.WMCP_CONTRACT_VIOLATION
+
+
+def test_action_head_is_abstract() -> None:
+    with pytest.raises(TypeError):
+        ActionHead(_continuous(3), cond_dim=8)  # type: ignore[abstract]
+
+
+def test_local_checkpoint_seam_is_named_state_dict_local() -> None:
+    head = _RefHead(_continuous(5), cond_dim=8)
+    # the local-only accessor exists under its INV-ACTIONHEAD-LOCAL name...
+    assert set(head.state_dict_local()) == {"weight"}
+    # ...and NOT under the shared-serializer name a federation/artifact path would pick up.
+    assert not hasattr(head, "state_dict")
