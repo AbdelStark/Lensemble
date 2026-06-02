@@ -8,7 +8,11 @@ from .commit import (
     parse_dataset_commitment,
     verify_binding,
 )
-from .ledger import ContributionLedger
+from .ledger import (
+    ContributionLedger,
+    ContributionRecord,
+    parse_contribution_record,
+)
 
 __all__ = [
     "commit_dataset",
@@ -16,4 +20,6 @@ __all__ = [
     "parse_dataset_commitment",
     "verify_binding",
     "ContributionLedger",
+    "ContributionRecord",
+    "parse_contribution_record",
 ]
