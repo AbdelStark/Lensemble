@@ -199,3 +199,29 @@ def validate_action_spec(spec: ActionSpec) -> None:
                 _spec_fail("num_classes", f"expected num_classes[{i}] >= 2, got {n}")
     else:  # pragma: no cover - exhaustive over ActionKind
         _spec_fail("kind", f"unknown ActionKind: {spec.kind!r}")
+
+
+def check_wmcp_join(
+    advertised_version: str, participant_version: str = WMCP_VERSION
+) -> None:
+    """Exact-equality WMCP federation-join gate (``INV-WMCP``, RFC-0007 6).
+
+    Refuses a participant whose installed ``WMCP_VERSION`` differs from the federation's advertised
+    version *before* it can contribute to an aggregation — conformance is a precondition for joining.
+    Raises :class:`~lensemble.errors.ContractViolation` (code ``WMCP_CONTRACT_VIOLATION``) on mismatch,
+    naming both versions and the required lockstep upgrade; no-op return when equal. Fail-closed: a
+    non-conforming participant is detected at join, never after it has corrupted an aggregation. v0.1 is
+    exact equality on the full SemVer string (no compatible-minor negotiation).
+    """
+    if advertised_version != participant_version:
+        err = ContractViolation(
+            f"WMCP version mismatch at federation join: federation advertises "
+            f"{advertised_version!r}, participant has {participant_version!r}",
+            code=LensembleErrorCode.WMCP_CONTRACT_VIOLATION,
+            remediation=(
+                "upgrade in lockstep so the participant and the federation run the same WMCP_VERSION "
+                f"(federation={advertised_version!r}, participant={participant_version!r})"
+            ),
+        )
+        err.field = "wmcp_version"  # type: ignore[attr-defined]
+        raise err
