@@ -8,5 +8,13 @@ from __future__ import annotations
 
 from lensemble.data.dataset import EpisodeDataset
 from lensemble.data.episode import Episode, Transition, Window
+from lensemble.data.residency import EgressRole, guard_egress
 
-__all__ = ["Transition", "Episode", "Window", "EpisodeDataset"]
+__all__ = [
+    "Transition",
+    "Episode",
+    "Window",
+    "EpisodeDataset",
+    "guard_egress",
+    "EgressRole",
+]
