@@ -23,6 +23,7 @@ from torch import nn
 
 from lensemble.contracts import WMCP_VERSION, LatentState
 from lensemble.errors import ConfigError, LensembleErrorCode
+from lensemble.model.numerics import apply_numerics, autocast_forward, resolve_device
 
 if TYPE_CHECKING:
     from torch import Tensor
@@ -49,6 +50,9 @@ class Predictor(nn.Module):
     d: int
     num_tokens: int
     cond_dim: int
+    compute_dtype: torch.dtype = (
+        torch.float32
+    )  # bf16 on CUDA (set by build_predictor); fp32 default
 
     def __init__(
         self,
@@ -102,12 +106,14 @@ class Predictor(nn.Module):
                 code=LensembleErrorCode.CONFIG_INVALID,
                 remediation="produce the conditioning embedding with last dim == predictor cond_dim",
             )
-        cond = self.cond_proj(action_embedding.to(x.dtype))  # (B, width)
-        h = (
-            self.in_proj(x) + self.pos_embed + cond.unsqueeze(1)
-        )  # broadcast cond over N
-        h = self.norm(self.blocks(h))
-        out = self.out_proj(h)  # (B, N, d)
+        # bf16 forward on CUDA / fp32 on the CPU fallback (RFC-0008 7); a no-op for fp32.
+        with autocast_forward(x.device, getattr(self, "compute_dtype", torch.float32)):
+            cond = self.cond_proj(action_embedding.to(x.dtype))  # (B, width)
+            h = (
+                self.in_proj(x) + self.pos_embed + cond.unsqueeze(1)
+            )  # broadcast cond over N
+            h = self.norm(self.blocks(h))
+            out = self.out_proj(h)  # (B, N, d)
         return LatentState(
             tokens=out,
             num_tokens=self.num_tokens,
@@ -189,7 +195,7 @@ def build_predictor(cfg: Any) -> Predictor:
             code=LensembleErrorCode.CONFIG_INVALID,
             remediation="choose a num_heads that divides predictor_width",
         )
-    return Predictor(
+    predictor = Predictor(
         d=d,
         num_tokens=num_tokens,
         cond_dim=cond_dim,
@@ -199,3 +205,7 @@ def build_predictor(cfg: Any) -> Predictor:
         mlp_ratio=mlp_ratio,
         wmcp_version=wmcp_version,
     )
+    apply_numerics(
+        predictor, resolve_device()
+    )  # CUDA primary (bf16 forward) / CPU fallback (fp32)
+    return predictor
