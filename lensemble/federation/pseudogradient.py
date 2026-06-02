@@ -81,7 +81,7 @@ def build_pseudogradient(
     dataset_root: bytes,
     round_index: int,
     clipped: bool = False,
-    quantized: bool = False,
+    quantize: bool = False,
 ) -> PseudoGradient:
     """Flatten the federated param-group deltas into a :class:`PseudoGradient` (RFC-0003 3).
 
@@ -89,7 +89,13 @@ def build_pseudogradient(
     The flat ``delta`` concatenates the encoder groups then the predictor groups, each sorted by name, in
     a fixed deterministic order. An ``action_head.*`` group (or any non-federated group) raises
     :class:`~lensemble.errors.ResidencyViolation` (``INV-ACTIONHEAD-LOCAL``): per-embodiment heads are
-    local and never cross. ``l2_norm`` is the fp32 norm of the assembled ``delta``.
+    local and never cross.
+
+    When ``quantize`` is set (the ``federation.quantize_pseudo_gradient`` config flag, default off), the
+    assembled flat delta is round-tripped through int8 wire quantization (a bounded, deterministic
+    perturbation; ``lensemble.federation.quant``) and ``PseudoGradient.quantized`` is set ``True``.
+    Quantization runs on the already clipped-and-noised delta and before secure-aggregation masking
+    (RFC-0012 §6). ``l2_norm`` is the fp32 norm of the final (possibly quantized) ``delta``.
     """
     for name in param_deltas:
         group = name.split(".", 1)[0]
@@ -117,11 +123,15 @@ def build_pseudogradient(
         )
     else:
         delta = torch.zeros(0, dtype=torch.float32)
+    if quantize:
+        from lensemble.federation.quant import wire_roundtrip
+
+        delta = wire_roundtrip(delta)
     return PseudoGradient(
         delta=delta,
         l2_norm=float(delta.norm()),
         dataset_root=dataset_root,
         round_index=round_index,
         clipped=clipped,
-        quantized=quantized,
+        quantized=quantize,
     )
