@@ -2,7 +2,18 @@
 
 from __future__ import annotations
 
-from .commit import DatasetCommitment, commit_dataset
+from .commit import (
+    DatasetCommitment,
+    commit_dataset,
+    parse_dataset_commitment,
+    verify_binding,
+)
 from .ledger import ContributionLedger
 
-__all__ = ["commit_dataset", "DatasetCommitment", "ContributionLedger"]
+__all__ = [
+    "commit_dataset",
+    "DatasetCommitment",
+    "parse_dataset_commitment",
+    "verify_binding",
+    "ContributionLedger",
+]

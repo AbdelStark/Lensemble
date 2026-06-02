@@ -86,6 +86,17 @@ class EpisodeDataset:
     def __len__(self) -> int:
         return len(self._episodes)
 
+    @property
+    def episodes(self) -> tuple[Episode, ...]:
+        """The participant-local episodes, read-only.
+
+        In-process access inside the trust boundary — provenance commits ``R_c`` locally
+        (``lensemble.provenance.commit_dataset``) and only the 32-byte root ever crosses egress.
+        Residency-safe (``INV-RESIDENCY``): a read accessor, not a serialization/egress path, and no
+        broader than the existing ``windows()``, which already yields raw tensors locally.
+        """
+        return self._episodes
+
     def windows(self, num_steps: int) -> Iterator[Window]:
         """Yield every contiguous ``num_steps``-transition window across the episodes.
 
