@@ -1,6 +1,7 @@
 """lensemble.model.action_head — see docs/rfcs/RFC-0008 / RFC-0007. Stub scaffolded by #2."""
 
 from __future__ import annotations
+
 from typing import Any
 
 

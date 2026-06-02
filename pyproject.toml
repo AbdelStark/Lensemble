@@ -43,7 +43,16 @@ dp = ["opacus"]
 # Optional observability sink adapters (RFC-0015); the canonical sinks are files.
 observability = ["tensorboard", "wandb"]
 # Dev / test stack.
-dev = ["pytest", "hypothesis", "pytest-benchmark", "ruff", "pyright", "build"]
+dev = [
+    "pytest",
+    "hypothesis",
+    "pytest-benchmark",
+    "pytest-cov",
+    "coverage[toml]",
+    "ruff",
+    "pyright",
+    "build",
+]
 # Phase-2 verifiable layer (Stwo / Circle-STARK prover, out-of-tree, RFC-0006). Declared, stubbed.
 verify = []
 
@@ -59,3 +68,53 @@ version = { attr = "lensemble.__version__" }
 
 [tool.setuptools.packages.find]
 include = ["lensemble*"]
+
+# --- Quality gates (07-testing-strategy §8). The CI workflow (.github/workflows/ci.yml) runs the
+# exact commands below; a contributor reproduces every blocking gate locally with the same config. ---
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["lensemble", "tests"]
+
+[tool.ruff.lint]
+# Errors (E), pyflakes incl. undefined/unused (F), and import ordering (I). Opinionated rewrite
+# families (UP/B/SIM/C4) are deliberately excluded: UP042 would rewrite the spec-mandated
+# `LensembleErrorCode(str, Enum)` to `StrEnum` (changes error-code semantics), and B008 fights
+# Typer's `= typer.Option(...)` default-argument API (conventions §11).
+select = ["E", "F", "I"]
+ignore = ["E501"]  # line length is owned by `ruff format`, not the linter
+
+[tool.ruff.lint.isort]
+known-first-party = ["lensemble"]  # stdlib / third-party / lensemble in distinct import groups
+
+[tool.pyright]
+include = ["lensemble", "tests"]
+pythonVersion = "3.11"
+typeCheckingMode = "basic"
+# Local runs resolve torch/pytest from the project venv; CI provisions `.venv` identically so the
+# import graph pyright sees is the same in both places (07 §8: no GPU, CPU-only, deterministic).
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers --strict-config"
+# The fixed hypothesis profile (deadline off, derandomized for replay) is registered in
+# tests/conftest.py and loaded there (07 §7); CI exports HYPOTHESIS_PROFILE=lensemble.
+
+[tool.coverage.run]
+source = ["lensemble"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "\\.\\.\\.",  # bare-ellipsis Protocol/abstract bodies
+]
+# NOTE: `raise NotImplementedError` is deliberately NOT excluded. Stub failure paths in the
+# security-critical modules (e.g. provenance.commit before #29) must be covered by an explicit
+# contract test, so the 100% gate stays load-bearing rather than silently satisfied.

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 import torch
@@ -26,7 +27,7 @@ def _weights() -> dict[str, torch.Tensor]:
     }
 
 
-def _save(d: Path, w: dict[str, torch.Tensor], **kw: object) -> str:
+def _save(d: Path, w: dict[str, torch.Tensor], **kw: Any) -> str:
     return save_checkpoint(
         d,
         w,

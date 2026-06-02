@@ -1,4 +1,5 @@
 """lensemble.federation.round — see docs/rfcs/RFC-0013. Stub scaffolded by #2."""
+
 from __future__ import annotations
 
 

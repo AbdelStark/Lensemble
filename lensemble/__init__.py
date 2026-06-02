@@ -77,11 +77,27 @@ def __dir__() -> list[str]:
     return sorted(__all__)
 
 
-if TYPE_CHECKING:  # static-analysis view of the lazily re-exported surface; no runtime cost
+if (
+    TYPE_CHECKING
+):  # static-analysis view of the lazily re-exported surface; no runtime cost
     from lensemble.config import LensembleConfig, RunManifest, load  # noqa: F401
     from lensemble.eval import Planner, evaluate  # noqa: F401
-    from lensemble.federation import Coordinator, Participant, RoundState, train_local  # noqa: F401
+    from lensemble.federation import (  # noqa: F401
+        Coordinator,
+        Participant,
+        RoundState,
+        train_local,
+    )
     from lensemble.gauge import frame_drift, procrustes_align  # noqa: F401
-    from lensemble.model import Objective, build_action_head, build_encoder, build_predictor  # noqa: F401
-    from lensemble.provenance import ContributionLedger, DatasetCommitment, commit_dataset  # noqa: F401
+    from lensemble.model import (
+        Objective,
+        build_action_head,
+        build_encoder,
+        build_predictor,
+    )  # noqa: F401
+    from lensemble.provenance import (
+        ContributionLedger,
+        DatasetCommitment,
+        commit_dataset,
+    )  # noqa: F401
     from lensemble.verify import recompute_alignment  # noqa: F401

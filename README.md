@@ -5,6 +5,8 @@
 *Specification corpus · v0.1 (Draft) · June 2026*
 Author: Abdelhamid Bakhta ([@AbdelStark](https://github.com/AbdelStark))
 
+[![ci](https://github.com/AbdelStark/Lensemble/actions/workflows/ci.yml/badge.svg)](https://github.com/AbdelStark/Lensemble/actions/workflows/ci.yml)
+
 ---
 
 ## What Lensemble is
@@ -88,3 +90,8 @@ Lensemble/
 ```
 
 A reference implementation (`lensemble/`, Python; warm-starting V-JEPA 2, wrapping stable-worldmodel for data + MPC eval) follows the staged plan in [RFC-0001](docs/rfcs/RFC-0001-architecture.md) (Migration / Rollout) and the milestones in [conventions §12](docs/spec/conventions.md#12-milestones-and-stages).
+
+## Contributing
+
+[`CONTRIBUTING.md`](CONTRIBUTING.md) covers the dev setup and the blocking CI gates (lint, type-check,
+the CPU test suite, and the coverage thresholds) that must be green before any pull request merges.

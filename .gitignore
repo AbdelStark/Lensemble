@@ -4,6 +4,15 @@ __pycache__/
 .venv/
 .env
 .DS_Store
+
+# Test / coverage artifacts
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.pytest_cache/
+.hypothesis/
+.ruff_cache/
 node_modules/
 dist/
 .artifacts/
@@ -15,3 +24,7 @@ data/raw/
 # Local automation and scratch workspaces
 .agents/harness/
 .tldr/
+.claude/
+
+# uv: we install via `uv pip install -e .[dev]` (not `uv sync`), so the lock is non-authoritative
+uv.lock

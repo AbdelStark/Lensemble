@@ -116,7 +116,11 @@ def test_check_is_pure_no_mutation() -> None:
 from hypothesis import given  # noqa: E402
 from hypothesis import strategies as st  # noqa: E402
 
-from lensemble.contracts import ActionKind, ActionSpec, validate_action_spec  # noqa: E402
+from lensemble.contracts import (  # noqa: E402
+    ActionKind,
+    ActionSpec,
+    validate_action_spec,
+)
 
 
 def _continuous(dim: int = 3) -> ActionSpec:

@@ -142,3 +142,25 @@ def test_violation_propagates_not_swallowed() -> None:
     except ResidencyViolation:
         raised = True
     assert raised, "guard_egress must propagate ResidencyViolation (fail-closed)"
+
+
+def test_unknown_object_is_walked_fail_closed() -> None:
+    # An unmarked, unknown carrier is not trusted: the guard walks its __dict__ so a hidden
+    # resident tensor is still caught (fail-closed, INV-RESIDENCY). Exercises the __dict__
+    # field-iteration and the unknown-object recursion in residency._iter_fields/_inspect.
+    class _Smuggler:
+        def __init__(self) -> None:
+            self.label = "harmless"
+            self.hidden = torch.zeros(4)  # a raw tensor tucked behind an unknown type
+
+    with pytest.raises(ResidencyViolation):
+        guard_egress(_Smuggler())
+
+
+def test_unknown_fieldless_object_passes() -> None:
+    # An unknown object that carries no inspectable fields (no __dict__, not a dataclass) holds
+    # no resident data, so the fail-closed walk finds nothing and the guard returns cleanly.
+    class _Opaque:
+        __slots__ = ()
+
+    assert guard_egress({"marker": _Opaque()}) is None
