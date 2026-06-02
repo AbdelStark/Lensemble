@@ -42,7 +42,7 @@ Full statement of thesis, goals, non-goals, and success criteria: [00-overview.m
   [RFC-0003](docs/rfcs/RFC-0003-federated-protocol.md) →
   [RFC-0004](docs/rfcs/RFC-0004-data-provenance.md) →
   [RFC-0002](docs/rfcs/RFC-0002-gauge-and-aggregation.md) →
-  [RFC-0005](docs/rfcs/RFC-0005-evaluation.md), then the subsystem RFCs (0007–0015), then
+  [RFC-0005](docs/rfcs/RFC-0005-evaluation.md), then the subsystem RFCs (0007–0016), then
   [RFC-0006](docs/rfcs/RFC-0006-verifiable-contribution.md).
 - For conventions, notation, named invariants, and the type/API/error contracts shared across the
   corpus: [conventions.md](docs/spec/conventions.md).
@@ -83,6 +83,7 @@ Full statement of thesis, goals, non-goals, and success criteria: [00-overview.m
 | [0013](docs/rfcs/RFC-0013-coordinator-runtime.md) | Coordinator & Participant Runtime | Accepted | federation |
 | [0014](docs/rfcs/RFC-0014-provenance-commitments.md) | Provenance Commitments & Merkle Scheme | Accepted | provenance |
 | [0015](docs/rfcs/RFC-0015-observability-diagnostics.md) | Observability, Diagnostics & Telemetry | Accepted | observability |
+| [0016](docs/rfcs/RFC-0016-deployment-vendoring-topology.md) | Deployment, Vendoring & Topology | Accepted | core |
 
 ## Scope and status
 

@@ -389,7 +389,8 @@ dependency table; reasons abbreviated):
 | ruff / pyright | recent | lint + type-check CI gates |
 | V-JEPA 2 weights | pinned release | encoder warm-start + AC recipe; the `t=0` frame anchor |
 | LeJEPA / LeWM (SIGReg) | pinned | the objective (random-projection + characteristic-function Gaussianity) |
-| stable-worldmodel | pinned | data layer (`lance`/`hdf5`/`lerobot`), envs, latent-MPC eval |
+| stable-worldmodel | pinned (vendored, [RFC-0016](../rfcs/RFC-0016-deployment-vendoring-topology.md)) | data layer (`lance`/`hdf5`/`lerobot`), envs, latent-MPC eval |
+| stable-pretraining | pinned (vendored, [RFC-0016](../rfcs/RFC-0016-deployment-vendoring-topology.md)) | pretraining scaffold reused alongside stable-worldmodel |
 | Stwo (Circle-STARK prover) | Phase-2 only | aggregation-correctness proof — out of v1.0 scope |
 
 Support-window policy:
