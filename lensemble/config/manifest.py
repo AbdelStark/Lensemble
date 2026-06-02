@@ -1,4 +1,5 @@
 """lensemble.config.manifest — see docs/rfcs/RFC-0009. Stub scaffolded by #2."""
+
 from __future__ import annotations
 
 
