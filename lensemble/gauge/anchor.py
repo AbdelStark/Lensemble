@@ -21,6 +21,7 @@ from torch import Tensor
 
 from lensemble.data.probe import probe_content_hash
 from lensemble.errors import FrameDriftExceeded, LensembleErrorCode, ProbeError
+from lensemble.gauge.procrustes import procrustes_align
 
 if TYPE_CHECKING:
     from lensemble.model.objective import _EncoderLike  # structural encoder protocol
@@ -41,13 +42,13 @@ class FrameAnchor:
         self,
         probe: Any,
         ref_embeddings: Tensor,
-        variant: Literal["landmark"] = "landmark",
+        variant: Literal["landmark", "rotational"] = "landmark",
         *,
         probe_hash: str,
     ) -> None:
-        if variant != "landmark":
+        if variant not in ("landmark", "rotational"):
             raise ValueError(
-                f"FrameAnchor here implements only variant='landmark', got {variant!r}"
+                f"FrameAnchor variant must be 'landmark' or 'rotational', got {variant!r}"
             )
         k = ref_embeddings.shape[0]
         d = ref_embeddings.shape[-1]
@@ -78,12 +79,24 @@ class FrameAnchor:
         self._d = int(d)
 
     def loss(self, encoder: _EncoderLike) -> Tensor:
-        """The unweighted ``L_anchor = (1/k) * sum_i ||f_theta(p_i) - t_i||^2`` (0-dim fp32, RFC-0002 4).
+        """The unweighted ``L_anchor`` (0-dim fp32, RFC-0002 4), differentiable w.r.t. ``f_theta``.
 
-        Minimizing it pulls the encoder's frame on the ``k`` landmarks back onto the fixed round-0 targets
-        — the only rotation that zeroes it (for ``k >= d`` generic landmarks) is the identity.
+        ``variant="landmark"`` (Variant A): ``(1/k) * sum_i ||f_theta(p_i) - t_i||^2`` — pull the encoder's
+        frame on the ``k`` landmarks back onto the fixed round-0 targets; the only rotation that zeroes it
+        (for ``k >= d`` generic landmarks) is the identity.
+
+        ``variant="rotational"`` (Variant B): ``||Q* - I||_F^2`` where ``Q* = procrustes_align(f_theta(P),
+        E_ref)`` — penalize *only* the Procrustes rotation, leaving the post-alignment content residual
+        free, with gradients flowing through the differentiable SVD into ``f_theta``. A near-degenerate
+        SVD raises :class:`~lensemble.errors.DegenerateProcrustes` rather than a NaN gradient.
         """
         landmarks = self.probe.points[self.probe.landmark_idx]
         predicted = encoder(landmarks).tokens.to(torch.float32)
-        diff = predicted - self.targets
-        return diff.pow(2).sum() / self._k
+        if self.variant == "landmark":
+            return (predicted - self.targets).pow(2).sum() / self._k
+        # rotational (Variant B): penalize the recovered rotation only
+        rotation, _ = procrustes_align(
+            predicted.reshape(-1, self._d), self.targets.reshape(-1, self._d)
+        )
+        identity = torch.eye(self._d, dtype=rotation.dtype)
+        return (rotation - identity).pow(2).sum()
