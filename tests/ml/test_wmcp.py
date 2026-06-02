@@ -109,3 +109,111 @@ def test_check_is_pure_no_mutation() -> None:
     # frozen dataclass: fields are immutable
     with pytest.raises(dataclasses.FrozenInstanceError):
         s.dim = 99  # type: ignore[misc]
+
+
+# --- ActionSpec conformance (RFC-0007 3/4), issue #7 ---
+
+from hypothesis import given  # noqa: E402
+from hypothesis import strategies as st  # noqa: E402
+
+from lensemble.contracts import ActionKind, ActionSpec, validate_action_spec  # noqa: E402
+
+
+def _continuous(dim: int = 3) -> ActionSpec:
+    return ActionSpec(
+        embodiment_id="so101-arm-7dof",
+        kind=ActionKind.CONTINUOUS,
+        dim=dim,
+        low=tuple(-1.0 for _ in range(dim)),
+        high=tuple(1.0 for _ in range(dim)),
+        num_classes=None,
+        units=tuple("rad" for _ in range(dim)),
+        wmcp_version=WMCP_VERSION,
+    )
+
+
+def _discrete(dim: int = 2) -> ActionSpec:
+    return ActionSpec(
+        embodiment_id="quadruped.gait",
+        kind=ActionKind.DISCRETE,
+        dim=dim,
+        low=None,
+        high=None,
+        num_classes=tuple(4 for _ in range(dim)),
+        units=tuple("idx" for _ in range(dim)),
+        wmcp_version=WMCP_VERSION,
+    )
+
+
+def test_valid_specs_validate() -> None:
+    assert validate_action_spec(_continuous()) is None
+    assert validate_action_spec(_discrete()) is None
+
+
+def _assert_spec_violation(spec: ActionSpec, field: str) -> None:
+    with pytest.raises(ContractViolation) as exc:
+        validate_action_spec(spec)
+    assert exc.value.code == LensembleErrorCode.WMCP_CONTRACT_VIOLATION
+    assert exc.value.remediation
+    assert exc.value.field == field  # type: ignore[attr-defined]
+
+
+def test_invalid_specs_rejected() -> None:
+    import dataclasses as dc
+
+    base_c = _continuous(3)
+    base_d = _discrete(2)
+    _assert_spec_violation(dc.replace(base_c, dim=0, low=(), high=(), units=()), "dim")
+    _assert_spec_violation(dc.replace(base_c, units=("rad", "rad")), "units")
+    _assert_spec_violation(
+        dc.replace(base_c, high=(-1.0, -1.0, -1.0)), "bounds"
+    )  # low>=high
+    _assert_spec_violation(dc.replace(base_d, num_classes=(4, 1)), "num_classes")  # <2
+    _assert_spec_violation(
+        dc.replace(base_c, num_classes=(2, 2, 2)), "num_classes"
+    )  # continuous w/ classes
+    _assert_spec_violation(
+        dc.replace(base_d, low=(0.0, 0.0), high=(1.0, 1.0)), "bounds"
+    )  # discrete w/ bounds
+    _assert_spec_violation(dc.replace(base_c, embodiment_id="Bad ID!"), "embodiment_id")
+    _assert_spec_violation(
+        dc.replace(base_c, wmcp_version="wmcp-0.0.0"), "wmcp_version"
+    )
+
+
+def test_actionspec_hashable_and_stable() -> None:
+    a, b = _continuous(3), _continuous(3)
+    assert a == b
+    assert hash(a) == hash(b)
+    assert len({a, b}) == 1  # usable as a set/dict key
+
+
+@given(dim=st.integers(min_value=1, max_value=6))
+def test_continuous_property_valid(dim: int) -> None:
+    spec = ActionSpec(
+        embodiment_id="emb-0",
+        kind=ActionKind.CONTINUOUS,
+        dim=dim,
+        low=tuple(float(-i - 1) for i in range(dim)),
+        high=tuple(float(i + 1) for i in range(dim)),
+        num_classes=None,
+        units=tuple("u" for _ in range(dim)),
+        wmcp_version=WMCP_VERSION,
+    )
+    assert validate_action_spec(spec) is None
+
+
+@given(counts=st.lists(st.integers(min_value=2, max_value=9), min_size=1, max_size=6))
+def test_discrete_property_valid(counts: list[int]) -> None:
+    dim = len(counts)
+    spec = ActionSpec(
+        embodiment_id="emb-1",
+        kind=ActionKind.DISCRETE,
+        dim=dim,
+        low=None,
+        high=None,
+        num_classes=tuple(counts),
+        units=tuple("idx" for _ in range(dim)),
+        wmcp_version=WMCP_VERSION,
+    )
+    assert validate_action_spec(spec) is None

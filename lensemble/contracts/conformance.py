@@ -8,10 +8,12 @@ bug or interface disagreement. Enforces ``INV-WMCP``.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import re
+from typing import TYPE_CHECKING, NoReturn
 
 import torch
 
+from lensemble.contracts.action import ActionKind, ActionSpec
 from lensemble.contracts.latent import WMCP_VERSION, LatentState
 from lensemble.errors import ContractViolation, LensembleErrorCode
 
@@ -19,6 +21,7 @@ if TYPE_CHECKING:
     from typing import Any
 
 _ALLOWED_DTYPES = (torch.bfloat16, torch.float16, torch.float32)
+_EMBODIMENT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 
 
 def _fail(
@@ -28,7 +31,7 @@ def _fail(
     got_shape: tuple[int, ...],
     wmcp_version: str,
     expected_shape: "tuple[Any, ...] | None" = None,
-) -> None:
+) -> NoReturn:
     """Raise a ``ContractViolation`` carrying the diagnostic fields (RFC-0007 7)."""
     err = ContractViolation(
         f"LatentState conformance failed: {field}",
@@ -129,3 +132,70 @@ def check_latent_state(
             got_shape=got,
             wmcp_version=ver,
         )
+
+
+def _spec_fail(field: str, remediation: str) -> NoReturn:
+    """Raise a ``ContractViolation`` for an ``ActionSpec`` rule (RFC-0007 7)."""
+    err = ContractViolation(
+        f"ActionSpec validation failed: {field}",
+        code=LensembleErrorCode.WMCP_CONTRACT_VIOLATION,
+        remediation=remediation,
+    )
+    err.field = field  # type: ignore[attr-defined]
+    raise err
+
+
+def validate_action_spec(spec: ActionSpec) -> None:
+    """Validate an ``ActionSpec`` before action-head construction (``INV-WMCP``, RFC-0007 3/4).
+
+    Raises :class:`~lensemble.errors.ContractViolation` (code ``WMCP_CONTRACT_VIOLATION``) on any rule;
+    no-op return on success. Pure: no I/O, no mutation.
+    """
+    if spec.wmcp_version != WMCP_VERSION:
+        _spec_fail(
+            "wmcp_version",
+            f"expected wmcp_version == {WMCP_VERSION!r}, got {spec.wmcp_version!r}",
+        )
+    if not spec.embodiment_id or not _EMBODIMENT_ID_RE.match(spec.embodiment_id):
+        _spec_fail(
+            "embodiment_id",
+            "expected a non-empty embodiment_id matching ^[a-z0-9][a-z0-9._-]*$ "
+            f"(safe as a key and a log/file label), got {spec.embodiment_id!r}",
+        )
+    if spec.dim <= 0:
+        _spec_fail("dim", f"expected dim > 0, got {spec.dim}")
+    if len(spec.units) != spec.dim:
+        _spec_fail(
+            "units",
+            f"expected len(units) == dim ({spec.dim}), got {len(spec.units)}",
+        )
+
+    if spec.kind is ActionKind.CONTINUOUS:
+        if spec.num_classes is not None:
+            _spec_fail("num_classes", "continuous spec must have num_classes is None")
+        if spec.low is None or spec.high is None:
+            _spec_fail("bounds", "continuous spec must provide low and high bounds")
+        if len(spec.low) != spec.dim or len(spec.high) != spec.dim:
+            _spec_fail(
+                "bounds",
+                f"expected len(low) == len(high) == dim ({spec.dim}), "
+                f"got {len(spec.low)} and {len(spec.high)}",
+            )
+        for i, (lo, hi) in enumerate(zip(spec.low, spec.high, strict=True)):
+            if not lo < hi:
+                _spec_fail("bounds", f"expected low[{i}] < high[{i}], got {lo} >= {hi}")
+    elif spec.kind is ActionKind.DISCRETE:
+        if spec.low is not None or spec.high is not None:
+            _spec_fail("bounds", "discrete spec must have low and high as None")
+        if spec.num_classes is None:
+            _spec_fail("num_classes", "discrete spec must provide per-dim num_classes")
+        if len(spec.num_classes) != spec.dim:
+            _spec_fail(
+                "num_classes",
+                f"expected len(num_classes) == dim ({spec.dim}), got {len(spec.num_classes)}",
+            )
+        for i, n in enumerate(spec.num_classes):
+            if n < 2:
+                _spec_fail("num_classes", f"expected num_classes[{i}] >= 2, got {n}")
+    else:  # pragma: no cover - exhaustive over ActionKind
+        _spec_fail("kind", f"unknown ActionKind: {spec.kind!r}")

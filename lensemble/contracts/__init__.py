@@ -6,7 +6,15 @@ dtype, and frame semantics every encoder emits and every predictor consumes (``I
 
 from __future__ import annotations
 
-from lensemble.contracts.conformance import check_latent_state
+from lensemble.contracts.action import ActionKind, ActionSpec
+from lensemble.contracts.conformance import check_latent_state, validate_action_spec
 from lensemble.contracts.latent import WMCP_VERSION, LatentState
 
-__all__ = ["LatentState", "WMCP_VERSION", "check_latent_state"]
+__all__ = [
+    "LatentState",
+    "WMCP_VERSION",
+    "check_latent_state",
+    "ActionSpec",
+    "ActionKind",
+    "validate_action_spec",
+]
