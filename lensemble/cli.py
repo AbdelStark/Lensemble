@@ -349,18 +349,82 @@ app.add_typer(verify_app, name="verify")
 
 @verify_app.command("recompute")
 def verify_recompute(
+    checkpoint: Path = typer.Option(
+        ...,
+        "--checkpoint",
+        help="committed (θ, φ) checkpoint dir; hash-verified on load (INV-CHECKPOINT-HASH)",
+    ),
+    probe: Path = typer.Option(
+        ...,
+        "--probe",
+        help="pinned public probe P; content-hash checked against its pin (INV-PROBE-PIN)",
+    ),
+    expected: Path | None = typer.Option(
+        None,
+        "--expected",
+        help="an AlignmentClaim JSON to check against; exits non-zero if it does not match",
+    ),
     config: Path | None = _CONFIG_OPT,
-    run_dir: Path = _RUNDIR_OPT,
     overrides: list[str] | None = _OVERRIDES_ARG,
 ) -> None:
-    """Recompute and check a round's aggregation/alignment from released artifacts (RFC-0006)."""
-    _stub_command(
-        "verify recompute",
-        config,
-        overrides,
-        run_dir,
-        owner="verify.recompute_alignment",
+    """Publicly recompute a committed model's frame alignment to the reference (RFC-0006 §4; 02 §1.8).
+
+    Reconstructs ``f_θ`` from the self-describing checkpoint (#171), recomputes the closed-form Procrustes
+    alignment ``Q*`` of ``f_θ(P)`` to the probe's pinned reference targets ``E_ref`` deterministically,
+    and echoes the result JSON to stdout. Without ``--expected`` it emits the
+    :class:`~lensemble.gauge.drift.FrameDriftReport` (``drift_from_global['committed']`` is the recovered
+    rotation angle to the reference frame). With ``--expected <claim.json>`` it emits the richer
+    :class:`~lensemble.verify.AlignmentRecomputation` and **exits non-zero** when ``matches_expected`` is
+    ``False`` — the CLI exit-code contract a CI / verifier consumes (RFC-0006 §4).
+
+    The #18 caveat: this MEASURES the committed model's alignment to the reference frame; it does NOT
+    verify the Layer-3 backstop was applied, because that backstop rotates in activation space at
+    aggregation (the recorded #18 decision), not as a fold into the committed weights.
+    """
+    from lensemble.verify import (
+        parse_alignment_claim,
+        recompute_alignment,
+        recompute_alignment_claim,
     )
+
+    with _supervise():
+        _compose(
+            config, overrides
+        )  # validate config at the boundary (no-op for the recompute)
+        if expected is None:
+            report = recompute_alignment(checkpoint, probe)
+            typer.echo(
+                report.model_dump_json()
+            )  # machine-readable: report JSON -> stdout
+            typer.echo(
+                "verify recompute: alignment recomputed from the committed weights + pinned probe "
+                "(RFC-0006 §4; measures alignment to the reference frame, not the #18 activation-space "
+                "backstop).",
+                err=True,  # human-readable -> stderr
+            )
+            return
+        if not expected.exists():
+            raise ConfigError(
+                f"--expected claim file not found: {expected}",
+                code=LensembleErrorCode.CONFIG_INVALID,
+                remediation="pass an existing AlignmentClaim JSON path, or omit --expected",
+            )
+        claim = parse_alignment_claim(json.loads(expected.read_text(encoding="utf-8")))
+        record = recompute_alignment_claim(checkpoint, probe, expected=claim)
+        typer.echo(
+            record.model_dump_json()
+        )  # machine-readable: the record JSON -> stdout
+        if record.matches_expected is False:
+            typer.echo(
+                "verify recompute: recomputed alignment does NOT match the expected claim; the claim is "
+                "rejected (RFC-0006 §4).",
+                err=True,  # human-readable -> stderr
+            )
+            raise typer.Exit(code=1)
+        typer.echo(
+            "verify recompute: recomputed alignment matches the expected claim (RFC-0006 §4).",
+            err=True,  # human-readable -> stderr
+        )
 
 
 @verify_app.command("prove")
