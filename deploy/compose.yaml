@@ -1,0 +1,35 @@
+# Docker Compose topology STUB — RFC-0016 §4 (Layer 1, local multi-node).
+#
+# This is a TOPOLOGY STUB, not a runnable deployment. It sketches the coordinator + participant service
+# skeleton (a `participant` scaled via `deploy.replicas`, a `cpu` profile for CI/laptops, and the
+# coordinator `healthcheck` / `depends_on` ordering) so RFC-0016's acceptance — "a contributor can run N
+# nodes / `docker compose --profile cpu up`" — is STRUCTURALLY unblocked. The real Stage-C wiring (a
+# working image, the networked control-plane transport, and config-driven rendering from
+# `LensembleConfig.federation`) lands with #45's networked transport and the real vendoring (#96). The
+# image/command below are placeholders.
+
+services:
+  coordinator:
+    # STUB: placeholder image/command — real image lands with #45 + real vendoring (#96).
+    image: lensemble:stub
+    command: ["lensemble", "federate", "coordinator"]
+    profiles: ["cpu"]
+    healthcheck:
+      # STUB: a real readiness probe replaces this when the networked transport (#45) exists.
+      test: ["CMD", "true"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  participant:
+    # STUB: placeholder image/command — participants join only after the coordinator is ready.
+    image: lensemble:stub
+    command: ["lensemble", "federate", "participant"]
+    profiles: ["cpu"]
+    depends_on:
+      coordinator:
+        condition: service_healthy
+    deploy:
+      # N participants on one machine; rendered from `LensembleConfig.federation.participant_count`
+      # once config-driven generation lands (RFC-0016 §4).
+      replicas: 2
