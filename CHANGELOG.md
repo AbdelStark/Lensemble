@@ -27,6 +27,30 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:eval`: **Non-IID severity, C/H, and scale sweeps — Claim 4 (robustness)** (RFC-0005 §7; #56) — the
+  three §7 robustness sweeps run **over** the §6 ladder rungs, reusing #55's runner (`run_ablation_ladder`)
+  and harness (`run_federated_simulation`). Split across the RFC-0001 §3 band (eval may not import
+  federation): the **compose** side is new `lensemble/eval/sweeps.py`
+  (`lensemble.eval.partition_synthetic_noniid` / `sample_drift_pairs` / `SiloPartition`); the **drivers**
+  are new `lensemble/federation/sweeps.py` (`lensemble.federation.non_iid_severity_sweep` /
+  `participant_horizon_sweep` / `scale_sweep`). The non-IID severity axis is **synthetic** — the partition
+  shifts each silo's synthetic toy distribution by a per-silo mean offset scaled by the severity `s ∈ [0, 1]`
+  (`s=0` near-IID/shared draw → `s=1` strongly non-IID/per-silo shift) — because the real
+  `stable-worldmodel` factors-of-variation are **deferred** (maintainer-gated vendoring, #96): the real
+  factors-of-variation path is a **documented, fail-closed seam** (`factor != "synthetic"` raises
+  `EvaluationError`, never silently falling back, mirroring `resolve_env`'s `stable-worldmodel://` branch).
+  The `(C, H)` sweep varies `federation.participant_count` / `inner_horizon` (a longer `H` rotates frames
+  further apart before the outer step, RFC-0002 §2.1); the scale sweep repeats the key rungs at increasing
+  `model.latent_dim` (each a coherent ViT shape via the #166 bridge). `sample_drift_pairs` deterministically
+  samples a bounded set of participant pairs for the `O(C²)` drift figure at large `C` (seeded, capped at
+  `C-choose-2`), recorded in the `RunManifest` so the figure stays reproducible (RFC-0005 §8). Each sweep
+  runs only the load-bearing `naive-fedavg` + `frame-anchor` rungs per point (a new `rung_names` filter on
+  `run_ablation_ladder`) to stay CPU-fast, and reuses #55's per-`Coordinator` `tempfile.mkdtemp` cleanup so
+  the many-point sweeps leak no temp dir. CPU regression guard `tests/ml/test_noniid_sweeps.py` asserts the
+  load-bearing trends — stronger non-IID and longer `H` raise the naive drift; the anchored rung stays low
+  at every severity and scale — plus the #96 fail-closed seam, pair-sampling determinism, and zero temp-dir
+  leak. Docs: extended the [Ablation Ladder page](docs/ablation-ladder.md) with the three sweep axes, the
+  partition-by-factor protocol, the deferred real-factors seam, and the `O(C²)` enumerate-vs-sample policy.
 - `area:eval`: **Ablation-ladder runner — the paper's core experiment** (RFC-0005 §6; #55) —
   `lensemble.eval.run_ablation_ladder` / `lambda_anc_sweep` / `RungReport` / `LADDER_RUNGS` (new
   `lensemble/eval/ablation.py`), on top of a new **live multi-round federated-simulation harness**

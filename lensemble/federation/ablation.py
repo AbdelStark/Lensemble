@@ -46,6 +46,7 @@ def run_ablation_ladder(
     participants_data: "Sequence[SiloData]",
     *,
     num_rounds: int,
+    rung_names: "Sequence[str] | None" = None,
 ) -> dict[str, RungReport]:
     """Run every ladder rung through the live federated-simulation harness; return per-rung records (#55).
 
@@ -58,6 +59,12 @@ def run_ablation_ladder(
     (:func:`~lensemble.eval.ablation.run_distillation`) — the top-rung mechanism; the consensus does not
     change the reported drift (the drift is the pre-consensus per-silo signal, RFC-0002 §6).
 
+    ``rung_names`` optionally restricts the run to a SUBSET of the ladder (in ladder order, ignoring any
+    unknown name): the RFC-0005 §7 sweeps (#56) run MANY ladder points, so they drive only the load-bearing
+    ``naive-fedavg`` + ``frame-anchor`` rungs per point to stay CPU-fast, while the full ladder run (the §6
+    central experiment) passes ``None`` to run all five. Composing/running each rung is independent of the
+    others, so a subset is a faithful slice of the full ladder.
+
     The per-rung frame-drift figure is the MEAN inter-silo rotation angle across rounds — the stable,
     non-flaky reduction that smooths the round-to-round variance of the toy outer loop, so the qualitative
     ordering (naive worst, anchored flat) is a robust comparison rather than a single noisy last-round
@@ -65,8 +72,11 @@ def run_ablation_ladder(
     in ladder order. Each rung pins its own throwaway probe dir (cleaned up after the run) and the harness
     cleans up each Coordinator's ``tempfile.mkdtemp`` artifacts dir, so the multi-rung run leaks no temp dir.
     """
+    selected = None if rung_names is None else set(rung_names)
     reports: dict[str, RungReport] = {}
     for name, spec in LADDER_RUNGS:
+        if selected is not None and name not in selected:
+            continue
         comp = compose_rung(base_cfg, spec)
         try:
             result = run_federated_simulation(

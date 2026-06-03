@@ -33,6 +33,11 @@ from .simulation import (
     run_federated_simulation,
 )
 from .state import GlobalState, ParamRef
+from .sweeps import (
+    non_iid_severity_sweep,
+    participant_horizon_sweep,
+    scale_sweep,
+)
 from .transport import InProcessTransport, Transport
 
 __all__ = [
@@ -46,6 +51,9 @@ __all__ = [
     "SimulationResult",
     "run_federated_simulation",
     "run_ablation_ladder",
+    "non_iid_severity_sweep",
+    "participant_horizon_sweep",
+    "scale_sweep",
     "GlobalState",
     "ParamRef",
     "Transport",
