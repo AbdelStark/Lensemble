@@ -446,6 +446,25 @@ The data layer supports `lance` (default), `hdf5` (portable), and the `lerobot:/
 - Each adapter declares minimal data-quality metadata (modality, embodiment, `ActionSpec`, episode
   count); the federation MAY gate on declared quality ([RFC-0004 §6](../rfcs/RFC-0004-data-provenance.md#6-data-quality-metadata-and-the-wmcp-precondition)).
 
+The three built-in adapters resolve through one module-level registry in `lensemble.data.adapters`
+keyed by `fmt` (or, for the read-only LeRobot view, the `lerobot://` URI scheme). `save_episodes` /
+`load_episodes` are the dispatch entry points; `register_adapter` is the extension point:
+
+```python
+from lensemble.data import save_episodes, load_episodes, register_adapter
+
+save_episodes(dataset, "silo_c0.lance", fmt="lance")    # default reference store
+ds = load_episodes("silo_c0.lance")                       # fmt inferred from the .lance suffix
+ds = load_episodes("lerobot://lerobot/pusht")             # read-only, conformance-checked on load
+
+register_adapter("myfmt", loader=my_load, saver=my_save)  # a new backend plugs in here
+```
+
+- `save_episodes(..., fmt="lerobot")` raises: the `lerobot://` view is read-only by construction
+  (it registers no saver), so it never participates in commitment or egress.
+- A `loader` returns a read-back `EpisodeDataset` carrying the same `fmt`; an omitted `saver` makes the
+  adapter read-only. Both run inside the trust boundary on local files only.
+
 ---
 
 ## 6. Open questions

@@ -316,7 +316,7 @@ The authoritative policy is in [09-release-and-versioning.md](09-release-and-ver
 | LeJEPA / LeWM (SIGReg) | pinned | the objective (random-projection + characteristic-function Gaussianity) |
 | stable-worldmodel | pinned (vendored, [RFC-0016](../rfcs/RFC-0016-deployment-vendoring-topology.md)) | data layer (`lance`/`hdf5`/`lerobot`), envs, latent-MPC eval |
 | stable-pretraining | pinned (vendored, [RFC-0016](../rfcs/RFC-0016-deployment-vendoring-topology.md)) | pretraining scaffold reused alongside stable-worldmodel |
-| lance | `>=0.10` | append-friendly fast indexed episode reads (default format) |
+| pylance | `>=0.10` | the Lance columnar format (import name `lance`) — append-friendly fast indexed episode reads (default format). The bare `lance` PyPI name is an unrelated typosquat; depend on `pylance`. |
 | h5py | `>=3.10` | portable single-file episode format |
 | hydra-core / omegaconf | `>=1.3` / `>=2.3` | structured config groups + overrides |
 | pydantic | `>=2,<3` | typed validation of on-disk metadata schemas |
