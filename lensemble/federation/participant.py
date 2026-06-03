@@ -34,12 +34,14 @@ hooks to inject tiny fixtures. When #22 lands these hooks resolve from the real 
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import torch
 from torch import Tensor
 
-from lensemble.config.seed import derive
+from lensemble.config.seed import derive, round_sketch_seed
 from lensemble.data.probe import PublicProbe, load_probe
 from lensemble.errors import (
     GaugeError,
@@ -75,12 +77,26 @@ _INNER_LR = 1e-3
 _DP_BOUND_TOL = 1e-6
 
 
+@dataclass(frozen=True)
 class RunResult:
-    """Result of a local training run: checkpoint, manifest, final metrics (02-public-api 1.2).
+    """Result of a single-site local training run (02-public-api 1.2; the Stage-A ``train_local`` output).
 
-    Owned by ``train_local`` (the Stage-A single-site path), which is NOT this issue (#43 is the federated
-    ``Participant.local_round``). Left as the existing stub surface for the owning issue to flesh out.
+    Carries the committed checkpoint directory, its hash-verified ``content_hash`` (``INV-CHECKPOINT-HASH``,
+    the value to commit), the deterministic eval-style ``RunManifest`` hash binding the run's exact inputs,
+    and the final inner-loop loss. Scalars/hashes/paths only — no raw tensor crosses this boundary
+    (``INV-RESIDENCY``).
     """
+
+    checkpoint_dir: (
+        Path  # the committed artifact directory (weights.safetensors + header.json)
+    )
+    checkpoint_hash: (
+        str  # the artifact content_hash (64 lowercase hex, INV-CHECKPOINT-HASH)
+    )
+    manifest_hash: (
+        str  # SHA-256 over the train_local-mode RunManifest (created_at excluded)
+    )
+    final_loss: float  # the last inner-AdamW-step objective total (a convergence diagnostic, not a gate)
 
 
 class Participant:
@@ -123,16 +139,24 @@ class Participant:
     def _local_windows(self) -> Sequence["Window"]:
         """The participant's local training windows (the #22 data-layer boundary).
 
-        Default: there is no toy data source wired yet, so this fails closed citing #22. Tests override it
-        to inject a tiny sequence of :class:`~lensemble.data.episode.Window`s. The windows are RAW,
-        residency-bound, and never cross a boundary — only the released ``delta`` does (``INV-RESIDENCY``).
+        Default (the #22-backed resolution, #167): when ``cfg.data.data_source`` is set the windows are
+        materialized through the #22 data adapter — ``load_episodes(cfg.data.data_source, fmt=cfg.data.format)``
+        then ``list(ds.windows(cfg.data.window_steps))``. With no configured source it fails closed citing
+        #22 (the participant-override path tests exercise). The windows are RAW, residency-bound, and never
+        cross a boundary — only the released ``delta`` does (``INV-RESIDENCY``).
         """
-        raise RoundError(
-            "no local data source configured; the #22 data layer yields the participant's windows — "
-            "override _local_windows to inject them",
-            code=LensembleErrorCode.ROUND_FAILED,
-            remediation="wire the #22 loader (cfg.data) or override _local_windows with a window source",
-        )
+        from lensemble.data.adapters import load_episodes
+
+        source = getattr(self.config.data, "data_source", None)
+        if source is None:
+            raise RoundError(
+                "no local data source configured (cfg.data.data_source is None); the #22 data layer yields "
+                "the participant's windows — set cfg.data.data_source or override _local_windows to inject them",
+                code=LensembleErrorCode.ROUND_FAILED,
+                remediation="set cfg.data.data_source to a local episode store, or override _local_windows",
+            )
+        dataset = load_episodes(source, fmt=self.config.data.format)
+        return list(dataset.windows(int(self.config.data.window_steps)))
 
     def _dataset_root(self) -> bytes:
         """The participant's local dataset Merkle root ``R_c`` (32 bytes, ``INV-COMMIT-BINDING``).
@@ -151,17 +175,30 @@ class Participant:
     def _action_spec(self) -> "ActionSpec":
         """The per-embodiment ``ActionSpec`` the local action head is built from (RFC-0007/0008; #22).
 
-        Default: derived from the local windows' declared ``embodiment_id`` would require the #22 loader;
-        with no source wired this fails closed. Tests override it (or override ``_local_windows`` to also
-        carry a spec). The action head is per-embodiment LOCAL state and is NEVER federated
-        (``INV-ACTIONHEAD-LOCAL``).
+        Default (the #22-backed resolution, #167): when ``cfg.data.data_source`` is set, the spec is the
+        ``action_spec`` declared on the loaded episodes (``load_episodes(...).episodes[0].action_spec``) —
+        every episode in a participant store shares one embodiment. With no configured source this fails
+        closed citing #22. Tests override it (or override ``_local_windows`` to also carry a spec). The
+        action head is per-embodiment LOCAL state and is NEVER federated (``INV-ACTIONHEAD-LOCAL``).
         """
-        raise RoundError(
-            "no ActionSpec configured; the #22 data layer declares the embodiment's ActionSpec — "
-            "override _action_spec to supply it",
-            code=LensembleErrorCode.ROUND_FAILED,
-            remediation="wire the #22 embodiment ActionSpec or override _action_spec",
-        )
+        from lensemble.data.adapters import load_episodes
+
+        source = getattr(self.config.data, "data_source", None)
+        if source is None:
+            raise RoundError(
+                "no ActionSpec configured (cfg.data.data_source is None); the #22 data layer declares the "
+                "embodiment's ActionSpec — set cfg.data.data_source or override _action_spec to supply it",
+                code=LensembleErrorCode.ROUND_FAILED,
+                remediation="set cfg.data.data_source to a local episode store, or override _action_spec",
+            )
+        episodes = load_episodes(source, fmt=self.config.data.format).episodes
+        if not episodes:
+            raise RoundError(
+                f"data source {source!r} declares no episodes, so no embodiment ActionSpec can be resolved",
+                code=LensembleErrorCode.ROUND_FAILED,
+                remediation="point cfg.data.data_source at a non-empty local episode store",
+            )
+        return episodes[0].action_spec
 
     # --- the federated round (RFC-0013 §1) ---
 
@@ -413,48 +450,187 @@ class Participant:
         predictor: Predictor,
         action_head: ActionHead,
         objective: Objective,
-    ) -> None:
+    ) -> float:
         """Run ``H = cfg.federation.inner_horizon`` inner AdamW steps over θ/φ + the local head.
 
-        Each step: ``loss = objective(encoder, predictor, window, action_head.encode(window.actions)).total``;
-        ``backward``; ``step``. The loop only needs to RUN and produce a real Δ — it is not
-        convergence-tested; ``H`` and the data are kept tiny in tests. Optimizes the encoder, predictor,
-        AND the local action head (the head is trained locally; only θ/φ are later released).
+        Resolves the participant's local windows through the #22 hook, then delegates to the shared
+        :func:`_inner_loop` (the SAME loop ``train_local`` runs, so the Stage-A single-site path and the
+        federated round share one inner-loop body). Returns the final-step objective total (a diagnostic).
+        The loop only needs to RUN and produce a real Δ — it is not convergence-tested; ``H`` and the data
+        are kept tiny in tests. Optimizes the encoder, predictor, AND the local action head (the head is
+        trained locally; only θ/φ are later released).
         """
         windows = self._local_windows()
-        if not windows:
-            raise RoundError(
-                "no local windows to run the inner loop on",
-                code=LensembleErrorCode.ROUND_FAILED,
-                remediation="provide at least one local Window (the #22 loader yields them)",
-            )
-        params = (
-            list(encoder.parameters())
-            + list(predictor.parameters())
-            + list(action_head.parameters())
-        )
         lr = float(getattr(cfg.federation, "inner_lr", _INNER_LR))
-        optimizer = torch.optim.AdamW(params, lr=lr)
         horizon = int(cfg.federation.inner_horizon)
-        encoder.train()
-        predictor.train()
-        action_head.train()
-        for step in range(horizon):
-            window = windows[step % len(windows)]
-            optimizer.zero_grad(set_to_none=True)
-            action_embedding = action_head.encode(window.actions)
-            loss = objective(encoder, predictor, window, action_embedding).total
-            loss.backward()
-            optimizer.step()
+        return _inner_loop(
+            encoder, predictor, action_head, objective, windows, horizon=horizon, lr=lr
+        )
 
 
-def train_local(config: "LensembleConfig") -> RunResult:
-    """Single-site / participant-local training (the Stage-A inner loop, 02-public-api 1.2).
+def _inner_loop(
+    encoder: Encoder,
+    predictor: Predictor,
+    action_head: ActionHead,
+    objective: Objective,
+    windows: Sequence["Window"],
+    *,
+    horizon: int,
+    lr: float,
+) -> float:
+    """The shared ``H``-step inner AdamW loop over θ/φ + the local head (RFC-0013 §1 / RFC-0001 Stage A).
 
-    NOT this issue: #43 implements the federated ``Participant.local_round``. ``train_local`` (the
-    single-site convenience path) is owned by its own issue; left as the existing stub surface.
+    The single inner-loop body used by BOTH :meth:`Participant._run_inner_loop` (the federated round) and
+    :func:`train_local` (the single-site Stage-A path), so the two never drift. Each step:
+    ``loss = objective(encoder, predictor, window, action_head.encode(window.actions)).total``; ``backward``;
+    ``step``. Cycles the windows when ``horizon`` exceeds their count. Fails closed on no windows
+    (``RoundError``) — the loop needs at least one local :class:`~lensemble.data.episode.Window` to produce a
+    real Δ. Returns the LAST step's objective total (a convergence diagnostic, not a gate; the toy loop is
+    not convergence-tested). Optimizes the encoder, predictor, AND the local action head — only θ/φ are
+    ever released downstream (``INV-ACTIONHEAD-LOCAL``).
     """
-    raise NotImplementedError(
-        "lensemble.train_local is the single-site Stage-A path; it is not part of #43 "
-        "(the federated Participant.local_round)"
+    if not windows:
+        raise RoundError(
+            "no local windows to run the inner loop on",
+            code=LensembleErrorCode.ROUND_FAILED,
+            remediation="provide at least one local Window (the #22 loader yields them)",
+        )
+    params = (
+        list(encoder.parameters())
+        + list(predictor.parameters())
+        + list(action_head.parameters())
     )
+    optimizer = torch.optim.AdamW(params, lr=lr)
+    encoder.train()
+    predictor.train()
+    action_head.train()
+    final_loss = 0.0
+    for step in range(horizon):
+        window = windows[step % len(windows)]
+        optimizer.zero_grad(set_to_none=True)
+        action_embedding = action_head.encode(window.actions)
+        loss = objective(encoder, predictor, window, action_embedding).total
+        loss.backward()
+        optimizer.step()
+        final_loss = float(loss.detach())
+    return final_loss
+
+
+def train_local(
+    config: "LensembleConfig", *, run_dir: "Path | None" = None
+) -> RunResult:
+    """Single-site Stage-A training: warm-start → inner loop → commit checkpoint → manifest (RFC-0001).
+
+    The single-site convenience path of [02-public-api §1.2]: it builds the encoder/predictor/action-head
+    from ``config`` (the #166/#168 ``LensembleConfig``→architecture bridge), resolves local windows through
+    the SAME #22 data layer the federated ``Participant`` uses (``cfg.data.data_source`` →
+    ``load_episodes`` → ``windows(cfg.data.window_steps)``), runs ``cfg.federation.inner_horizon`` inner
+    AdamW steps minimizing the composite SIGReg-JEPA objective via the shared :func:`_inner_loop`, then
+    hash-commits the trained ``(θ, φ)`` with :func:`~lensemble.artifacts.checkpoint.save_checkpoint`
+    (``INV-CHECKPOINT-HASH``) and binds the run to a deterministic ``train_local``-mode ``RunManifest``.
+
+    Single-site == round 0: the objective's SIGReg sketch seed is ``round_sketch_seed(root_seed, 0)``
+    (``INV-SKETCH-CONSISTENCY``). The anchor: with ``cfg.objective.lambda_anc > 0`` it is built from the
+    pinned probe (``cfg.data.probe_path``) exactly as the participant builds it (round-0 reference snapshot
+    ``f_ref``); with ``lambda_anc == 0`` the bare LeJEPA objective runs (``anchor=None``).
+
+    Returns a :class:`RunResult` (checkpoint dir + ``content_hash`` + manifest hash + final loss). Only
+    the shared ``encoder``/``predictor`` weights enter the artifact (``INV-ACTIONHEAD-LOCAL``: the artifact
+    boundary fail-closes on a non-encoder/predictor group; the local head is never serialized here). No raw
+    observation/action crosses a boundary — the windows are RAW and local (``INV-RESIDENCY``).
+
+    Raises :class:`~lensemble.errors.RoundError` when no local windows resolve (no ``data_source`` and the
+    store yields nothing), and :class:`~lensemble.errors.ConfigError` on an invalid ``cfg.model``/spec.
+    """
+    import hashlib
+    import tempfile
+
+    from lensemble.artifacts.checkpoint import save_checkpoint
+    from lensemble.config.manifest import build_manifest, config_hash
+
+    cfg = config
+    encoder = build_encoder(cfg)
+    predictor = build_predictor(cfg)
+
+    # Resolve the action spec + local windows through the #22 data layer (a single-participant Participant
+    # reuses the SAME hooks the federated path uses; the default hooks read cfg.data — #167).
+    from lensemble.federation.transport import InProcessTransport
+
+    site = Participant(cfg, participant_id="local", transport=InProcessTransport())
+    action_head = build_action_head(cfg, site._action_spec())
+    windows = site._local_windows()
+
+    # Single-site == round 0: the broadcast sketch seed s_0 (INV-SKETCH-CONSISTENCY).
+    sketch_seed = round_sketch_seed(cfg.determinism.root_seed, 0)
+
+    # Build the objective. With lambda_anc > 0 the anchor is built from the pinned probe exactly as the
+    # participant does; with lambda_anc == 0 the bare LeJEPA objective runs (anchor=None).
+    o = cfg.objective
+    anchor: AnchorTerm | None = None
+    if float(o.lambda_anc) > 0.0:
+        probe = site._pinned_probe()
+        f_ref = snapshot_reference(encoder)
+        landmarks = probe.points[probe.landmark_idx]
+        ref_embeddings = f_ref(landmarks).tokens.detach()
+        anchor = FrameAnchor(
+            probe,
+            ref_embeddings,
+            variant=o.anchor_variant,
+            probe_hash=probe.content_hash.hex(),
+        ).loss
+    objective = Objective(
+        lambda_pred=float(o.lambda_pred),
+        lambda_sig=float(o.lambda_sig),
+        lambda_anc=float(o.lambda_anc),
+        sketch_seed=sketch_seed,
+        sketch_dim=int(o.sigreg_sketch_dim),
+        ep_knots=int(o.sigreg_knots),
+        anchor=anchor,
+    )
+
+    lr = float(getattr(cfg.federation, "inner_lr", _INNER_LR))
+    horizon = int(cfg.federation.inner_horizon)
+    final_loss = _inner_loop(
+        encoder, predictor, action_head, objective, windows, horizon=horizon, lr=lr
+    )
+
+    # Commit the trained (θ, φ) to a hash-verified artifact (INV-CHECKPOINT-HASH). Only the shared groups
+    # enter the artifact — the action head is local-only (INV-ACTIONHEAD-LOCAL; the boundary fail-closes).
+    run_dir = (
+        Path(run_dir)
+        if run_dir is not None
+        else Path(tempfile.mkdtemp(prefix="lensemble-train-local-"))
+    )
+    ckpt_dir = run_dir / "checkpoint"
+    weights: dict[str, Tensor] = {}
+    for name, tensor in encoder.state_dict().items():
+        weights[f"encoder.{name}"] = tensor
+    for name, tensor in predictor.state_dict().items():
+        weights[f"predictor.{name}"] = tensor
+    checkpoint_hash = save_checkpoint(
+        ckpt_dir,
+        weights,
+        wmcp_version=cfg.model.wmcp_version,
+        round_index=0,  # single-site Stage A is round 0
+        config_hash=config_hash(_config_asdict(cfg)),
+        parent_hash=None,
+    )
+
+    manifest = build_manifest(cfg, run_mode="train_local")
+    manifest_hash = hashlib.sha256(
+        manifest.model_dump_json(exclude={"created_at"}).encode()
+    ).hexdigest()
+
+    return RunResult(
+        checkpoint_dir=ckpt_dir,
+        checkpoint_hash=checkpoint_hash,
+        manifest_hash=manifest_hash,
+        final_loss=final_loss,
+    )
+
+
+def _config_asdict(cfg: "LensembleConfig") -> dict[str, object]:
+    """``dataclasses.asdict`` of the resolved config (the canonical config_hash input, RFC-0009 7)."""
+    from dataclasses import asdict
+
+    return asdict(cfg)

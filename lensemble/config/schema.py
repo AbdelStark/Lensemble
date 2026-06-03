@@ -117,6 +117,13 @@ class DataConfig:
     )
     probe_path: str | None = None
     embodiment_id: str = "default"
+    # The local data source the #22 adapter resolves to RAW, residency-bound episodes (a path/URI
+    # `load_episodes` reads via `fmt`); None means no configured source — the participant's `_local_windows`
+    # default then fails closed citing #22 and a test/deployment must override it (#167).
+    data_source: str | None = None
+    # The training-window horizon `num_steps` the loader yields (`EpisodeDataset.windows(window_steps)`);
+    # must be > 0 (validate_config). Kept small for the toy/single-site path (#167).
+    window_steps: int = 1
 
 
 @dataclass(frozen=True)
@@ -423,6 +430,16 @@ def validate_config(cfg: LensembleConfig) -> None:
             det.deterministic_aggregation,
             "True for federated runs",
             "federated runs require deterministic_aggregation=true (INV-AGG-DETERMINISM)",
+        )
+
+    # The training-window horizon must be a positive step count (the loader rejects window_steps <= 0,
+    # mirroring EpisodeDataset.windows; #167). Validated at the boundary so a bad cfg.data fails on load.
+    if d.window_steps <= 0:
+        raise _fail(
+            "data.window_steps",
+            d.window_steps,
+            "> 0",
+            "set data.window_steps to a positive training-window horizon",
         )
 
     # Residency across a network boundary (INV-RESIDENCY).

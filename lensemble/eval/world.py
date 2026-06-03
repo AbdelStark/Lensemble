@@ -28,6 +28,10 @@ EvalWorldFactory = Callable[["LensembleConfig"], "EvalWorld"]
 
 _STABLE_WORLDMODEL_PREFIX = "stable-worldmodel://"
 
+# The built-in toy env id (#167): a deterministic CPU world that lets `evaluate` produce a real EvalReport
+# for a green end-to-end run WITHOUT the unvendored stable-worldmodel suite (#96).
+SYNTHETIC_TOY_ENV_ID = "synthetic://toy"
+
 
 @runtime_checkable
 class EvalWorld(Protocol):
@@ -108,3 +112,87 @@ def resolve_env(env_id: str, *, cfg: "LensembleConfig") -> EvalWorld:
         code=LensembleErrorCode.EVALUATION_FAILED,
         remediation="register it with register_env, or use a stable-worldmodel:// id",
     )
+
+
+# --- the built-in synthetic://toy world (#167): a deterministic CPU EvalWorld for a green e2e run ---
+
+
+class _ToyWorld:
+    """A deterministic CPU :class:`EvalWorld` with closed-form clips and a KNOWN, non-trivial success rate.
+
+    The built-in toy world (#167): it lets ``evaluate`` produce a real :class:`~lensemble.eval.report.EvalReport`
+    for an end-to-end green run WITHOUT the unvendored ``stable-worldmodel`` suite (#96). It reads its clip
+    shape from ``cfg.model`` (``num_frames``, ``in_channels``, ``image_size``) so the clips
+    ``(num_frames, in_channels, image_size, image_size)`` match the encoder the harness reconstructs (the
+    harness does ``encoder(obs.unsqueeze(0))``, batching one clip). ``reset(seed)``/``goal()``/``step`` are
+    seeded so a run is reproducible (conventions 9), and ``action_spec`` is continuous dim 2.
+
+    ``succeeded()`` is rigged by the reset seed's PARITY: an even reset seed succeeds, an odd one does not.
+    Over the harness's seed-pinned episodes (seeds ``root_seed + i`` for ``i in range(4)``) at the default
+    ``root_seed == 0`` this yields exactly two successes → ``success_rate == 0.5``, a KNOWN non-trivial
+    value (NOT always-0 / always-1), so the e2e success-rate assertion is non-vacuous.
+    """
+
+    action_spec: "ActionSpec"
+
+    def __init__(self, cfg: "LensembleConfig") -> None:
+        from lensemble.contracts import WMCP_VERSION, ActionKind, ActionSpec
+
+        m = cfg.model
+        self._num_frames = int(getattr(m, "num_frames"))
+        self._in_channels = int(getattr(m, "in_channels", 3))
+        self._image_size = int(getattr(m, "image_size"))
+        self.action_spec = ActionSpec(
+            embodiment_id="synthetic-toy",
+            kind=ActionKind.CONTINUOUS,
+            dim=2,
+            low=(-1.0, -1.0),
+            high=(1.0, 1.0),
+            num_classes=None,
+            units=("u", "u"),
+            wmcp_version=WMCP_VERSION,
+        )
+        self._seed = 0
+        self._steps = 0
+
+    def _clip(self, seed: int) -> "Tensor":
+        import torch
+
+        gen = torch.Generator().manual_seed(seed)
+        return torch.randn(
+            self._num_frames,
+            self._in_channels,
+            self._image_size,
+            self._image_size,
+            generator=gen,
+        )
+
+    def reset(self, seed: int) -> "Tensor":
+        self._seed = seed
+        self._steps = 0
+        return self._clip(seed)
+
+    def goal(self) -> "Tensor":
+        return self._clip(
+            7919
+        )  # a fixed goal clip (a prime, distinct from the episode seeds)
+
+    def step(self, action: "Tensor") -> "Tensor":
+        self._steps += 1
+        return self._clip(self._seed + self._steps)
+
+    def succeeded(self) -> bool:
+        # Rigged by reset-seed parity → 0.5 over the harness's four consecutive seeds (a KNOWN non-trivial
+        # rate; deterministic, never all-0). Independent of the planned actions (the toy world has no real
+        # dynamics) so the success rate is stable across runs.
+        return self._seed % 2 == 0
+
+
+def _toy_factory(cfg: "LensembleConfig") -> "_ToyWorld":
+    """Build the deterministic ``synthetic://toy`` world from ``cfg`` (the registered factory, #167)."""
+    return _ToyWorld(cfg)
+
+
+# Self-register the built-in toy env at import (mirrors the data adapters' self-registration), so a bare
+# `evaluate(..., env_id="synthetic://toy")` resolves without any deployment wiring (#167).
+register_env(SYNTHETIC_TOY_ENV_ID, _toy_factory)

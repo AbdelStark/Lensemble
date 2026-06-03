@@ -150,8 +150,32 @@ def train(
     run_dir: Path = _RUNDIR_OPT,
     overrides: list[str] | None = _OVERRIDES_ARG,
 ) -> None:
-    """Train a single-node JEPA world model end-to-end (the centralized baseline)."""
-    _stub_command("train", config, overrides, run_dir, owner="model.train_local")
+    """Train a single-node JEPA world model end-to-end (the centralized Stage-A baseline, #167).
+
+    Composes + validates the config, emits the RunManifest, then runs the real
+    :func:`lensemble.federation.train_local` single-site path (warm-start → inner loop → hash-committed
+    checkpoint). Machine output on stdout (the manifest path, then the checkpoint dir + hash); the
+    human-readable note goes to stderr. Requires ``cfg.data.data_source`` (the #22 local episode store the
+    inner loop trains on); a missing source surfaces as a ``ROUND_FAILED`` exit-1 via ``_supervise``.
+    """
+    from lensemble.federation import train_local
+
+    with _supervise():
+        cfg = _compose(config, overrides)
+        manifest_path = _emit_manifest(cfg, command="train", run_dir=run_dir)
+        typer.echo(str(manifest_path))  # machine-readable: manifest path -> stdout
+        result = train_local(cfg, run_dir=run_dir)
+        typer.echo(
+            str(result.checkpoint_dir)
+        )  # machine-readable: committed checkpoint dir -> stdout
+        typer.echo(
+            result.checkpoint_hash
+        )  # machine-readable: the artifact content hash -> stdout
+        typer.echo(
+            f"train: checkpoint committed ({result.checkpoint_hash[:12]}…), final_loss="
+            f"{result.final_loss:.4f}.",
+            err=True,  # human-readable -> stderr
+        )
 
 
 federate_app = typer.Typer(
@@ -169,14 +193,31 @@ def federate_coordinator(
     run_dir: Path = _RUNDIR_OPT,
     overrides: list[str] | None = _OVERRIDES_ARG,
 ) -> None:
-    """Run the aggregation coordinator for a federated run (RFC-0003 / RFC-0013)."""
-    _stub_command(
-        "federate coordinator",
-        config,
-        overrides,
-        run_dir,
-        owner="federation.Coordinator",
-    )
+    """Validate + report readiness of the aggregation coordinator (RFC-0003 / RFC-0013; wired in #167).
+
+    Composes + validates the config, emits the RunManifest, instantiates the REAL
+    :class:`~lensemble.federation.Coordinator` over an in-process transport, and echoes its initial
+    committed ``global_state_hash``. HONEST SCOPE: a full multi-process federated run needs the networked
+    transport (#45) — a single-process CLI cannot drive a complete round alone (no participants connect), so
+    this command VALIDATES + REPORTS readiness rather than running rounds. It does NOT fake a federated run.
+    """
+    from lensemble.federation import Coordinator, InProcessTransport
+
+    with _supervise():
+        cfg = _compose(config, overrides)
+        manifest_path = _emit_manifest(
+            cfg, command="federate coordinator", run_dir=run_dir
+        )
+        typer.echo(str(manifest_path))  # machine-readable: manifest path -> stdout
+        coordinator = Coordinator(cfg, transport=InProcessTransport())
+        typer.echo(
+            coordinator.global_state_hash()
+        )  # machine-readable: the initial global hash -> stdout
+        typer.echo(
+            f"federate coordinator: ready on {listen!r} (initial global hash "
+            f"{coordinator.global_state_hash()[:12]}…); a full round needs the networked transport (#45).",
+            err=True,  # human-readable -> stderr
+        )
 
 
 @federate_app.command("participant")
@@ -186,28 +227,90 @@ def federate_participant(
         "--coordinator",
         help="coordinator address (transport per RFC-0013)",
     ),
+    participant_id: str = typer.Option(
+        "participant-0",
+        "--participant-id",
+        help="this participant's stable id (RFC-0013 §1)",
+    ),
     config: Path | None = _CONFIG_OPT,
     run_dir: Path = _RUNDIR_OPT,
     overrides: list[str] | None = _OVERRIDES_ARG,
 ) -> None:
-    """Run a federated participant: local inner loop, released pseudo-gradient (RFC-0003)."""
-    _stub_command(
-        "federate participant",
-        config,
-        overrides,
-        run_dir,
-        owner="federation.Participant",
-    )
+    """Validate + report readiness of a federated participant (RFC-0003; wired in #167).
+
+    Composes + validates the config, emits the RunManifest, instantiates the REAL
+    :class:`~lensemble.federation.Participant` over an in-process transport, and echoes its
+    ``participant_id``. HONEST SCOPE: a participant's local round needs a coordinator-broadcast
+    ``GlobalState`` (and the released pseudo-gradient crosses the #45 networked transport); a single-process
+    CLI cannot drive a full round alone, so this command VALIDATES + REPORTS readiness rather than running a
+    round. It does NOT fake a federated run.
+    """
+    from lensemble.federation import InProcessTransport, Participant
+
+    with _supervise():
+        cfg = _compose(config, overrides)
+        manifest_path = _emit_manifest(
+            cfg, command="federate participant", run_dir=run_dir
+        )
+        typer.echo(str(manifest_path))  # machine-readable: manifest path -> stdout
+        member = Participant(
+            cfg, participant_id=participant_id, transport=InProcessTransport()
+        )
+        typer.echo(
+            member.participant_id
+        )  # machine-readable: the participant id -> stdout
+        typer.echo(
+            f"federate participant {member.participant_id!r}: ready against {coordinator!r}; a full round "
+            "needs a coordinator-broadcast GlobalState over the networked transport (#45).",
+            err=True,  # human-readable -> stderr
+        )
 
 
 @app.command("eval")
 def eval_(
     config: Path | None = _CONFIG_OPT,
     run_dir: Path = _RUNDIR_OPT,
+    checkpoint: Path | None = typer.Option(
+        None,
+        "--checkpoint",
+        help="hash-verified checkpoint dir to evaluate (omit to only emit a manifest)",
+    ),
+    env_id: str | None = typer.Option(
+        None,
+        "--env-id",
+        help="eval env id (default: cfg.eval.env_id, e.g. synthetic://toy)",
+    ),
     overrides: list[str] | None = _OVERRIDES_ARG,
 ) -> None:
-    """Evaluate a checkpoint by latent-MPC rollout on a held-out env (RFC-0005)."""
-    _stub_command("eval", config, overrides, run_dir, owner="eval.evaluate")
+    """Evaluate a checkpoint by latent-MPC rollout on a held-out env (RFC-0005; wired in #167).
+
+    Composes + validates the config and emits the RunManifest (path on stdout). With ``--checkpoint`` it
+    runs the real :func:`lensemble.eval.evaluate` and echoes the :class:`~lensemble.eval.report.EvalReport`
+    JSON to stdout; ``--env-id`` defaults to ``cfg.eval.env_id``. Without ``--checkpoint`` it only emits the
+    manifest (the config-validation path), so ``lensemble eval`` stays usable as a dry config check.
+    """
+    from lensemble.eval import evaluate
+
+    with _supervise():
+        cfg = _compose(config, overrides)
+        manifest_path = _emit_manifest(cfg, command="eval", run_dir=run_dir)
+        typer.echo(str(manifest_path))  # machine-readable: manifest path -> stdout
+        if checkpoint is None:
+            typer.echo(
+                "eval: config validated, manifest written; pass --checkpoint to run latent-MPC eval.",
+                err=True,  # human-readable -> stderr
+            )
+            return
+        resolved_env = env_id or cfg.eval.env_id
+        report = evaluate(checkpoint, resolved_env, cfg=cfg)
+        typer.echo(
+            report.model_dump_json()
+        )  # machine-readable: the EvalReport JSON -> stdout
+        typer.echo(
+            f"eval: success_rate={report.success_rate}, effective_dim={report.effective_dim:.4f} "
+            f"on {resolved_env}.",
+            err=True,  # human-readable -> stderr
+        )
 
 
 commit_app = typer.Typer(

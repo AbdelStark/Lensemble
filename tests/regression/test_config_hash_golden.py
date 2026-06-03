@@ -23,8 +23,12 @@ from lensemble.config import config_hash, load
 # Re-pinned for #166: ModelConfig gained the ViT-shape bridge fields (num_frames/tubelet/image_size/
 # patch_size/depth/num_heads/in_channels/mlp_ratio) so build_encoder/build_predictor are callable from a
 # load_config() config — another intentional, reviewed schema addition.
+# Re-pinned for #167: DataConfig gained `data_source: str | None = None` (the #22 local-episode source the
+# participant's default `_local_windows` resolves via `load_episodes`) and `window_steps: int = 1` (the
+# training-window horizon `num_steps`), an intentional, reviewed schema addition that shifts the default
+# config's canonical encoding.
 _GOLDEN_DEFAULT_CONFIG_HASH = (
-    "9fce731672c45ab4082ab67649d0ccb8af79a36e2c58f0103648ff68ff9685be"
+    "0c3cf3dc5c882ce304a5e2436fd6902d97afee2ba2ada468c8ce8a9248e0088e"
 )
 
 
