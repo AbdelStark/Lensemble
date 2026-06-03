@@ -13,6 +13,8 @@ from .quant import (
     wire_roundtrip,
 )
 from .round import RoundDriver, RoundPhase, RoundState
+from .state import GlobalState, ParamRef
+from .transport import InProcessTransport, Transport
 
 __all__ = [
     "Coordinator",
@@ -20,6 +22,10 @@ __all__ = [
     "RoundState",
     "RoundPhase",
     "RoundDriver",
+    "GlobalState",
+    "ParamRef",
+    "Transport",
+    "InProcessTransport",
     "train_local",
     "PseudoGradient",
     "build_pseudogradient",
