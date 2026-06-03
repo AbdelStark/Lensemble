@@ -28,6 +28,14 @@ from enum import Enum
 
 from lensemble.errors import LensembleError, LensembleErrorCode, RoundError
 
+# RFC-0013 §1 imports ``GlobalState`` / ``PseudoGradient`` from ``lensemble.federation.round`` (the
+# runtime-class module). Re-export them here so that import resolves; the canonical definitions live in
+# ``state.py`` (03 §7) and ``pseudogradient.py`` (03 §6).
+from lensemble.federation.pseudogradient import (  # noqa: E402,F401  (re-export for RFC-0013 §1)
+    PseudoGradient,
+)
+from lensemble.federation.state import GlobalState, ParamRef  # noqa: E402,F401
+
 
 class RoundState(str, Enum):
     """The outer-round lifecycle state (RFC-0013 2). String values agree with 03 8 ``RoundPhase``."""

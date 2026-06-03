@@ -19,6 +19,36 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `lensemble.federation`: the `Participant` local round (RFC-0013 §1/§3) — `Participant(config, *,
+  participant_id, transport)` with `local_round(global_state, round_seed) -> PseudoGradient` and
+  `join(coordinator_endpoint) -> GlobalState`. One round fetches the global `(θ_t, φ_t)` through the
+  transport (hash-verified, `INV-CHECKPOINT-HASH`), runs `H` inner AdamW steps on local windows over the
+  encoder/predictor/local-action-head params, forms `Δ_c = (θ_c,φ_c) − (θ_t,φ_t)` over ONLY the
+  `(θ, φ)` groups (`INV-ACTIONHEAD-LOCAL`; the per-embodiment head is never federated), DP-privatizes it
+  (clip-then-noise, the LOCKED RFC-0003 §4 ordering; noise generator seeded by
+  `(root_seed, round_index, participant_id)`), binds it to the dataset Merkle root `R_c`
+  (`INV-COMMIT-BINDING`), and returns a `PseudoGradient`. The RELEASED delta is clipped-AND-noised, so its
+  `l2_norm` is the HONEST released norm and MAY exceed `C_clip` after noising — `INV-DP-BOUND` is asserted
+  on the POST-CLIP norm inside `lensemble.privacy.dp.privatize`, not on the released norm. Preconditions:
+  `INV-PROBE-PIN` (a `probe_hash` mismatch raises `ProbeError`), `INV-WARMSTART-T0` (a round-0 encoder-hash
+  drift raises **`GaugeError`** — the #43 acceptance criterion pins `GaugeError` here, deviating from SPEC
+  03 §7's `CheckpointIntegrityError`), and `INV-SKETCH-CONSISTENCY` (`round_seed != sketch_seed` raises
+  `GaugeError`). Only the `delta` crosses (`INV-RESIDENCY`, gated by the `EgressRole.PSEUDO_GRADIENT`
+  carrier). The participant's pinned probe, local windows, dataset root, and `ActionSpec` are resolved
+  through protected hooks (`_pinned_probe` / `_local_windows` / `_dataset_root` / `_action_spec` /
+  `_warmstart_hash`) — the #22 data-layer boundary (a toy seam tests override; the real loader/commitment
+  lands with #22). (#43)
+- `lensemble.federation`: the `GlobalState` + `ParamRef` broadcast round-state types (03 §7) — frozen,
+  validated dataclasses (`round_index >= 0`, 32-byte `probe_hash`, non-empty `wmcp_version`, 64-hex
+  `content_hash`); `GlobalState` is re-exported from `lensemble.federation.round` so the RFC-0013 §1 import
+  resolves. (#43)
+- `lensemble.federation`: the `Transport` seam (RFC-0013 §1/§5) shared with #42/#45 — a `Protocol`
+  (`register` / `recover_global_state` / `fetch_params` / `submit_update` participant-side;
+  `broadcast_round_open` / `collect_updates` coordinator-side, exercised by #42) plus the concrete
+  in-memory `InProcessTransport`. `fetch_params` resolves a `ParamRef` to weights and re-verifies the
+  recomputed canonical-safetensors content hash against `ref.content_hash`, raising
+  `CheckpointIntegrityError` on a tamper (`INV-CHECKPOINT-HASH`); `InProcessTransport.commit` seeds the
+  store for tests/single-process runs. (#43)
 - `area:ci`: the CPU performance smoke (08 §7) — `tests/integration/test_perf_smoke.py` guards the four
   08 §7 regression checks on a tiny synthetic config (no download): a generous wall-time ceiling on one
   toy inner+outer cycle (an overrun is a regression SIGNAL, a plain `assert`, not a raised error), the
