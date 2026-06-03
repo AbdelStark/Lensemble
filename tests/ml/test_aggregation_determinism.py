@@ -17,6 +17,7 @@ import torch
 from lensemble.errors import LensembleErrorCode, NonDeterministicAggregation
 from lensemble.federation import (
     OuterOptimizer,
+    PseudoGradient,
     assert_bitwise_reproducible,
     build_pseudogradient,
 )
@@ -180,3 +181,123 @@ def test_aggregation_determinism_self_check_never_swallows() -> None:
 
     src = Path(det.__file__).read_text(encoding="utf-8")
     assert "except" not in src and "try:" not in src
+
+
+# --- Layer-3 Procrustes backstop fed into the SAME outer step stays bitwise-reproducible (#18) ---
+#
+# The backstop (lensemble.gauge.backstop.procrustes_backstop) realigns each over-threshold participant's
+# predictor delta as a PURE LINEAR operation, then re-flattens the (possibly) aligned grouped delta into a
+# PseudoGradient and feeds it to the SAME OuterOptimizer.step. RFC-0002 §5: this stays bitwise-deterministic
+# (INV-AGG-DETERMINISM) and a degenerate Procrustes (clamp-and-skip) keeps the round alive.
+
+import math  # noqa: E402
+
+_BD = 4  # backstop latent dim d
+_BWIDTH = 6  # predictor width
+_BN = 64  # probe landmarks (k >> d, well-conditioned)
+_BTHRESH = 15.0
+
+
+def _b_rot(angle_deg: float, d: int = _BD) -> torch.Tensor:
+    a = math.radians(angle_deg)
+    c, s = math.cos(a), math.sin(a)
+    q = torch.eye(d)
+    q[0, 0], q[0, 1], q[1, 0], q[1, 1] = c, -s, s, c
+    return q
+
+
+def _b_grouped_delta(seed: int) -> dict[str, torch.Tensor]:
+    """A toy encoder.*/predictor.* grouped delta with the real predictor.* names/shapes."""
+    g = torch.Generator().manual_seed(seed)
+    return {
+        "encoder.norm.weight": torch.randn(_BD, generator=g),
+        "encoder.norm.bias": torch.randn(_BD, generator=g),
+        "predictor.in_proj.weight": torch.randn(_BWIDTH, _BD, generator=g),
+        "predictor.in_proj.bias": torch.randn(_BWIDTH, generator=g),
+        "predictor.out_proj.weight": torch.randn(_BD, _BWIDTH, generator=g),
+        "predictor.out_proj.bias": torch.randn(_BD, generator=g),
+        "predictor.norm.weight": torch.randn(_BWIDTH, generator=g),
+        "predictor.norm.bias": torch.randn(_BWIDTH, generator=g),
+    }
+
+
+def _b_e_ref() -> torch.Tensor:
+    g = torch.Generator().manual_seed(424242)
+    return torch.randn(_BN, _BD, generator=g)
+
+
+def _b_flatten(grouped: dict) -> PseudoGradient:
+    """Flatten an aligned grouped delta into a PseudoGradient via build_pseudogradient (canonical order)."""
+    return build_pseudogradient(grouped, dataset_root=b"\x07" * 32, round_index=0)
+
+
+def _backstop_then_outer_step() -> torch.Tensor:
+    """Run procrustes_backstop on two participants (one above, one below τ) then ONE outer step (pure)."""
+    from lensemble.gauge import procrustes_backstop
+
+    e_ref = _b_e_ref()
+    deltas = {"c0": _b_grouped_delta(31), "c1": _b_grouped_delta(32)}
+    embeddings = {
+        "c0": e_ref @ _b_rot(40.0),
+        "c1": e_ref @ _b_rot(3.0),
+    }  # c0 fires, c1 does not
+    aligned = procrustes_backstop(
+        deltas, embeddings, e_ref, threshold_deg=_BTHRESH, singular_floor=1e-6
+    )
+    updates = {pid: _b_flatten(aligned[pid]) for pid in aligned}
+    # The flat θ⊕φ global params length is the sum of the grouped delta numels (canonical order).
+    n = sum(t.numel() for t in deltas["c0"].values())
+    return OuterOptimizer(lr=0.7, momentum=0.9).step(torch.zeros(n), updates)
+
+
+def test_backstop_then_outer_step_is_bitwise_reproducible() -> None:
+    from hashlib import sha256
+
+    from safetensors.torch import save
+
+    first = _backstop_then_outer_step()
+    second = _backstop_then_outer_step()
+    # torch.equal AND an identical safetensors content hash (the issue acceptance criterion).
+    assert torch.equal(first, second)
+    assert (
+        sha256(save({"r": first})).hexdigest()
+        == sha256(save({"r": second})).hexdigest()
+    )
+    assert _content_hash(first) == _content_hash(second)
+
+
+def test_backstop_degenerate_injection_keeps_round_alive_and_warns(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import logging
+
+    from lensemble.gauge import procrustes_backstop
+
+    e_ref = _b_e_ref()
+    # A rank-deficient embedding (a zeroed column) makes M = T^T S degenerate after the relaxed retry too,
+    # so the backstop SKIPS this participant (keeps the unaligned delta) — the round stays alive.
+    deg = e_ref.clone()
+    deg[:, _BD - 1] = 0.0
+    ref_deg = e_ref.clone()
+    ref_deg[:, _BD - 1] = 0.0
+    deltas = {"c0": _b_grouped_delta(33)}
+
+    with caplog.at_level(logging.WARNING, logger="lensemble.gauge.backstop"):
+        aligned = procrustes_backstop(
+            deltas, {"c0": deg}, ref_deg, threshold_deg=_BTHRESH, singular_floor=1e-6
+        )
+
+    # The unaligned delta survived; the outer step still commits a finite, reproducible result.
+    for name, tensor in deltas["c0"].items():
+        assert torch.equal(aligned["c0"][name], tensor)
+    n = sum(t.numel() for t in deltas["c0"].values())
+    updates = {"c0": _b_flatten(aligned["c0"])}
+    r1 = OuterOptimizer(lr=0.7, momentum=0.9).step(torch.zeros(n), updates)
+    r2 = OuterOptimizer(lr=0.7, momentum=0.9).step(torch.zeros(n), updates)
+    assert bool(torch.isfinite(r1).all())
+    assert torch.equal(r1, r2)  # the surviving round is still bitwise-reproducible
+    # ...and the clamp-and-skip logged at WARN naming gauge/procrustes_residual.
+    assert any(
+        rec.levelno == logging.WARNING and "gauge/procrustes_residual" in rec.message
+        for rec in caplog.records
+    )

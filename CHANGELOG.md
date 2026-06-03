@@ -27,6 +27,25 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:gauge`: **Layer-3 Procrustes re-alignment backstop at aggregation** (RFC-0002 §5; #18) —
+  `lensemble.gauge.procrustes_backstop` / `realign_predictor_delta` (new `lensemble/gauge/backstop.py`).
+  Immediately before the outer step, each participant whose latent frame drift exceeds
+  `gauge.frame_drift_threshold_deg` has `Q_c* = procrustes_align(f_c(P), E_ref)` applied to its *released*
+  delta as a PURE LINEAR operation, so the result stays bitwise-deterministic and publicly recomputable
+  (`INV-AGG-DETERMINISM`; RFC-0006 §3). **Activation-space realization (the recorded #18 decision):** only
+  the weight-expressible predictor conjugation `g_phi -> Q g_phi Q^T` is folded into the committed delta —
+  rotating exactly `predictor.in_proj.weight` (`Δ <- Δ @ Q^T`), `predictor.out_proj.weight` (`Δ <- Q @ Δ`),
+  and `predictor.out_proj.bias` (`Δ <- Q @ Δ`); the **encoder delta is left byte-identical**. The
+  LayerNorm-terminated encoder has no terminal `(d, d)` linear to fold `Q` into and the maintainer chose
+  not to add one, so the encoder-frame component is bounded by the Layer-2 anchor (RFC-0002 §4) and lives
+  in activation space, NOT in the committed weights — which is exactly why `recompute_alignment` (#62)
+  measures residual encoder drift rather than verifying a weight-fold (the #18/#62 verifiability tradeoff).
+  A degenerate Procrustes (`DegenerateProcrustes`) clamp-and-retries once, then skips the backstop for that
+  participant (keeping its UNALIGNED delta) and logs `gauge/procrustes_residual` at WARN (RFC-0015) — the
+  round is handled in-round, never aborted. Wired into the `Coordinator` ALIGNING phase behind the
+  `_probe_embeddings` / `_reference_embeddings` #18/#22 hooks (both `None` by default, so ALIGNING stays the
+  byte-identical measured pass-through and the golden config hash is untouched); the backstop is a
+  Stage-B / simulated-backend operation, since the masking secure-agg backend reveals only the sum.
 - `area:verify`: **proof-readiness audit** — a single integration-test entry point
   (`tests/integration/test_proofready_audit.py`) that exercises all five RFC-0006 §3 Phase-1 proof-ready
   disciplines together over a tiny synthetic federated round, the v1.0 "proof-ready guarantees verified

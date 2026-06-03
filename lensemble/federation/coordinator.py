@@ -29,9 +29,21 @@ Per-round lifecycle (RFC-0013 §1/§2), all on the single coordinator thread in 
   inside the thunk → pure). A mismatch raises :class:`~lensemble.errors.NonDeterministicAggregation`
   (security-critical, never swallowed) and the round → ``ABORTED``. Arrival order does not matter — the
   reduction is over the total order on ``participant_id``.
-- **ALIGNING** — frame drift is measured on the probe when per-participant embeddings are available;
-  here it is a MEASURED PASS-THROUGH. The Layer-3 Procrustes backstop fold-in (drift > τ) is **#18 and
-  explicitly out of scope** for this issue, so this state neither corrects the gauge nor mutates θ/φ.
+- **ALIGNING** — frame drift is measured on the probe when per-participant embeddings are available, AND
+  the Layer-3 Procrustes backstop (RFC-0002 §5, #18) is applied when BOTH per-participant embeddings and a
+  reference frame ``E_ref`` are wired (the ``_probe_embeddings``/``_reference_embeddings`` #18/#22 seam):
+  each participant whose drift exceeds ``cfg.gauge.frame_drift_threshold_deg`` has its PREDICTOR delta
+  conjugated by ``Q_c* = procrustes_align(f_c(P), E_ref)`` as a PURE LINEAR operation
+  (``g_phi -> Q g_phi Q^T``, applied to the released delta). The ENCODER delta is left UNCHANGED — the
+  activation-space realization of the recorded #18 decision: the encoder ends in a ``LayerNorm`` with no
+  terminal ``(d, d)`` linear to fold ``Q`` into, so the encoder-frame component is bounded by the Layer-2
+  anchor (RFC-0002 §4) and lives in activation space, NOT in the committed weights (which is why
+  ``recompute_alignment`` (#62) measures residual encoder drift rather than verifying a weight-fold — the
+  #18/#62 verifiability tradeoff). The backstop is a deterministic pre-step feeding the SAME outer reduction
+  (``INV-AGG-DETERMINISM``). With nothing wired (the default) ALIGNING is a byte-identical MEASURED
+  PASS-THROUGH and does not mutate θ/φ. With the masking secure-aggregation backend the coordinator sees
+  only the summed update (no per-participant deltas), so the backstop is a Stage-B / simulated-backend
+  operation; the hooks are the seam.
 - **COMMITTING** — the PERSISTENT :class:`~lensemble.federation.outer.OuterOptimizer.step` folds the
   averaged delta into the global params → ``θ_{t+1}⊕φ_{t+1}`` (covers ONLY θ/φ; the deltas are
   ``PseudoGradient`` s that by construction carry no action head, ``INV-ACTIONHEAD-LOCAL``). The flat
@@ -72,9 +84,11 @@ from lensemble.errors import (
     NonDeterministicAggregation,
 )
 from lensemble.federation.outer import OuterOptimizer
+from lensemble.federation.pseudogradient import PseudoGradient, build_pseudogradient
 from lensemble.federation.round import RoundDriver, RoundState
 from lensemble.federation.state import GlobalState, ParamRef
 from lensemble.federation.transport import weights_content_hash
+from lensemble.gauge.backstop import procrustes_backstop
 from lensemble.gauge.drift import FrameDriftReport, frame_drift
 from lensemble.model.encoder import build_encoder
 from lensemble.model.predictor import build_predictor
@@ -84,7 +98,6 @@ if TYPE_CHECKING:
     from torch import Tensor
 
     from lensemble.config.schema import LensembleConfig
-    from lensemble.federation.pseudogradient import PseudoGradient
     from lensemble.federation.transport import Transport
 
 # The federated param groups, in the order build_pseudogradient flattens them (encoder θ, then predictor
@@ -159,8 +172,9 @@ class Coordinator:
         self._config_hash = config_hash(asdict(cfg))
         self._probe_hash = self._resolve_probe_hash(cfg)
 
-        # The frame-drift report measured at ALIGNING each round (None until the first measured round); the
-        # Procrustes backstop fold-in is #18 (out of scope) so this is a measured-only diagnostic.
+        # The frame-drift report measured at ALIGNING each round (None until the first measured round). The
+        # Layer-3 Procrustes backstop (#18) is applied alongside it when the #18/#22 hooks are wired; this is
+        # the diagnostic record, not the fold-in (the fold-in lands in _align_updates).
         self._last_drift: FrameDriftReport | None = None
 
         # The present count of the most recent COLLECTING (for run()'s below-K FaultToleranceExceeded; the
@@ -309,9 +323,18 @@ class Coordinator:
             self._driver.state = RoundState.ABORTED
             return RoundState.ABORTED
 
+        # The per-participant probe embeddings + the reference frame E_ref for ALIGNING (both None by
+        # default — the measured pass-through). The Layer-3 Procrustes backstop (#18) fires only when BOTH
+        # are wired (the #18/#22 seam); the backstop runs in ALIGNING but the deltas it produces must be the
+        # ones the AGGREGATING self-check and COMMITTING step both see, so embeddings are resolved here.
+        embeddings = self._probe_embeddings(t)
+        e_ref = self._reference_embeddings(t)
+
         # 2. AGGREGATING — the determinism self-check (INV-AGG-DETERMINISM). assert_outer_step_deterministic
         # re-runs the PURE thunk twice (a FRESH optimizer each call, so its velocity is not advanced) and
-        # compares the two reductions bitwise; a mismatch raises NonDeterministicAggregation and aborts.
+        # compares the two reductions bitwise; a mismatch raises NonDeterministicAggregation and aborts. The
+        # thunk reduces the SAME (possibly backstop-aligned) deltas COMMITTING commits — the backstop is a
+        # pure linear pre-step, so the self-check verifies exactly the committed reduction.
         self._driver.to(RoundState.AGGREGATING)
         prior_params = self._global_params
         lr = self.config.federation.outer_lr
@@ -319,7 +342,7 @@ class Coordinator:
         try:
             assert_outer_step_deterministic(
                 lambda: OuterOptimizer(lr=lr, momentum=momentum).step(
-                    prior_params, updates
+                    prior_params, self._align_updates(updates, embeddings, e_ref)
                 ),
                 round_index=t,
             )
@@ -329,16 +352,20 @@ class Coordinator:
             self._driver.abort(exc)  # → ABORTED, re-raises
             raise  # defensive: abort always raises (this line is unreachable, keeps types total)
 
-        # 3. ALIGNING — measure frame drift on the probe when per-participant embeddings are available;
-        # MEASURED PASS-THROUGH here. The Procrustes backstop fold-in (drift > τ) is #18 (OUT OF SCOPE):
-        # this state does NOT correct the gauge and does NOT mutate θ/φ.
+        # 3. ALIGNING — measure frame drift on the probe AND apply the Layer-3 Procrustes backstop (#18) when
+        # per-participant embeddings + a reference E_ref are wired (the #18/#22 seam). The backstop conjugates
+        # each over-threshold participant's PREDICTOR delta by Q_c* as a PURE LINEAR operation (RFC-0002 §5);
+        # the encoder delta is left UNCHANGED (the activation-space decision — a LayerNorm-terminated encoder
+        # has no terminal linear to fold Q into). With nothing wired this is the measured pass-through it was:
+        # the aligned updates are byte-identical to `updates`, so every existing coordinator test stays green.
         self._driver.to(RoundState.ALIGNING)
-        self._measure_drift(t)
+        self._measure_drift(t, embeddings)
+        aligned_updates = self._align_updates(updates, embeddings, e_ref)
 
-        # 4. COMMITTING — the PERSISTENT outer step folds the averaged delta into the global params (only
-        # θ/φ); un-flatten via the manifest; hash-commit; append the ContributionRecord; advance the hash.
+        # 4. COMMITTING — the PERSISTENT outer step folds the averaged (aligned) delta into the global params
+        # (only θ/φ); un-flatten via the manifest; hash-commit; append the ContributionRecord; advance hash.
         self._driver.to(RoundState.COMMITTING)
-        new_params = self._optimizer.step(prior_params, updates)
+        new_params = self._optimizer.step(prior_params, aligned_updates)
         theta_weights, phi_weights = _unflatten_groups(self._param_manifest, new_params)
         new_hash = self._commit_checkpoint(
             theta_weights,
@@ -463,14 +490,14 @@ class Coordinator:
         )
         self._ledger.append(record)
 
-    def _measure_drift(self, t: int) -> None:
-        """ALIGNING: measure frame drift on the probe IF per-participant embeddings are available.
+    def _measure_drift(self, t: int, embeddings: "dict[str, Tensor] | None") -> None:
+        """ALIGNING: measure the frame-drift report on the probe IF per-participant embeddings are available.
 
-        MEASURED PASS-THROUGH (RFC-0013 §1, ALIGNING). The Procrustes backstop fold-in is #18 (OUT OF
-        SCOPE): this never corrects the gauge or mutates θ/φ. With no per-participant embeddings wired
-        here (#18/#22 boundary), there is nothing to measure and the report stays unset.
+        The frame-drift diagnostic (the headline figure, RFC-0002 §9) is measured here. The Procrustes
+        backstop fold-in itself is applied by :meth:`_align_updates`; this only records the report. With no
+        per-participant embeddings wired (#18/#22 boundary) there is nothing to measure and the report stays
+        unset (the measured pass-through).
         """
-        embeddings = self._probe_embeddings(t)
         if embeddings is None or len(embeddings) < 2:
             return
         self._last_drift = frame_drift(
@@ -479,6 +506,72 @@ class Coordinator:
             probe=self._probe(),
             expected_probe_hash=self._probe_hash.hex(),
         )
+
+    def _align_updates(
+        self,
+        updates: "dict[str, PseudoGradient]",
+        embeddings: "dict[str, Tensor] | None",
+        e_ref: "Tensor | None",
+    ) -> "dict[str, PseudoGradient]":
+        """The Layer-3 Procrustes backstop (#18): realign the over-threshold deltas before the outer step.
+
+        When per-participant ``embeddings`` AND a reference ``e_ref`` are wired (the #18/#22 seam),
+        un-flattens each contributing ``PseudoGradient.delta`` into its grouped ``encoder.*``/``predictor.*``
+        form via the param manifest, runs :func:`~lensemble.gauge.backstop.procrustes_backstop` (threshold =
+        ``cfg.gauge.frame_drift_threshold_deg``, floor = ``cfg.gauge.procrustes_singular_floor``), and
+        re-flattens the aligned grouped deltas back into ``PseudoGradient`` s (the canonical
+        ``build_pseudogradient`` order, element-wise aligned with the global params). A participant without a
+        wired embedding is passed through unchanged.
+
+        With nothing wired (the default — ``embeddings``/``e_ref`` are ``None``) this is the IDENTITY: the
+        returned mapping IS ``updates`` (the same objects), so ALIGNING stays the byte-identical pass-through
+        and every existing coordinator test commits the same hash. The backstop is a pure linear operation on
+        the released deltas, so the result feeds the SAME ``OuterOptimizer.step`` and a re-run with identical
+        inputs commits the identical hash (``INV-AGG-DETERMINISM``).
+
+        With the masking secure-aggregation backend the coordinator sees ONLY the masked sum (no
+        per-participant deltas), so the backstop is a Stage-B / simulated-backend operation; ``embeddings`` /
+        ``e_ref`` are the seam that makes it observable.
+        """
+        if embeddings is None or e_ref is None:
+            return updates  # identity pass-through (the default; no backstop wired)
+
+        # Un-flatten each contributing delta into its grouped encoder.*/predictor.* form (the backstop input).
+        grouped: dict[str, dict[str, Tensor]] = {}
+        backstop_ids: list[str] = []
+        for pid in updates:
+            if pid not in embeddings:
+                continue  # a participant without a wired embedding is passed through unchanged
+            theta, phi = _unflatten_groups(self._param_manifest, updates[pid].delta)
+            grouped[pid] = {f"{_ENCODER_GROUP}.{k}": v for k, v in theta.items()}
+            grouped[pid].update({f"{_PREDICTOR_GROUP}.{k}": v for k, v in phi.items()})
+            backstop_ids.append(pid)
+        if not grouped:
+            return (
+                updates  # no participant had a wired embedding — pass through unchanged
+            )
+
+        aligned_grouped = procrustes_backstop(
+            grouped,
+            {pid: embeddings[pid] for pid in grouped},
+            e_ref,
+            threshold_deg=self.config.gauge.frame_drift_threshold_deg,
+            singular_floor=self.config.gauge.procrustes_singular_floor,
+        )
+
+        # Re-flatten the aligned grouped deltas into PseudoGradients in the SAME canonical order, preserving
+        # each PseudoGradient's binding metadata (dataset_root / round_index / clipped). Participants without a
+        # wired embedding keep their original PseudoGradient.
+        aligned: dict[str, PseudoGradient] = dict(updates)
+        for pid in backstop_ids:
+            original = updates[pid]
+            aligned[pid] = build_pseudogradient(
+                aligned_grouped[pid],
+                dataset_root=original.dataset_root,
+                round_index=original.round_index,
+                clipped=original.clipped,
+            )
+        return aligned
 
     def _probe_embeddings(
         self,
@@ -489,6 +582,20 @@ class Coordinator:
         The Layer-3 Procrustes fold-in (#18) consumes these; with no embeddings wired here the ALIGNING
         state is a measured pass-through. Subclasses / #18 override this to supply ``f_c(P)`` per
         participant (and the reserved ``"global"`` key for the aggregated model).
+        """
+        return None
+
+    def _reference_embeddings(
+        self,
+        t: int,  # noqa: ARG002 — t is the #18 boundary hook signature (unused here)
+    ) -> "Tensor | None":
+        """The reference frame ``E_ref`` ``(n, d)`` the Layer-3 backstop aligns each participant to (#18).
+
+        Returns ``None`` by default, so the backstop is un-wired and ALIGNING is a byte-identical
+        pass-through. The Layer-3 Procrustes backstop fires only when BOTH this and :meth:`_probe_embeddings`
+        return non-``None`` (the #18/#22 seam): each over-threshold participant's predictor delta is
+        conjugated by ``Q_c* = procrustes_align(f_c(P), E_ref)`` before the outer step (RFC-0002 §5).
+        Subclasses / #18 override this to supply the reference frame (for example the round-0 ``E_ref``).
         """
         return None
 
