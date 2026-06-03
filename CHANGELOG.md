@@ -27,6 +27,24 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:eval`: **Ablation-ladder runner — the paper's core experiment** (RFC-0005 §6; #55) —
+  `lensemble.eval.run_ablation_ladder` / `lambda_anc_sweep` / `RungReport` / `LADDER_RUNGS` (new
+  `lensemble/eval/ablation.py`), on top of a new **live multi-round federated-simulation harness**
+  `lensemble.federation.run_federated_simulation` / `SiloData` / `SimulationResult` / `RoundMetrics` (new
+  `lensemble/federation/simulation.py`). The ladder realizes the RFC-0002 §4 gauge fix additively — one
+  mechanism per rung: `naive-fedavg` (negative control) → `shared-sketch` (Layer 1, `lambda_sig>0`,
+  `INV-SKETCH-CONSISTENCY`) → `procrustes-backstop` (Layer 3, the #18 coordinator seam ON) → `frame-anchor`
+  (Layer 2, `lambda_anc>0`, the recommended config) → `distillation` (Layer 4, the gauge-invariant
+  function-space consensus, #20). Each rung is driven through the harness — one `InProcessTransport`, one
+  `Coordinator` (subclassed to wire the #18 backstop hooks when the rung enables it), and one `Participant`
+  per silo over genuinely DIFFERENT per-silo data so the naive frames actually drift — and reports all three
+  metric families at each rung: frame drift (`frame_drift`, §2), MPC `success_rate` (§3), and `effective_dim`
+  (§4). `lambda_anc_sweep` resolves each swept value to a distinct, validated `LensembleConfig`
+  (RFC-0002 §7, the central hyperparameter). Residency-safe (only pseudo-gradients cross the transport,
+  `INV-RESIDENCY`); the harness cleans up each `Coordinator`'s `tempfile.mkdtemp` artifacts dir so the
+  multi-rung × sweep runs do not leak temp dirs. CPU regression guard `tests/ml/test_ablation_ladder.py`
+  asserts the load-bearing qualitative ordering (naive worst on drift; anchored flat, RFC-0005 §6). Docs:
+  new [Ablation Ladder page](docs/ablation-ladder.md), referenced from RFC-0005 §6.
 - `area:gauge`: **Layer-3 Procrustes re-alignment backstop at aggregation** (RFC-0002 §5; #18) —
   `lensemble.gauge.procrustes_backstop` / `realign_predictor_delta` (new `lensemble/gauge/backstop.py`).
   Immediately before the outer step, each participant whose latent frame drift exceeds

@@ -47,6 +47,7 @@ validation:
 nav:
   - Home: index.md
   - API Reference: reference.md
+  - Ablation Ladder: ablation-ladder.md
   - Roadmap: roadmap/IMPLEMENTATION.md
   - Specification:
       - Overview: spec/00-overview.md
