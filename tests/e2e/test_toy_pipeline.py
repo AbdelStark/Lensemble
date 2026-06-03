@@ -365,10 +365,25 @@ def test_cli_train_then_eval_smoke(tmp_path: Path) -> None:
     train_result = train_local(cfg, run_dir=run_dir)
     assert (train_result.checkpoint_dir / "weights.safetensors").exists()
 
-    # `eval --help` is the safe CLI surface check (the full `eval --checkpoint` path needs a config carrying
-    # the toy ModelConfig, which the CLI's default LensembleConfig does not; that path is covered directly
-    # via `evaluate` above). The help confirms the new options are wired.
-    help_result = runner.invoke(app, ["eval", "--help"])
-    assert help_result.exit_code == 0
-    assert "--checkpoint" in help_result.stdout
-    assert "--env-id" in help_result.stdout
+    # The `eval` command's `--checkpoint`/`--env-id` options are WIRED — checked behaviorally rather than
+    # by scraping the rich-rendered `--help` panel (whose wrapping/styling is terminal-width- and
+    # rich-version-dependent and so flaky across local vs CI). Invoking with a nonexistent checkpoint must
+    # FAIL on the load (not on option parsing): the options are recognized (no "No such option"), and the
+    # run exits non-zero. (The full toy `eval --checkpoint` happy path needs a toy-ModelConfig config the
+    # CLI's default LensembleConfig is not; that path is covered directly via `evaluate` above.)
+    eval_result = runner.invoke(
+        app,
+        [
+            "eval",
+            "--checkpoint",
+            str(tmp_path / "nonexistent-ckpt"),
+            "--env-id",
+            "synthetic://toy",
+        ],
+    )
+    assert (
+        eval_result.exit_code != 0
+    )  # fails on the missing checkpoint, not on option parsing
+    assert (
+        "No such option" not in eval_result.output
+    )  # --checkpoint / --env-id ARE recognized
