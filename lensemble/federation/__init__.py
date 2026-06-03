@@ -3,6 +3,18 @@
 from __future__ import annotations
 
 from .coordinator import Coordinator
+from .messages import (
+    CONTROL_MESSAGE_SCHEMA_VERSION,
+    Commitment,
+    ControlMessage,
+    RoundClose,
+    RoundOpen,
+    Update,
+    from_pseudogradient,
+    parse_control_message,
+    to_delta_tensor,
+)
+from .network import LoopbackChannel, MessageChannel, NetworkedTransport
 from .outer import OuterOptimizer, assert_bitwise_reproducible
 from .participant import Participant, train_local
 from .pseudogradient import PseudoGradient, build_pseudogradient
@@ -26,6 +38,18 @@ __all__ = [
     "ParamRef",
     "Transport",
     "InProcessTransport",
+    "MessageChannel",
+    "LoopbackChannel",
+    "NetworkedTransport",
+    "ControlMessage",
+    "RoundOpen",
+    "Commitment",
+    "Update",
+    "RoundClose",
+    "CONTROL_MESSAGE_SCHEMA_VERSION",
+    "parse_control_message",
+    "from_pseudogradient",
+    "to_delta_tensor",
     "train_local",
     "PseudoGradient",
     "build_pseudogradient",

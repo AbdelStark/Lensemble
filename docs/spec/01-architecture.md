@@ -276,7 +276,21 @@ RoundOpen → [verify probe + derive A] → H inner steps → Δ_c → clip+nois
   large model across local devices. This is intra-trust-domain; no Lensemble boundary is crossed here.
 - Simulation harness. In Stage B the coordinator and participants run in one process (in-process round
   simulation) so the gauge science is studied on one cluster; in Stage C they run as separate networked
-  processes over a real boundary ([RFC-0013](../rfcs/RFC-0013-coordinator-runtime.md)).
+  processes over a real boundary ([RFC-0013](../rfcs/RFC-0013-coordinator-runtime.md)). Both stages drive
+  the SAME `RoundState` machine and the SAME operation-oriented `Transport` seam
+  (`lensemble.federation.transport.Transport`); only the transport changes. Stage C's
+  `NetworkedTransport` (`lensemble.federation.network`) implements that seam over the low-level
+  RFC-0013 §5 `MessageChannel` wire layer (`send` / `recv` with the None-on-timeout contract /
+  `broadcast` / `peers`) carrying the four `ControlMessage`s (`RoundOpen` / `Commitment` / `Update` /
+  `RoundClose`, `lensemble.federation.messages`). It is interchangeable with `InProcessTransport` in
+  `Coordinator(config, *, transport=...)`: a two-node round over the in-process `LoopbackChannel`
+  commits a `global_state_hash()` bit-identical to the in-process run on the same seed (the deterministic
+  outer step makes the equality exact). The four messages carry only hashes, coordination scalars, and the
+  released masked `Δ_c` — never raw data (`INV-RESIDENCY`, fail-closed); ingress re-validates every message
+  and binds each `Δ_c` to its committed `R_c` (`CommitmentMismatch`, `INV-COMMIT-BINDING`, never swallowed).
+  The concrete wire protocol (gRPC vs HTTP/REST) is bound at Stage C behind the `MessageChannel` Protocol —
+  the state machine is transport-agnostic
+  ([RFC-0013 §Open Questions](../rfcs/RFC-0013-coordinator-runtime.md)).
 
 Device contract ([conventions §9](conventions.md#9-determinism-dtype-device)): CUDA primary, with a CPU fallback path that runs the small CI configs; tests
 must pass on CPU. Compute dtype is bf16 forward with fp32 master weights and loss/statistic

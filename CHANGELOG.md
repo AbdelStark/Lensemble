@@ -27,6 +27,35 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `lensemble.federation`: the networked control-plane transport (RFC-0013 §5, Stage C) — the `Stage-C`
+  realization of the runtime control plane, layered beneath the unchanged operation-oriented `Transport`
+  seam (#42/#43) (#45). New `lensemble.federation.messages` defines the four boundary-crossing
+  `ControlMessage`s as frozen pydantic v2 models (`extra="forbid"`, integer `CONTROL_MESSAGE_SCHEMA_VERSION`
+  gated FIRST by `parse_control_message`, mirroring `parse_dataset_commitment`): `RoundOpen` (coord →
+  participant, integrity hashes + `s_t` + probe/landmark hashes + `H`), `Commitment` (participant → coord,
+  the dataset Merkle root `R_c`, `INV-COMMIT-BINDING`), `Update` (participant → aggregator, the released
+  masked `Δ_c` as a JSON-native finite `tuple[float, ...]` + `l2_norm`, **never** a raw
+  observation/action/embedding, `INV-RESIDENCY`), and `RoundClose` (coord → all, the `(θ_{t+1}, φ_{t+1})`
+  content hash, `INV-CHECKPOINT-HASH`); `from_pseudogradient` / `to_delta_tensor` route the carrier through
+  `guard_egress` so a non-`PseudoGradient` raw payload fails closed (`ResidencyViolation`, never swallowed).
+  New `lensemble.federation.network` adds the low-level RFC-0013 §5 wire `MessageChannel` Protocol
+  (`send` / `recv` with the **None-on-timeout** contract / `broadcast` / `peers`), its in-process
+  `LoopbackChannel` realization (per-peer FIFO inboxes; `connected_pair` / `connected_mesh`; the testable
+  stand-in for the real socket transport — the gRPC-vs-HTTP wire choice is the Stage-C Open Question), and
+  `NetworkedTransport`, which implements the SAME `lensemble.federation.transport.Transport` Protocol the
+  `Coordinator`/`Participant` consume — so it is **interchangeable with `InProcessTransport` in
+  `Coordinator(config, *, transport=...)`** — realizing each operation over the channel: `broadcast_round_open`
+  emits a `RoundOpen` and seeds the hash→weights store so `fetch_params` resolves θ/φ out-of-band by locator
+  (hash-verified, `INV-CHECKPOINT-HASH`); `submit_update` `send`s an `Update`; `collect_updates` drains the
+  coordinator inbox via `recv` until `None`, ingress-validates EVERY message (a malformed/too-new payload
+  raises the typed `ValidationError`/`SchemaVersionMismatch` and the update is not counted, so the round
+  state does not advance), and binds each `Update`'s `Δ_c` to its committed `R_c` via `verify_binding`
+  (`CommitmentMismatch` on mismatch, `INV-COMMIT-BINDING`, never swallowed). A `NetworkedTransport` round
+  driven over a `LoopbackChannel` commits a `global_state_hash()` bit-identical to the in-process run on the
+  same seed/updates (the deterministic outer step makes the equality exact). The four message symbols,
+  `parse_control_message`, `from_pseudogradient`, `to_delta_tensor`, `MessageChannel`, `LoopbackChannel`, and
+  `NetworkedTransport` are exported from `lensemble.federation`. The op-oriented `Transport` and
+  `InProcessTransport` are unchanged.
 - `lensemble.data`: the `lance` / `hdf5` / `lerobot` on-disk storage backends behind the
   `EpisodeDataset.fmt` selector, plus the `fmt`/URI-scheme dispatcher and registry (RFC-0004 §1;
   the extension point of [02 §5.2](docs/spec/02-public-api.md#52-registering-a-new-data-adapter)).
