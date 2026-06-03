@@ -172,12 +172,27 @@ class Participant:
         VALIDATES it by fetching its θ/φ refs through ``transport.fetch_params`` (which hash-verifies the
         weights, ``INV-CHECKPOINT-HASH``). A tampered θ/φ artifact raises
         :class:`~lensemble.errors.CheckpointIntegrityError` from the fetch and ``join`` does not return.
+
+        RECOVERY CONTRACT (RFC-0013 §3). A long-absent rejoiner adopts the recovered ``GlobalState`` as the
+        SOLE source of truth and discards any stale local state — it does not carry forward an old round's
+        ``(θ, φ)`` or round index, so the rejoiner is byte-identical to a fresh joiner from this point.
+        When the recovered ``GlobalState.round_index == 0`` this ALSO revalidates ``INV-WARMSTART-T0``: the
+        fetched encoder's content hash must equal the pinned warm-start (``_warmstart_hash``), else the
+        gauge is not closed at ``t=0`` and :class:`~lensemble.errors.GaugeError` is raised here — the same
+        check :meth:`local_round` runs, hoisted to the recovery path so a round-0 rejoiner fails fast.
         """
         self.transport.register(self.participant_id, coordinator_endpoint)
         gs = self.transport.recover_global_state(participant_id=self.participant_id)
         # Validate the recovered refs resolve and hash-verify before trusting the state (rejoiner path).
-        self.transport.fetch_params(gs.theta_ref)
+        theta_weights = self.transport.fetch_params(gs.theta_ref)
         self.transport.fetch_params(gs.phi_ref)
+        # INV-WARMSTART-T0 on the recovery path: a round-0 rejoiner revalidates the warm-start gauge from
+        # the recovered θ before adopting the state (RFC-0013 §3). Build a fresh encoder, load the fetched
+        # θ_0, and run the SAME _check_warmstart local_round runs (a drift → GaugeError).
+        if gs.round_index == 0:
+            encoder = build_encoder(self.config)
+            encoder.load_state_dict(theta_weights, strict=True)
+            self._check_warmstart(gs, encoder)
         return gs
 
     def local_round(self, global_state: GlobalState, round_seed: int) -> PseudoGradient:

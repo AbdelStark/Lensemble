@@ -63,6 +63,25 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
   through protected hooks (`_pinned_probe` / `_local_windows` / `_dataset_root` / `_action_spec` /
   `_warmstart_hash`) — the #22 data-layer boundary (a toy seam tests override; the real loader/commitment
   lands with #22). (#43)
+- `lensemble.federation`: runtime fault tolerance & elasticity (RFC-0013 §3/§7). `FederationConfig` gains
+  two knobs — `secure_agg_threshold: int = 2` (the secure-aggregation reveal threshold `t_agg`, validated
+  `0 < t_agg <= participant_count`) and `collect_timeout_s: float = 30.0` (the per-round COLLECTING
+  wall-time budget, validated `> 0`). The `Coordinator` round quorum is now
+  `K = max(fault_tolerance_min_participants, secure_agg_threshold)` (below `t_agg` survivors the masking
+  sum cannot be unblinded, so the higher threshold gates the COLLECTING check). `Coordinator.try_round() ->
+  RoundState` attempts the CURRENT round once over the PRESENT contributing set and returns the resulting
+  state: a below-`K` round goes to `ABORTED` WITHOUT raising and WITHOUT advancing the round index or
+  global hash, so the SAME round `t` can be re-attempted once enough updates are staged; on success the
+  hash advances and round `t+1` opens. `run(num_rounds)` loops over `try_round` as the FAIL-FAST driver,
+  SURFACING a below-`K` round as a raised `FaultToleranceExceeded` (code `FAULT_TOLERANCE_EXCEEDED`,
+  carrying `contributing`/`quorum`). Elastic completion averages over the present `C_t` (absent
+  participants are simply not in the `ContributionRecord`); the in-process present set models the
+  `collect_timeout_s` drop (the wall-clock timeout is the #45 seam) and a delta for a PAST round is never
+  back-applied — a dropped participant reconciles at the NEXT round. `Participant.join` now revalidates
+  `INV-WARMSTART-T0` on the recovery path when the recovered `GlobalState.round_index == 0` (fetch θ_0,
+  compare the encoder content hash to the pinned warm-start; a drift → `GaugeError`), and a long-absent
+  rejoiner adopts the recovered `GlobalState` as the sole source of truth (discards stale local state).
+  The default-config `config_hash` golden is re-pinned (#37) to reflect the two new defaults. (#44)
 - `lensemble.federation`: the `GlobalState` + `ParamRef` broadcast round-state types (03 §7) — frozen,
   validated dataclasses (`round_index >= 0`, 32-byte `probe_hash`, non-empty `wmcp_version`, 64-hex
   `content_hash`); `GlobalState` is re-exported from `lensemble.federation.round` so the RFC-0013 §1 import
@@ -146,6 +165,10 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Changed
 
+- `FederationConfig`: gained `secure_agg_threshold` and `collect_timeout_s` (RFC-0013 §3); the
+  default-config `config_hash` golden vector is re-pinned to
+  `aaa0a3f7b98f89bead1c2e63c49fb66e0afdb081f88d85d44d8d03e03886f4fb` to reflect the two new defaults
+  (an intentional, reviewed schema addition that shifts the canonical encoding). (#44)
 - `lensemble.federation.build_pseudogradient`: the `quantized` keyword is now `quantize` — the action
   flag that applies the int8 wire round-trip on the assembled flat delta and sets
   `PseudoGradient.quantized`. Pre-1.0 minor; no released callers passed the old keyword.

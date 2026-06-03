@@ -90,6 +90,40 @@ def test_rule_fault_tolerance_floor() -> None:
     )
 
 
+def test_rule_secure_agg_threshold_above_participant_count() -> None:
+    # K = max(min_participants, secure_agg_threshold); t_agg must be in (0, C] (#44, RFC-0013 §3).
+    base = load_config()
+    err = _expect(
+        dataclasses.replace(
+            base,
+            federation=dataclasses.replace(base.federation, secure_agg_threshold=99),
+        )
+    )
+    assert err.key == "federation.secure_agg_threshold"  # type: ignore[attr-defined]
+
+
+def test_rule_secure_agg_threshold_non_positive() -> None:
+    base = load_config()
+    _expect(
+        dataclasses.replace(
+            base,
+            federation=dataclasses.replace(base.federation, secure_agg_threshold=0),
+        )
+    )
+
+
+def test_rule_collect_timeout_non_positive() -> None:
+    # The COLLECTING wall-time budget must be strictly positive (#44, RFC-0013 §3).
+    base = load_config()
+    err = _expect(
+        dataclasses.replace(
+            base,
+            federation=dataclasses.replace(base.federation, collect_timeout_s=0.0),
+        )
+    )
+    assert err.key == "federation.collect_timeout_s"  # type: ignore[attr-defined]
+
+
 def test_rule_dp_budget() -> None:
     base = load_config()
     _expect(

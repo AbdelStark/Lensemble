@@ -13,9 +13,16 @@ Per-round lifecycle (RFC-0013 §1/§2), all on the single coordinator thread in 
   :class:`~lensemble.federation.state.GlobalState` (refs to the committed θ/φ, ``sketch_seed=s_t``), and
   ``transport.broadcast_round_open`` it (the ``RoundOpen`` payload, RFC-0013 §5). The broadcast state
   references ONLY θ/φ — never an action head (``INV-ACTIONHEAD-LOCAL``).
-- **COLLECTING** — ``transport.collect_updates(t)``. A contributing count below
-  ``cfg.federation.fault_tolerance_min_participants`` aborts the round with
-  :class:`~lensemble.errors.FaultToleranceExceeded` (the round → ``ABORTED``, the global hash unchanged).
+- **COLLECTING** — ``transport.collect_updates(t)``. The round quorum is
+  ``K = max(cfg.federation.fault_tolerance_min_participants, cfg.federation.secure_agg_threshold)``
+  (RFC-0013 §3): below ``K`` survivors the secure-aggregation reveal cannot be unblinded, so a
+  contributing count below ``K`` aborts the round with
+  :class:`~lensemble.errors.FaultToleranceExceeded` (the round → ``ABORTED``, the global hash AND the
+  round index unchanged — no partial commit, no advance, so the SAME round ``t`` may be re-attempted once
+  enough updates are staged). The *present* set is whatever ``collect_updates(t)`` returns: the
+  in-process transport models the post-``collect_timeout_s`` present set as the collected set (the
+  wall-clock drop is the network seam #45), and a delta for a PAST round is never back-applied — a
+  dropped participant reconciles by contributing at the NEXT round.
 - **AGGREGATING** — the determinism self-check (``INV-AGG-DETERMINISM``, RFC-0013 §4): the reduction
   ``(1/C)·Σ_c Δ_c`` is re-run under the canonical participant-id-sorted order and compared bitwise via
   :func:`~lensemble.aggregation.determinism.assert_outer_step_deterministic` (a FRESH optimizer per call
@@ -156,6 +163,10 @@ class Coordinator:
         # Procrustes backstop fold-in is #18 (out of scope) so this is a measured-only diagnostic.
         self._last_drift: FrameDriftReport | None = None
 
+        # The present count of the most recent COLLECTING (for run()'s below-K FaultToleranceExceeded; the
+        # quorum is recomputed from cfg). Set each round at COLLECTING.
+        self._last_contributing: int = 0
+
         # Commit the round-0 artifact to mint the initial global hash, then build + broadcast GlobalState_0.
         initial_hash = self._commit_checkpoint(
             theta_weights, phi_weights, round_index=0, parent_hash=None
@@ -172,22 +183,71 @@ class Coordinator:
 
         Each round is ``OPEN → COLLECTING → AGGREGATING → ALIGNING → COMMITTING → CLOSED`` or
         short-circuits to ``ABORTED``. On ``CLOSED`` the committed global hash advances and a
-        :class:`~lensemble.provenance.ledger.ContributionRecord` is appended. A below-quorum round raises
-        :class:`~lensemble.errors.FaultToleranceExceeded`; a non-reproducible reduction raises
-        :class:`~lensemble.errors.NonDeterministicAggregation` (security-critical, never swallowed) — both
-        drive the round to ``ABORTED`` with the global hash unchanged (no partial commit).
+        :class:`~lensemble.provenance.ledger.ContributionRecord` is appended.
+
+        RETRY SEMANTICS (the choice). ``run`` is the FAIL-FAST driver and ``try_round`` is the
+        EXPLICIT-RETRY driver; both share the SAME single round body (:meth:`_run_one_round`), so the
+        sequential-loop invariant (round ``t+1`` does not open until round ``t`` is ``CLOSED``, §6) is
+        coherent across both. ``run`` SURFACES a below-quorum round as a raised
+        :class:`~lensemble.errors.FaultToleranceExceeded` (code ``FAULT_TOLERANCE_EXCEEDED``, carrying
+        ``contributing``/``quorum``); ``try_round`` does NOT raise on below-K, returning
+        ``RoundState.ABORTED`` instead so staging-and-re-attempting the SAME round ``t`` is the supported
+        elastic path (the round index/hash are unchanged on abort). A non-reproducible reduction always
+        raises :class:`~lensemble.errors.NonDeterministicAggregation` (security-critical, never swallowed) —
+        an abort drives the round to ``ABORTED`` with the global hash unchanged (no partial commit).
+
+        END STATE. ``run`` opens the next round only BETWEEN rounds, so after the last requested round the
+        driver rests in ``CLOSED`` (the next round is not opened speculatively); ``try_round`` opens round
+        ``t+1`` immediately after a commit so the next ``try_round`` attempts ``t+1`` (its end state after a
+        commit is ``OPEN`` on the new round).
         """
-        for _ in range(num_rounds):
+        for i in range(num_rounds):
             t = self._driver.round_index
-            self._run_one_round(t)
-            # Open the next round only when this one CLOSED and more rounds remain (RFC-0013 §6: the loop
-            # is sequential; round t+1 does not open until round t reaches CLOSED).
-            if self._driver.state is RoundState.CLOSED and _ < num_rounds - 1:
+            state = self._run_one_round(t)
+            if state is RoundState.ABORTED:
+                # run() is fail-fast: surface the below-quorum round as a raised FaultToleranceExceeded
+                # (the round is ABORTED, the global hash + round index unchanged). A non-reproducible
+                # reduction already propagated out of _run_one_round (never swallowed), so an ABORTED here
+                # is the below-K case.
+                raise self._build_quorum_error(t, self._last_contributing)
+            # Open the next round only BETWEEN rounds (RFC-0013 §6: the loop is sequential; round t+1 does
+            # not open until round t is CLOSED). The last requested round is left CLOSED (not re-opened).
+            if i < num_rounds - 1:
                 self._driver.open_next()
                 self._global_state = self._open_round(
                     round_index=self._driver.round_index,
                     global_hash=self._driver.global_hash,
                 )
+
+    def try_round(self) -> RoundState:
+        """Attempt the CURRENT round once; return the resulting :class:`RoundState` (RFC-0013 §1/§3).
+
+        The explicit-retry entry point. Drives the current round ``t`` through
+        ``COLLECTING → AGGREGATING → ALIGNING → COMMITTING → CLOSED`` over the PRESENT contributing set and,
+        on success, advances the canonical hash and opens round ``t+1`` (so the next ``try_round`` attempts
+        ``t+1``). If the present count is below the quorum
+        ``K = max(fault_tolerance_min_participants, secure_agg_threshold)`` the round goes to ``ABORTED``
+        and this returns ``RoundState.ABORTED`` WITHOUT raising and WITHOUT advancing the round index or the
+        global hash — the caller may stage more updates and re-attempt the SAME round ``t``. (Contrast
+        :meth:`run`, which surfaces the below-K case as a raised
+        :class:`~lensemble.errors.FaultToleranceExceeded`.) A non-reproducible reduction still raises
+        :class:`~lensemble.errors.NonDeterministicAggregation` (security-critical, never swallowed).
+
+        Elastic completion is over the present ``C_t`` (the absent participants are simply not in the
+        ``ContributionRecord``); the in-process present set models the ``collect_timeout_s`` drop (the
+        wall-clock timeout is the #45 seam) and a delta for a PAST round is never back-applied.
+        """
+        t = self._driver.round_index
+        state = self._run_one_round(t)
+        # Open the next round only when this one CLOSED (RFC-0013 §6: the loop is sequential; round t+1 does
+        # not open until round t reaches CLOSED). On ABORTED the round index/hash stay put for a re-attempt.
+        if state is RoundState.CLOSED:
+            self._driver.open_next()
+            self._global_state = self._open_round(
+                round_index=self._driver.round_index,
+                global_hash=self._driver.global_hash,
+            )
+        return state
 
     def round_state(self) -> RoundState:
         """The current :class:`~lensemble.federation.round.RoundState` (observability / test hook)."""
@@ -217,22 +277,37 @@ class Coordinator:
 
     # --- the round loop (RFC-0013 §1/§2) ---
 
-    def _run_one_round(self, t: int) -> None:
-        """Drive one round ``t`` through ``COLLECTING → AGGREGATING → ALIGNING → COMMITTING → CLOSED``."""
-        # 1. COLLECTING — fix the contributing set; abort below quorum (the global hash stays unchanged).
+    def _run_one_round(self, t: int) -> RoundState:
+        """Drive one round ``t`` through ``COLLECTING → AGGREGATING → ALIGNING → COMMITTING → CLOSED``.
+
+        Returns the resulting :class:`RoundState` (``CLOSED`` on a successful commit, ``ABORTED`` below
+        quorum). A below-K round does NOT raise here (the global hash + round index stay put so the SAME
+        round may be re-attempted); :meth:`run` translates a returned ``ABORTED`` into a raised
+        :class:`~lensemble.errors.FaultToleranceExceeded`. A non-reproducible reduction is still raised
+        (security-critical, never swallowed).
+        """
+        # A prior below-K attempt at THIS round left the driver ABORTED (round index/hash unchanged); a
+        # re-attempt re-opens the SAME round t. Reset OPEN so COLLECTING is a legal transition again (the
+        # round index is not advanced — open_next, the only incrementer, is not called on an abort).
+        if self._driver.state is RoundState.ABORTED:
+            self._driver.state = RoundState.OPEN
+
+        # 1. COLLECTING — fix the present set; abort below the quorum K (the global hash + round index stay
+        # unchanged so the SAME round t can be re-attempted once enough updates are staged). K is the HIGHER
+        # of the fault-tolerance floor and the secure-aggregation reveal threshold t_agg (RFC-0013 §3):
+        # below t_agg the masking sum cannot be unblinded, so the higher of the two gates the round.
         self._driver.to(RoundState.COLLECTING)
         updates = dict(self.transport.collect_updates(t))
-        quorum = self.config.federation.fault_tolerance_min_participants
+        self._last_contributing = len(updates)
+        quorum = self._quorum()
         if len(updates) < quorum:
-            err = FaultToleranceExceeded(
-                f"round {t} has {len(updates)} contributing participant(s), below the quorum of "
-                f"{quorum}; discarding the round (the global hash is unchanged)",
-                code=LensembleErrorCode.FAULT_TOLERANCE_EXCEEDED,
-                remediation="lower fault_tolerance_min_participants or wait for more participants to join",
-            )
-            err.contributing = len(updates)  # type: ignore[attr-defined]
-            err.quorum = quorum  # type: ignore[attr-defined]
-            self._driver.abort(err)  # → ABORTED, re-raises (never swallowed)
+            # Below K: drive the round to ABORTED WITHOUT raising and return the state. The global hash +
+            # round index are untouched (RoundDriver only advances the hash on commit), so the SAME round t
+            # can be re-attempted. run() turns this returned ABORTED into a raised FaultToleranceExceeded;
+            # try_round() returns it for the explicit-retry path. (We set ABORTED directly rather than
+            # call driver.abort(), which always raises — the non-raising abort is intentional here.)
+            self._driver.state = RoundState.ABORTED
+            return RoundState.ABORTED
 
         # 2. AGGREGATING — the determinism self-check (INV-AGG-DETERMINISM). assert_outer_step_deterministic
         # re-runs the PURE thunk twice (a FRESH optimizer each call, so its velocity is not advanced) and
@@ -278,6 +353,31 @@ class Coordinator:
         self._global_params = new_params
         self._theta_weights = theta_weights
         self._phi_weights = phi_weights
+        return RoundState.CLOSED
+
+    def _quorum(self) -> int:
+        """The round quorum ``K = max(fault_tolerance_min_participants, secure_agg_threshold)`` (§3).
+
+        The HIGHER of the fault-tolerance floor and the secure-aggregation reveal threshold ``t_agg``:
+        below ``t_agg`` survivors the masking sum cannot be unblinded (RFC-0011), so even if the
+        fault-tolerance floor is met the round still cannot complete — the higher threshold gates.
+        """
+        fed = self.config.federation
+        return max(fed.fault_tolerance_min_participants, fed.secure_agg_threshold)
+
+    def _build_quorum_error(self, t: int, contributing: int) -> FaultToleranceExceeded:
+        """The below-quorum :class:`~lensemble.errors.FaultToleranceExceeded` carrying ``contributing``/``quorum``."""
+        quorum = self._quorum()
+        err = FaultToleranceExceeded(
+            f"round {t} has {contributing} contributing participant(s), below the quorum K={quorum} "
+            f"(= max(fault_tolerance_min_participants, secure_agg_threshold)); discarding the round (the "
+            f"global hash and round index are unchanged)",
+            code=LensembleErrorCode.FAULT_TOLERANCE_EXCEEDED,
+            remediation="stage more updates for the same round and re-attempt, or lower the quorum knobs",
+        )
+        err.contributing = contributing  # type: ignore[attr-defined]
+        err.quorum = quorum  # type: ignore[attr-defined]
+        return err
 
     def _open_round(self, *, round_index: int, global_hash: str) -> GlobalState:
         """OPEN: pin (θ_t, φ_t), derive s_t, build + broadcast the round GlobalState (RFC-0013 §1/§5)."""
