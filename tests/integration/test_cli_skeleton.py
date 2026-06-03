@@ -41,14 +41,16 @@ def test_help_lists_the_public_command_tree() -> None:
 
 
 def test_valid_override_emits_manifest_and_exits_zero(tmp_path: Path) -> None:
-    result = runner.invoke(app, ["train", "--run-dir", str(tmp_path), _VALID_OVERRIDE])
+    # `eval` with no --checkpoint is the config-validation + manifest-emission path (exit 0) — `train` now
+    # runs the real single-site loop and needs a data_source (covered end-to-end in tests/e2e), so this
+    # boundary test uses `eval` to exercise override-application + manifest emission without training (#167).
+    result = runner.invoke(app, ["eval", "--run-dir", str(tmp_path), _VALID_OVERRIDE])
     assert result.exit_code == 0, result.stderr
-    manifest_path = Path(
-        result.stdout.strip()
-    )  # machine output: the manifest path on stdout
+    # machine output: the manifest path is the FIRST stdout line (a dry eval emits only the manifest path).
+    manifest_path = Path(result.stdout.strip().splitlines()[0])
     assert manifest_path.exists()
     manifest = json.loads(manifest_path.read_text())
-    assert manifest["command"] == "train"
+    assert manifest["command"] == "eval"
     assert (
         manifest["config"]["federation"]["participant_count"] == 8
     )  # override applied
@@ -56,12 +58,13 @@ def test_valid_override_emits_manifest_and_exits_zero(tmp_path: Path) -> None:
 
 
 def test_stdout_is_machine_readable_stderr_is_human(tmp_path: Path) -> None:
+    # `eval` with no --checkpoint is the dry config-validation path (#167): stdout is exactly the manifest
+    # path (machine), the human note goes to stderr.
     result = runner.invoke(app, ["eval", "--run-dir", str(tmp_path)])
     assert result.exit_code == 0
-    # stdout is exactly the manifest path (machine); the human note goes to stderr.
     assert result.stdout.strip().endswith("run_manifest.json")
-    assert "behavior owned by" in result.stderr
-    assert "behavior owned by" not in result.stdout
+    assert "pass --checkpoint" in result.stderr  # the human note about the dry path
+    assert "pass --checkpoint" not in result.stdout
 
 
 def test_unknown_override_exits_one_with_code_and_remediation(tmp_path: Path) -> None:
@@ -126,6 +129,8 @@ def test_verify_prove_is_phase_two_and_exits_nonzero() -> None:
 
 
 def test_federate_subcommands_emit_manifests(tmp_path: Path) -> None:
+    # The federate commands now instantiate the REAL Coordinator/Participant and report readiness (#167):
+    # stdout's FIRST line is the manifest path, the SECOND is the initial global hash / participant id.
     for sub, addr_flag in (
         ("coordinator", "--listen"),
         ("participant", "--coordinator"),
@@ -134,5 +139,13 @@ def test_federate_subcommands_emit_manifests(tmp_path: Path) -> None:
             app, ["federate", sub, addr_flag, "in-process", "--run-dir", str(tmp_path)]
         )
         assert result.exit_code == 0, result.stderr
-        manifest = json.loads(Path(result.stdout.strip()).read_text())
+        lines = result.stdout.strip().splitlines()
+        manifest = json.loads(Path(lines[0]).read_text())
         assert manifest["command"] == f"federate {sub}"
+        # readiness line: the coordinator echoes a 64-hex global hash; the participant echoes its id.
+        if sub == "coordinator":
+            assert len(lines[1]) == 64 and all(
+                c in "0123456789abcdef" for c in lines[1]
+            )
+        else:
+            assert lines[1] == "participant-0"

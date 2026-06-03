@@ -124,6 +124,30 @@ def test_rule_collect_timeout_non_positive() -> None:
     assert err.key == "federation.collect_timeout_s"  # type: ignore[attr-defined]
 
 
+def test_rule_window_steps_non_positive() -> None:
+    # The training-window horizon must be a positive step count (#167; mirrors EpisodeDataset.windows).
+    base = load_config()
+    err = _expect(
+        dataclasses.replace(base, data=dataclasses.replace(base.data, window_steps=0))
+    )
+    assert err.key == "data.window_steps"  # type: ignore[attr-defined]
+
+
+def test_data_source_defaults_none_and_window_steps_one() -> None:
+    # The #167 toy-pipeline knobs: no configured source by default; horizon 1.
+    cfg = load_config()
+    assert cfg.data.data_source is None
+    assert cfg.data.window_steps == 1
+
+
+def test_data_source_override_resolves() -> None:
+    cfg = load_config(
+        overrides=["data.data_source=/tmp/ds.lance", "data.window_steps=2"]
+    )
+    assert cfg.data.data_source == "/tmp/ds.lance"
+    assert cfg.data.window_steps == 2
+
+
 def test_rule_dp_budget() -> None:
     base = load_config()
     _expect(

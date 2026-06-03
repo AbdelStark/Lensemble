@@ -27,6 +27,26 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:e2e`: the first green end-to-end toy run (RFC-0001 Stage A; #167). `lensemble.federation.train_local`
+  is now implemented (was a `NotImplementedError` stub): the single-site Stage-A path builds
+  `encoder`/`predictor`/`action_head` from a `LensembleConfig` (the #166/#168 bridge), resolves local
+  windows through the #22 data layer, runs `cfg.federation.inner_horizon` inner AdamW steps over the
+  composite SIGReg-JEPA objective via a new shared `_inner_loop` helper (used by BOTH
+  `Participant._run_inner_loop` and `train_local`, so the two never drift), hash-commits the trained
+  `(θ, φ)` (`INV-CHECKPOINT-HASH`; only the shared groups enter the artifact, `INV-ACTIONHEAD-LOCAL`), and
+  returns a frozen `RunResult` (checkpoint dir + `content_hash` + manifest hash + final loss). The objective's
+  sketch seed is `round_sketch_seed(root_seed, 0)` (single-site == round 0, `INV-SKETCH-CONSISTENCY`).
+  `DataConfig` gains `data_source: str | None` (the local-episode source `Participant._local_windows` /
+  `_action_spec` now resolve via `load_episodes`, the #22-backed default) and `window_steps: int = 1` (the
+  training-window horizon; `validate_config` enforces `> 0`); the golden `config_hash` is re-pinned. A built-in
+  deterministic `synthetic://toy` `EvalWorld` self-registers in `lensemble.eval.world` (reads its clip shape
+  from `cfg.model`; a KNOWN, non-trivial seed-pinned success rate of 0.5), so `evaluate` runs a real
+  latent-MPC eval without the unvendored `stable-worldmodel` suite (#96). The CLI `train` / `eval` /
+  `federate coordinator|participant` commands are wired from `_stub_command` to the real entry points
+  (`eval` gains `--checkpoint`/`--env-id`; `federate` instantiates the real `Coordinator`/`Participant` and
+  reports readiness — a full multi-process round needs the networked transport #45). New
+  `tests/e2e/test_toy_pipeline.py` exercises the headline train→commit→eval green run, a federated
+  `try_round()` commit, and a CLI smoke.
 - `lensemble.federation`: the networked control-plane transport (RFC-0013 §5, Stage C) — the `Stage-C`
   realization of the runtime control plane, layered beneath the unchanged operation-oriented `Transport`
   seam (#42/#43) (#45). New `lensemble.federation.messages` defines the four boundary-crossing

@@ -564,11 +564,13 @@ def test_inner_loop_with_no_windows_fails_closed() -> None:
         p.local_round(gs, round_seed=7)
 
 
-def test_train_local_is_not_part_of_this_issue() -> None:
+def test_train_local_without_a_data_source_fails_closed() -> None:
+    # train_local resolves windows through the #22 data layer (cfg.data.data_source); with no source the
+    # default _local_windows fails closed citing #22 (#167). The full green path is in tests/e2e.
     from lensemble.federation import train_local
 
-    with pytest.raises(NotImplementedError):
-        train_local(_cfg())
+    with pytest.raises(RoundError):
+        train_local(_cfg())  # cfg.data.data_source is None by default
 
 
 # --- coordinator-side transport methods (the #42 surface, smoke-covered here) ---
