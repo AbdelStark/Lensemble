@@ -212,6 +212,19 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 - Reference-implementation scaffolding toward the v0.1 (Stage A) milestone across `core`, `contracts`,
   `model`, `gauge`, `federation`, `privacy`, `data`, `eval`, `config`, `artifacts`, and `observability`
   ([conventions §12](docs/spec/conventions.md#12-milestones-and-stages)).
+- `lensemble.gauge`: the Layer-4 function-space distillation fallback — `distill_consensus(probe_predictions,
+  *, align=True)` and `distill_to_consensus(consensus_target, *, steps, lr)` (RFC-0002 §6; the top rung of
+  the ablation ladder, RFC-0005 §6). Instead of averaging weights it aggregates participant *behaviors* on
+  the pinned public probe: with `align=True` each participant's probe embeddings `f_c(P)` are
+  Procrustes-aligned (Layer 3) onto a deterministic reference frame (the participant first in sorted id
+  order) before the mean, so the consensus is **gauge-invariant by construction** — it depends only on the
+  common reference `E_ref` (up to the reference's own frame), never on which per-participant rotation `Q_c`
+  each silo drew; `align=False` is the degraded plain-mean baseline. A global student then distills against
+  that consensus on the probe via an L2 (squared-Frobenius) function-space loss. A pure function of
+  public-probe outputs only — no private data crosses (`INV-RESIDENCY` not at stake; the probe is public) —
+  upcasting to fp32 (fp64 kept) like `procrustes_align` for determinism (`INV-AGG-DETERMINISM`) and
+  surfacing `DegenerateProcrustes` (`PROCRUSTES_DEGENERATE`) on an under-determined frame rather than a
+  silent garbage consensus. (#20)
 
 ### Changed
 
