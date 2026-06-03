@@ -27,6 +27,29 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:verify`: **public recomputation of frame alignment** — the one Phase-2 verification mechanism that
+  ships in Phase 1 because it is free (RFC-0006 §4; #62). `lensemble.verify.recompute_alignment(committed_weights:
+  Path, probe: Path) -> FrameDriftReport` (the frozen 02 §1.8 signature) hash-verifies the committed checkpoint
+  (`INV-CHECKPOINT-HASH`), reconstructs `f_θ` from its self-describing header (`Encoder.from_header`, #171),
+  recomputes the pinned probe's content hash (`INV-PROBE-PIN`), and re-runs the closed-form orthogonal Procrustes
+  alignment `Q* = V Uᵀ` from the SVD `E_refᵀ f_θ(P) = U Σ Vᵀ` deterministically — returning a reproducible
+  `FrameDriftReport` whose `drift_from_global["committed"]` is the committed model's recovered rotation angle to the
+  round-0 reference frame (built by reusing `gauge.frame_drift`, so the probe-pin / `DegenerateProcrustes` paths
+  are the same primitive). New frozen pydantic-v2 records `AlignmentClaim` / `AlignmentRecomputation` (RFC-0006 §4)
+  carry `procrustes_q_hash` (a platform-stable SHA-256 over the canonical little-endian fp32/fp64 bytes of `Q*` —
+  the cross-process verifiability key), `procrustes_residual`, `rotation_angle_deg`, `probe_hash`, and on the
+  recomputation `matches_expected` + `max_abs_residual_delta`; `recompute_alignment_claim(..., expected=)` checks a
+  published claim (exact `procrustes_q_hash` match plus residual/angle within the fp32/fp64 tolerance), and
+  `parse_alignment_claim` / `parse_alignment_recomputation` gate `schema_version` first (`SchemaVersionMismatch`).
+  The `lensemble verify recompute --checkpoint PATH --probe PATH [--expected claim.json]` CLI echoes the report /
+  record JSON to stdout and **exits non-zero** when a supplied expected claim does not match. Fail-closed and never
+  swallowed: `CheckpointIntegrityError` (tamper), `SchemaVersionMismatch` (too-new), `ProbeError` (probe-pin
+  mismatch), `ArtifactError` (a non-self-describing checkpoint), and `DegenerateProcrustes` (a rank-deficient probe
+  embedding — never a silent garbage `Q*`) all propagate. **#18 caveat (documented honestly):** this MEASURES the
+  committed model's alignment to the reference frame; it does NOT verify the Layer-3 re-alignment backstop was
+  applied, because that backstop rotates in **activation space** at aggregation (the recorded #18 decision), not as
+  a fold into the committed weights. New `tests/ml/test_recompute_alignment.py` (placed in `tests/ml`, the CI-scanned
+  dir, not the `tests/verify` the issue named which CI does not scan).
 - `area:artifacts`: **self-describing checkpoints** via a `ModelArchDescriptor` on `CheckpointHeader`
   (RFC-0010 §2; #171, unblocks #62). The new frozen pydantic-v2 `ModelArchDescriptor` records the encoder
   architecture `build_encoder` needs — `d` / `depth` / `num_heads` / `num_tokens` / `in_channels` /
