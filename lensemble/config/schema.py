@@ -64,6 +64,15 @@ class FederationConfig:
     outer_nesterov_momentum: float = 0.9
     quantize_pseudo_gradient: bool = False
     fault_tolerance_min_participants: int = 3
+    # t_agg — the minimum survivors the secure-aggregation reveal needs (RFC-0011); the round quorum is
+    # K = max(fault_tolerance_min_participants, secure_agg_threshold) (RFC-0013 §3). Below t_agg the
+    # masking sum cannot be unblinded, so a round may not complete.
+    secure_agg_threshold: int = 2
+    # The per-round COLLECTING wall-time budget (seconds) after which a non-arriving participant is dropped
+    # for the round (RFC-0013 §3); loose by design — a liveness/quality knob, not a correctness gate. The
+    # in-process transport models the post-timeout present set as the collected set (the network seam #45
+    # enforces the wall clock).
+    collect_timeout_s: float = 30.0
     transport: Literal["in_process", "network"] = (
         "in_process"  # network => a real trust boundary
     )
@@ -313,6 +322,25 @@ def validate_config(cfg: LensembleConfig) -> None:
             fed.fault_tolerance_min_participants,
             f"in (0, participant_count={fed.participant_count}]",
             "min participants must be in (0, C]",
+        )
+
+    # Secure-aggregation reveal threshold t_agg: 0 < t_agg <= C (RFC-0011/RFC-0013 §3). The round quorum
+    # K = max(min_participants, t_agg) is then in (0, C], so a federation of C members can always reach it.
+    if not (0 < fed.secure_agg_threshold <= fed.participant_count):
+        raise _fail(
+            "federation.secure_agg_threshold",
+            fed.secure_agg_threshold,
+            f"in (0, participant_count={fed.participant_count}]",
+            "the secure-aggregation reveal threshold t_agg must be in (0, C]",
+        )
+
+    # COLLECTING wall-time budget strictly positive (a non-positive timeout would drop everyone, RFC-0013 §3).
+    if not (fed.collect_timeout_s > 0):
+        raise _fail(
+            "federation.collect_timeout_s",
+            fed.collect_timeout_s,
+            "> 0",
+            "the per-round COLLECTING timeout must be a positive wall-time budget",
         )
 
     # DP budget well-formed.
