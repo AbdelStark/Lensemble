@@ -1,0 +1,13 @@
+# Helm chart STUB — RFC-0016 §4 (Layer 2, Kubernetes; Stage C+).
+#
+# A minimal valid Helm Chart.yaml so `helm template` is structurally unblocked. The coordinator +
+# participant templates and config-driven values land with the Stage-C Kubernetes work (RFC-0016 §4).
+apiVersion: v2
+name: lensemble
+description: >-
+  Lensemble deployment chart STUB (coordinator + participant topology). Scaffolding for the RFC-0016
+  topology backbone; templates land in Stage C (#96 / #45).
+type: application
+# Pre-release placeholder; the real version is rendered from `LensembleConfig` at Stage C.
+version: 0.0.0
+appVersion: "0.1.0"

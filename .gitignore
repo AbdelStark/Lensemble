@@ -32,3 +32,6 @@ data/raw/
 
 # uv: we install via `uv pip install -e .[dev]` (not `uv sync`), so the lock is non-authoritative
 uv.lock
+
+# Local run outputs (train_local / CLI --run-dir default)
+runs/

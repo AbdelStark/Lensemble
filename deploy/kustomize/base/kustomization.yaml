@@ -1,0 +1,9 @@
+# Kustomize base STUB — RFC-0016 §4 (Layer 2, Kubernetes; Stage C+).
+#
+# A minimal valid kustomize base so `kustomize build` is structurally unblocked. The coordinator +
+# participant manifests (and per-environment overlays: local kind/minikube, staging, sovereign-prod)
+# land with the Stage-C Kubernetes work (RFC-0016 §4).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Empty for now — the coordinator Deployment/Job + participant set are added in Stage C.
+resources: []

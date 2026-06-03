@@ -27,6 +27,26 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:foundation`: the autonomous **`third_party/` vendoring scaffold + `deploy/` IaC stubs** for the
+  RFC-0016 topology backbone (#96). New `third_party/{stable_worldmodel,stable_pretraining}/UPSTREAM.md`
+  VENDORING manifests record every RFC-0016 §2 field — source URL, candidate vendored commit SHA
+  (recorded but marked `STATUS: UNCONFIRMED`, a maintainer-gated research lead), vendored date
+  (`TBD — not yet vendored`), license `SPDX: MIT` + the in-tree `./LICENSE` path (`pending real vendor`)
+  with the maintainer-confirmation note (stable-worldmodel's MIT was maintainer-confirmed despite a
+  missing upstream LICENSE — a packaging bug; stable-pretraining ships a real MIT LICENSE), an empty
+  local-modification log, and the upstream-sync procedure (bump SHA → re-clone pristine → re-apply
+  `patches/*.patch` → update manifest). Each project gets a git-tracked empty `patches/.gitkeep`; a
+  `third_party/README.md` points to RFC-0016 and states the "no `third_party` symbol is re-exported from
+  `lensemble.__init__`" rule (these subtrees are outside the import DAG). New `deploy/` carries minimal
+  valid stubs — `compose.yaml` (coordinator + participant skeleton, `cpu` profile,
+  `healthcheck`/`depends_on`), `helm/Chart.yaml` (apiVersion v2, name `lensemble`, version 0.0.0), and
+  `kustomize/base/kustomization.yaml` (empty `resources: []`) — plus a `deploy/README.md` pointer, so the
+  RFC-0016 acceptance (`helm template` / `kustomize build` / N-node Compose) is structurally unblocked.
+  New `tests/unit/test_vendoring.py` asserts the manifests are present and complete, statically checks no
+  `stable_worldmodel`/`stable_pretraining` symbol leaks into the `lensemble` public surface, validates
+  the deploy stubs parse as YAML, and wires a skip-guarded SHA-drift check. No `lensemble/` code changes.
+  The real vendoring (confirmed SHAs + cloned upstream source) is the **maintainer-gated** step deferred
+  per the project decision.
 - `area:e2e`: the first green end-to-end toy run (RFC-0001 Stage A; #167). `lensemble.federation.train_local`
   is now implemented (was a `NotImplementedError` stub): the single-site Stage-A path builds
   `encoder`/`predictor`/`action_head` from a `LensembleConfig` (the #166/#168 bridge), resolves local
