@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+from .ablation import (
+    LADDER_RUNGS,
+    RungReport,
+    RungSpec,
+    lambda_anc_sweep,
+)
 from .baselines import BASELINES, gap_recovery_fraction, load_baseline
 from .harness import evaluate
 from .metrics import (
@@ -34,4 +40,8 @@ __all__ = [
     "BASELINES",
     "load_baseline",
     "gap_recovery_fraction",
+    "LADDER_RUNGS",
+    "RungReport",
+    "RungSpec",
+    "lambda_anc_sweep",
 ]

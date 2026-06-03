@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .ablation import run_ablation_ladder
 from .coordinator import Coordinator
 from .messages import (
     CONTROL_MESSAGE_SCHEMA_VERSION,
@@ -25,6 +26,12 @@ from .quant import (
     wire_roundtrip,
 )
 from .round import RoundDriver, RoundPhase, RoundState
+from .simulation import (
+    RoundMetrics,
+    SiloData,
+    SimulationResult,
+    run_federated_simulation,
+)
 from .state import GlobalState, ParamRef
 from .transport import InProcessTransport, Transport
 
@@ -34,6 +41,11 @@ __all__ = [
     "RoundState",
     "RoundPhase",
     "RoundDriver",
+    "SiloData",
+    "RoundMetrics",
+    "SimulationResult",
+    "run_federated_simulation",
+    "run_ablation_ladder",
     "GlobalState",
     "ParamRef",
     "Transport",

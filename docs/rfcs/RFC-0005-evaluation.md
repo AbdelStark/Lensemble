@@ -260,6 +260,13 @@ drift. The sweep is driven by Hydra config composition ([conventions §11](../sp
 value is a config group override, and a small-config version of each rung is a CPU integration test
 (§"Testing Strategy").
 
+> **Implementation.** The runner is `lensemble.eval.run_ablation_ladder` (driving each rung through the
+> live federated-simulation harness `lensemble.federation.run_federated_simulation`); the
+> $\lambda_{\text{anc}}$ sweep is `lensemble.eval.lambda_anc_sweep`. The five rungs, their RFC-0002 §4
+> layer mapping, and the sweet-spot discussion are documented on the
+> [Ablation Ladder page](../ablation-ladder.md), and the CPU regression guard is
+> `tests/ml/test_ablation_ladder.py`.
+
 ### 7. Non-IID severity & scale sweeps
 
 - **Non-IID severity.** Partition a multi-environment / multi-factor-of-variation corpus across silos
