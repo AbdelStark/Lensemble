@@ -233,7 +233,11 @@ A tagged release is cut only after all gates pass. These reuse the CI gates defi
    [RFC-0009](../rfcs/RFC-0009-configuration-reproducibility.md)).
 5. The public-recomputation gate: `recompute_alignment` reproduces the coordinator's frame alignment from
    the public probe + committed weights (Phase-1 proof-readiness, RFC-0006 §3; the probe is pinned per
-   `INV-PROBE-PIN`).
+   `INV-PROBE-PIN`). The end-to-end **proof-readiness audit**
+   (`tests/integration/test_proofready_audit.py`) is the v1.0 reproducibility-package gate that exercises
+   all five RFC-0006 §3 disciplines together (`INV-AGG-DETERMINISM`, `INV-CHECKPOINT-HASH`,
+   `INV-COMMIT-BINDING`, `INV-PROBE-PIN`, and public recomputation), each with a positive and a
+   fail-closed negative path.
 6. Coverage threshold met; docs link-check passes (every relative cross-reference resolves, every
    in-document `#anchor` resolves).
 7. `CHANGELOG.md` has a non-empty release block; `pyproject.toml` `[project].version`,
