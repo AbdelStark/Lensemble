@@ -27,6 +27,12 @@ from lensemble.aggregation.secure_agg import (
     assert_no_wrap,
     encode_delta,
 )
+from lensemble.aggregation.tee import (
+    SecureAggregator,
+    TEEAggregator,
+    TEEAttestation,
+    verify_attestation,
+)
 
 __all__ = [
     "FieldParams",
@@ -44,4 +50,8 @@ __all__ = [
     "key_agreement",
     "shamir_split",
     "shamir_reconstruct",
+    "SecureAggregator",
+    "TEEAggregator",
+    "TEEAttestation",
+    "verify_attestation",
 ]
