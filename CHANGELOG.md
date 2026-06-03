@@ -19,6 +19,31 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `lensemble.federation`: the `Coordinator` outer-round orchestrator (RFC-0013 §1/§4/§6) —
+  `Coordinator(config, *, transport)` with `run(num_rounds) -> None`, `round_state() -> RoundState`,
+  `global_state() -> GlobalState`. It holds the canonical global model `(θ_t, φ_t)`, builds the initial
+  encoder/predictor, captures the flat `θ⊕φ` in `build_pseudogradient`'s canonical order (encoder group
+  sorted, then predictor group sorted) plus a `(group, name, shape)` param manifest to un-flatten the
+  post-step vector, and drives a single sequential round loop (round `t+1` does not open until round `t`
+  is `CLOSED`/`ABORTED`, §6) through the `RoundState` machine:
+  `OPEN → COLLECTING → AGGREGATING → ALIGNING → COMMITTING → CLOSED`. **OPEN** pins `(θ_t, φ_t)`, derives
+  `s_t = round_sketch_seed(root_seed, t)`, builds + broadcasts the round `GlobalState`, and seeds the
+  transport fetch store so a participant fetching `θ_t/φ_t` round-trips (each `ParamRef.content_hash` is
+  minted as `weights_content_hash(group_weights)`, the exact hash `fetch_params` recomputes,
+  `INV-CHECKPOINT-HASH`). **COLLECTING** fixes the contributing set; below
+  `fault_tolerance_min_participants` aborts with `FaultToleranceExceeded` (the global hash unchanged).
+  **AGGREGATING** runs the determinism self-check — `assert_outer_step_deterministic` re-runs the
+  reduction `(1/C)·Σ_c Δ_c` under the canonical participant-id-sorted order with a FRESH optimizer per
+  call (pure), raising `NonDeterministicAggregation` on a mismatch (security-critical, never swallowed,
+  round → `ABORTED`, `INV-AGG-DETERMINISM`; arrival order does not matter). **ALIGNING** is a
+  MEASURED PASS-THROUGH — frame drift is measured on the probe when per-participant embeddings are wired,
+  but the Layer-3 Procrustes backstop fold-in is **#18 (out of scope here)**, so the gauge is not
+  corrected and `θ/φ` are not mutated. **COMMITTING** runs the PERSISTENT Nesterov `OuterOptimizer.step`
+  over ONLY `θ/φ` (the deltas carry no action head, `INV-ACTIONHEAD-LOCAL`), un-flattens via the manifest,
+  hash-commits `save_checkpoint` (round `t+1`, `parent_hash` = the current hash, `INV-CHECKPOINT-HASH`),
+  and appends a `ContributionRecord` (participants sorted, their dataset roots, the new `global_model_hash`,
+  `C_t` the averaging denominator) to the `ContributionLedger`. The `probe_hash` is loaded from
+  `cfg.data.probe_path` when set, else a fixed 32-byte placeholder — the **#22/#04 boundary**. (#42)
 - `lensemble.federation`: the `Participant` local round (RFC-0013 §1/§3) — `Participant(config, *,
   participant_id, transport)` with `local_round(global_state, round_seed) -> PseudoGradient` and
   `join(coordinator_endpoint) -> GlobalState`. One round fetches the global `(θ_t, φ_t)` through the
