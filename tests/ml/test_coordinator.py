@@ -427,6 +427,146 @@ def test_aligning_measures_drift_but_does_not_alter_commit() -> None:
     )  # the plain coordinator measured nothing
 
 
+# --- the Layer-3 Procrustes backstop FIRES when BOTH #18/#22 hooks are wired (RFC-0002 §5, #18) ---
+
+
+class _BackstopCoordinator(Coordinator):
+    """A Coordinator that wires the #18/#22 seam so the Layer-3 Procrustes backstop FIRES at ALIGNING.
+
+    Overriding BOTH ``_probe_embeddings`` (per-participant ``f_c(P)`` with a known above-threshold drift)
+    AND ``_reference_embeddings`` (the reference frame ``E_ref``) makes ALIGNING conjugate each
+    over-threshold participant's predictor delta by ``Q_c*`` before the outer step. The fold-in is a pure
+    linear pre-step, so the committed round is still bitwise-reproducible (``INV-AGG-DETERMINISM``).
+    """
+
+    _N_PROBE = 64  # k >> d so M = T^T S is well-conditioned
+
+    def _e_ref(self) -> torch.Tensor:
+        gen = torch.Generator().manual_seed(555)
+        return torch.randn(self._N_PROBE, _D, generator=gen)
+
+    def _rot30(self) -> torch.Tensor:
+        import math
+
+        a = math.radians(30.0)  # 30 deg > the 15 deg threshold -> the backstop fires
+        c, s = math.cos(a), math.sin(a)
+        q = torch.eye(_D)
+        q[0, 0], q[0, 1], q[1, 0], q[1, 1] = c, -s, s, c
+        return q
+
+    def _probe_embeddings(self, t: int) -> dict[str, torch.Tensor] | None:
+        e_ref = self._e_ref()
+        return {
+            "c0": e_ref
+            @ self._rot30(),  # a 30-deg-drifted frame -> backstop fires for c0
+            "c1": e_ref @ self._rot30(),
+            "global": e_ref,
+        }
+
+    def _reference_embeddings(self, t: int) -> torch.Tensor | None:
+        return self._e_ref()
+
+
+def test_backstop_fires_round_closes_reproducibly() -> None:
+    cfg = _cfg()
+
+    def _commit_with_backstop() -> tuple[str, torch.Tensor]:
+        transport = InProcessTransport()
+        coord = _BackstopCoordinator(cfg, transport=transport)
+        _stage(transport, cfg, round_index=0, participant_ids=["c0", "c1"])
+        coord.run(1)
+        return coord.global_state_hash(), coord.global_params().clone()
+
+    # The backstop-wired round reaches CLOSED with a reproducible committed hash across two runs.
+    h_a, params_a = _commit_with_backstop()
+    h_b, params_b = _commit_with_backstop()
+    assert (
+        h_a == h_b
+    )  # bitwise-reproducible despite the Procrustes fold-in (INV-AGG-DETERMINISM)
+    assert torch.equal(params_a, params_b)
+
+    # The backstop ACTUALLY fired: the committed θ_{t+1} differs from the plain (un-wired) pass-through.
+    transport_p = InProcessTransport()
+    coord_p = Coordinator(cfg, transport=transport_p)
+    _stage(transport_p, cfg, round_index=0, participant_ids=["c0", "c1"])
+    coord_p.run(1)
+    assert coord_p.round_state() == RoundState.CLOSED
+    assert (
+        h_a != coord_p.global_state_hash()
+    )  # the predictor-conjugation moved the committed params
+
+
+def test_default_coordinator_commits_same_hash_as_before() -> None:
+    # The default (no #18/#22 hooks overridden) coordinator is the byte-identical pass-through: the backstop
+    # is un-wired, so the committed hash is exactly the pre-#18 outer-step-only commit.
+    cfg = _cfg()
+
+    def _commit_default() -> str:
+        transport = InProcessTransport()
+        coord = Coordinator(cfg, transport=transport)
+        _stage(transport, cfg, round_index=0, participant_ids=["c0", "c1"])
+        coord.run(1)
+        return coord.global_state_hash()
+
+    assert _commit_default() == _commit_default()  # stable, un-fired pass-through
+
+
+class _PartialEmbeddingCoordinator(_BackstopCoordinator):
+    """A backstop-wired coordinator that supplies an embedding for ONLY one contributing participant.
+
+    The other contributing participant (no wired embedding) is passed through unchanged — exercising the
+    partial-coverage seam (a participant present in `updates` but absent from `embeddings`).
+    """
+
+    def _probe_embeddings(self, t: int) -> dict[str, torch.Tensor] | None:
+        e_ref = self._e_ref()
+        return {"c0": e_ref @ self._rot30(), "global": e_ref}  # no "c1" embedding
+
+
+def test_partial_embedding_coverage_realigns_only_the_wired_participant() -> None:
+    cfg = _cfg()
+    transport = InProcessTransport()
+    coord = _PartialEmbeddingCoordinator(cfg, transport=transport)
+    _stage(transport, cfg, round_index=0, participant_ids=["c0", "c1"])
+    coord.run(1)
+    # The round still CLOSED reproducibly (c0 realigned, c1 passed through unchanged).
+    assert coord.round_state() == RoundState.CLOSED
+
+    # A second run commits the identical hash (the partial backstop is deterministic).
+    transport2 = InProcessTransport()
+    coord2 = _PartialEmbeddingCoordinator(cfg, transport=transport2)
+    _stage(transport2, cfg, round_index=0, participant_ids=["c0", "c1"])
+    coord2.run(1)
+    assert coord.global_state_hash() == coord2.global_state_hash()
+
+
+class _NoContributingEmbeddingCoordinator(_BackstopCoordinator):
+    """A backstop-wired coordinator whose embeddings cover NO contributing participant (only "global").
+
+    With a non-None embeddings map AND a reference but no contributing participant in it, the backstop has
+    nothing to realign and the deltas pass through unchanged — the all-skipped seam.
+    """
+
+    def _probe_embeddings(self, t: int) -> dict[str, torch.Tensor] | None:
+        return {"global": self._e_ref()}  # no contributing participant id
+
+
+def test_embeddings_without_any_contributor_is_pass_through() -> None:
+    cfg = _cfg()
+    transport = InProcessTransport()
+    coord = _NoContributingEmbeddingCoordinator(cfg, transport=transport)
+    _stage(transport, cfg, round_index=0, participant_ids=["c0", "c1"])
+    coord.run(1)
+    assert coord.round_state() == RoundState.CLOSED
+
+    # The committed hash equals the plain (un-wired) pass-through: nothing was realigned.
+    transport_p = InProcessTransport()
+    coord_p = Coordinator(cfg, transport=transport_p)
+    _stage(transport_p, cfg, round_index=0, participant_ids=["c0", "c1"])
+    coord_p.run(1)
+    assert coord.global_state_hash() == coord_p.global_state_hash()
+
+
 # --- the probe_path-set branch: probe_hash is the pinned probe's content hash (#22/#04 boundary) ---
 
 
