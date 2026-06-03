@@ -410,7 +410,7 @@ def probe_build(
     pts = _load_points(points)
     cfg = SimpleNamespace(
         model=SimpleNamespace(
-            d=d,
+            latent_dim=d,  # build_encoder reads model.latent_dim (#166 bridge)
             num_frames=num_frames,
             image_size=image_size,
             patch_size=patch_size,

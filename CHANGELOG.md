@@ -257,6 +257,14 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Changed
 
+- `ModelConfig` → encoder/predictor bridge (#166): `ModelConfig` gained the ViT-shape fields
+  `num_frames` / `tubelet` / `image_size` / `patch_size` / `depth` / `num_heads` / `in_channels` /
+  `mlp_ratio` (coherent V-JEPA-class defaults: `(8//2)*(128//16)**2 == 256 == num_tokens`), and
+  `build_encoder` / `build_predictor` / `build_action_head` now read `model.latent_dim` (and the new
+  fields) instead of the nonexistent `model.d`. `evaluate()` / `Coordinator` / `Participant` are now
+  callable from a `load_config()` config (they previously raised `AttributeError`). `validate_config`
+  enforces `num_tokens == (num_frames//tubelet)*(image_size//patch_size)**2` and `num_heads | latent_dim`.
+  The default-config golden hash is re-pinned. The real ViT shapes remain owned by RFC-0008/#71.
 - `FederationConfig`: gained `secure_agg_threshold` and `collect_timeout_s` (RFC-0013 §3); the
   default-config `config_hash` golden vector is re-pinned to
   `aaa0a3f7b98f89bead1c2e63c49fb66e0afdb081f88d85d44d8d03e03886f4fb` to reflect the two new defaults

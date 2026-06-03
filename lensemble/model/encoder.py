@@ -166,12 +166,14 @@ def _model_cfg(cfg: Any) -> Any:
 def build_encoder(cfg: Any) -> Encoder:
     """Construct an :class:`Encoder` per the model config.
 
-    Pre: ``cfg.model.d > 0`` and the patching is consistent with ``cfg.model.num_tokens`` (when given).
+    Pre: ``cfg.model.latent_dim > 0`` and the patching is consistent with ``cfg.model.num_tokens``.
     Post: an ``Encoder`` whose forward emits a conformant ``LatentState`` (``INV-WMCP``).
     Raises: :class:`~lensemble.errors.ConfigError` on inconsistent dims/patching.
     """
     m = _model_cfg(cfg)
-    d = int(m.d)
+    # The ViT hidden dim is ModelConfig.latent_dim (#166 bridge); `d` is the legacy alias some
+    # SimpleNamespace test/CLI configs still use, so fall back to it when latent_dim is absent.
+    d = int(m.latent_dim if hasattr(m, "latent_dim") else m.d)
     in_channels = int(getattr(m, "in_channels", 3))
     num_frames = int(m.num_frames)
     image_size = int(m.image_size)
@@ -188,10 +190,12 @@ def build_encoder(cfg: Any) -> Encoder:
         )
 
     if d <= 0:
-        raise _bad(f"model.d must be > 0, got {d}", "set a positive latent dimension d")
+        raise _bad(
+            f"model.latent_dim must be > 0, got {d}", "set a positive latent_dim"
+        )
     if d % num_heads != 0:
         raise _bad(
-            f"model.d ({d}) must be divisible by num_heads ({num_heads})",
+            f"model.latent_dim ({d}) must be divisible by num_heads ({num_heads})",
             "choose num_heads dividing d",
         )
     if num_frames % tubelet != 0 or image_size % patch_size != 0:

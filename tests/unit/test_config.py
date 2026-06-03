@@ -172,3 +172,105 @@ def test_rule_probe_presence_for_anchored_runs() -> None:
     )  # probe_path defaults to None
     err = _expect(bad)
     assert "probe" in err.remediation.lower()
+
+
+# --- T3: the ViT-shape bridge (#166) — load_config() drives build_encoder/build_predictor ---
+
+
+def test_model_config_exposes_vit_shape_fields() -> None:
+    # The bridge fields build_encoder/build_predictor read must exist on the typed ModelConfig
+    # (the gap #166 closes — previously only `latent_dim`/`num_tokens` existed and the builders
+    # crashed with AttributeError for any load_config() config).
+    m = load_config().model
+    for f in (
+        "num_frames",
+        "tubelet",
+        "image_size",
+        "patch_size",
+        "depth",
+        "num_heads",
+        "in_channels",
+        "mlp_ratio",
+    ):
+        assert hasattr(m, f), f"ModelConfig is missing ViT-shape field {f!r}"
+
+
+def test_default_vit_shape_is_self_consistent() -> None:
+    # num_tokens == (num_frames // tubelet) * (image_size // patch_size) ** 2, and the patching divides.
+    m = load_config().model
+    assert m.num_frames % m.tubelet == 0
+    assert m.image_size % m.patch_size == 0
+    derived = (m.num_frames // m.tubelet) * (m.image_size // m.patch_size) ** 2
+    assert derived == m.num_tokens
+    assert (
+        m.latent_dim % m.num_heads == 0
+    )  # heads divide the hidden dim (build_encoder check)
+
+
+def test_build_encoder_predictor_from_load_config() -> None:
+    # The acceptance property: build_encoder/build_predictor succeed (no AttributeError) and the
+    # constructed modules' shape attrs match the config. Use a tiny consistent override so the unit
+    # test stays cheap (the default 1024-dim/24-depth shape is exercised by the dry checks above and
+    # the ml suites); the override keeps the SAME coherence rule num_tokens == derived.
+    from lensemble.model import build_encoder, build_predictor
+
+    cfg = load_config(
+        overrides=[
+            "model.encoder=vjepa2-vit-l",  # keep ENCODER_DIM consistency (latent_dim==1024)
+            "model.num_tokens=4",  # == the derived token count below (the #166 coherence rule)
+            "model.num_frames=2",
+            "model.tubelet=2",
+            "model.image_size=8",
+            "model.patch_size=4",
+            "model.depth=1",
+            "model.predictor_depth=1",
+            "model.num_heads=8",
+        ]
+    )
+    # (2//2) * (8//4)**2 = 1 * 4 = 4 tokens; latent_dim stays 1024 (ENCODER_DIM["vjepa2-vit-l"]).
+    assert cfg.model.num_tokens == 4
+    encoder = build_encoder(cfg)
+    predictor = build_predictor(cfg)
+    assert encoder.d == cfg.model.latent_dim
+    assert encoder.num_tokens == cfg.model.num_tokens
+    assert predictor.d == cfg.model.latent_dim
+    assert predictor.num_tokens == cfg.model.num_tokens
+
+    # build_action_head must also resolve cond_dim from a real ModelConfig (which has no cond_dim
+    # field) via the latent_dim fallback (#166 — previously it read the nonexistent cfg.model.d).
+    from lensemble.contracts import WMCP_VERSION, ActionKind, ActionSpec
+    from lensemble.model import build_action_head
+
+    spec = ActionSpec(
+        embodiment_id="toy",
+        kind=ActionKind.CONTINUOUS,
+        dim=2,
+        low=(-1.0, -1.0),
+        high=(1.0, 1.0),
+        num_classes=None,
+        units=("u", "u"),
+        wmcp_version=WMCP_VERSION,
+    )
+    head = build_action_head(cfg, spec)
+    assert head.cond_dim == cfg.model.latent_dim  # cond_dim falls back to latent_dim
+
+
+def test_rule_vit_shape_inconsistency_rejected() -> None:
+    # An inconsistent ViT shape (num_tokens not equal to the derived token count) is a ConfigError.
+    base = load_config()
+    err = _expect(
+        dataclasses.replace(
+            base,
+            model=dataclasses.replace(base.model, num_tokens=base.model.num_tokens + 1),
+        )
+    )
+    assert err.key == "model.num_tokens"  # type: ignore[attr-defined]
+
+
+def test_rule_num_heads_must_divide_latent_dim() -> None:
+    # num_heads must divide latent_dim (mirrors build_encoder's runtime check).
+    base = load_config()
+    err = _expect(
+        dataclasses.replace(base, model=dataclasses.replace(base.model, num_heads=7))
+    )
+    assert err.key == "model.num_heads"  # type: ignore[attr-defined]

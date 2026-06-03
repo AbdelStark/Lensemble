@@ -173,7 +173,8 @@ def build_predictor(cfg: Any) -> Predictor:
             code=LensembleErrorCode.CONFIG_INVALID,
             remediation="provide cfg.model with d, num_tokens, predictor_depth, predictor_width",
         )
-    d = int(model.d)
+    # latent dim is ModelConfig.latent_dim (#166 bridge); `d` is the legacy fixture alias (fallback).
+    d = int(model.latent_dim if hasattr(model, "latent_dim") else model.d)
     num_tokens = int(model.num_tokens)
     cond_dim = int(getattr(model, "cond_dim", d))
     width = int(getattr(model, "predictor_width", d))
