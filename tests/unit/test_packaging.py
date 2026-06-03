@@ -26,7 +26,7 @@ def test_runtime_dependency_constraints() -> None:
         "torch>=2.4,<3",
         "numpy>=1.26",
         "safetensors>=0.4",
-        "lance>=0.10",
+        "pylance>=0.10",  # the real Lance lib (import `lance`); the bare `lance` PyPI name is a typosquat
         "h5py>=3.10",
         "hydra-core>=1.3",
         "omegaconf>=2.3",

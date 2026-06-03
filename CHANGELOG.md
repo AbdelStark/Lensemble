@@ -17,8 +17,40 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ## [Unreleased]
 
+### Security
+
+- Dependencies: replaced the `lance>=0.10` runtime dependency with **`pylance>=0.10`** (the real Lance
+  columnar library; import name `lance`). The bare `lance` distribution on PyPI is an unrelated typosquat
+  (`lance==1.2.1`, an empty package) that the prior pin resolved to, so the default-format data backend
+  could not have worked from a clean install. Updated `pyproject.toml`, `tests/unit/test_packaging.py`,
+  and `conventions §11` in lockstep (#22).
+
 ### Added
 
+- `lensemble.data`: the `lance` / `hdf5` / `lerobot` on-disk storage backends behind the
+  `EpisodeDataset.fmt` selector, plus the `fmt`/URI-scheme dispatcher and registry (RFC-0004 §1;
+  the extension point of [02 §5.2](docs/spec/02-public-api.md#52-registering-a-new-data-adapter)).
+  `save_episodes(dataset, path, *, fmt)` / `load_episodes(source, *, fmt=None)` /
+  `register_adapter(fmt, *, loader, saver=None)` are exported from `lensemble.data`. The **lance**
+  backend (the default reference store) writes one columnar row per `Transition` — each tensor as raw
+  little-endian bytes plus a recorded dtype label + shape so the read reshapes byte-identically
+  (`torch.equal` holds) — with per-episode metadata and every `ActionSpec` field as denormalized string
+  columns; it is append-friendly with indexed random window reads. The **hdf5** backend writes one
+  portable `.h5` file, one group per episode, with stacked `obs_t`/`action_t`/`obs_tp1` datasets and the
+  episode metadata + `ActionSpec` fields as group/dataset attrs (`bfloat16` is bit-cast through `uint16`
+  and restored). The read-only **`lerobot://<repo_id>`** adapter resolves a LeRobot-Hub dataset to a
+  read-only `EpisodeDataset` view, importing `lerobot` lazily and raising a clear `ContractViolation`
+  with remediation when the optional library is absent; its on-load conformance check
+  (`_validate_episode_conformance`) validates each episode against the `Episode` schema and the WMCP
+  `ActionSpec` — an action trailing dim != `ActionSpec.dim`, an embodiment-id disagreement, an invalid
+  discrete `num_classes`, or a latent-incompatible modality raises `ContractViolation`
+  (`WMCP_CONTRACT_VIOLATION`, RFC-0007 §4). All adapters materialize RAW, local episodes inside the
+  trust boundary and expose no egress path (`INV-RESIDENCY`); `save_episodes(..., fmt="lerobot")` raises
+  (the `lerobot://` view is read-only by construction, so it never participates in commitment or egress).
+  `lance` and `h5py` are required (pinned) runtime deps for the two on-disk backends; `lerobot` is an
+  optional extra (lazily imported). The "Format round-trip" test asserts the materialized windows are
+  tensor-identical across `lance`, `hdf5`, and the original in-memory dataset (RFC-0004 §Testing,
+  RFC-0009 reproducibility). (#22)
 - `lensemble.federation`: the `Coordinator` outer-round orchestrator (RFC-0013 §1/§4/§6) —
   `Coordinator(config, *, transport)` with `run(num_rounds) -> None`, `round_state() -> RoundState`,
   `global_state() -> GlobalState`. It holds the canonical global model `(θ_t, φ_t)`, builds the initial
