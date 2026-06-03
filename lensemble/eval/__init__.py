@@ -20,6 +20,11 @@ from .metrics import (
 )
 from .mpc import Planner
 from .report import EVAL_REPORT_SCHEMA_VERSION, EvalReport, parse_eval_report
+from .sweeps import (
+    SiloPartition,
+    partition_synthetic_noniid,
+    sample_drift_pairs,
+)
 from .world import EvalWorld, register_env, resolve_env
 
 __all__ = [
@@ -44,4 +49,7 @@ __all__ = [
     "RungReport",
     "RungSpec",
     "lambda_anc_sweep",
+    "SiloPartition",
+    "partition_synthetic_noniid",
+    "sample_drift_pairs",
 ]

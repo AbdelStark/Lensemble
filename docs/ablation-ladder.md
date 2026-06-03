@@ -62,6 +62,76 @@ cheaply, so Layers 3-4 rarely fire. `lensemble.eval.lambda_anc_sweep(base_cfg, v
 swept value to a distinct, validated `LensembleConfig` (a config-group override over `objective.lambda_anc`);
 the caller drives each through the ladder harness to plot frame drift and MPC success versus `lambda_anc`.
 
+## The §7 sweeps — non-IID severity, C/H, and scale
+
+The [RFC-0005 §7](rfcs/RFC-0005-evaluation.md#7-non-iid-severity--scale-sweeps) robustness sweeps (the
+paper's **Claim 4**: the recipe holds across heterogeneity and scale) run **over** the ladder rungs,
+reusing the same runner and harness. They split across the [RFC-0001
+§3](rfcs/RFC-0001-architecture.md#3-dependency-layering-no-cycles) module band (eval may not import
+federation): the **compose** side — the synthetic non-IID partition and the seeded pair-sampling — lives
+in `lensemble.eval.sweeps`; the **drivers** that call the harness live one band up in
+`lensemble.federation.sweeps`. Each sweep keeps the dims/rounds/silos tiny (CPU-fast) and runs only the
+two load-bearing rungs per point — `naive-fedavg` (the negative control) and `frame-anchor` (the
+recommended config) — since the directional claim each axis asserts is naive-vs-anchored.
+
+### Non-IID severity — `non_iid_severity_sweep`
+
+For each severity `s ∈ [0, 1]` the synthetic per-silo data is partitioned by a per-silo distribution
+shift scaled by `s`, then the rungs run at each `s`; the per-rung drift-degradation curve vs severity is
+reported.
+
+- **`s = 0` (near-IID):** every silo draws the *same* synthetic distribution (identical per-silo
+  windows), so there is no heterogeneity-induced inter-silo offset.
+- **`s = 1` (strongly non-IID):** silo `c`'s observation mean is shifted by `c · unit` (a per-silo factor
+  index scaled by the severity), so the per-silo distributions are pulled apart.
+
+The expected trend (Claim 4): the **naive** rung's inter-silo frame drift *grows* with severity (the shift
+pulls the unconstrained frames apart), while the **anchored** rung stays low (the Variant-A landmark
+anchor pins each frame onto the round-0 reference regardless of the shift). On the small-config CPU run the
+measured naive drift roughly *doubles* from near-IID to strong (e.g. ~17° → ~34°) while the anchored rung
+holds at ~7°.
+
+#### Partition-by-factor protocol and the deferred real-factors seam (#96)
+
+RFC-0005 §7 calls for partitioning a multi-environment / multi-factor-of-variation corpus across silos by
+`stable-worldmodel`'s **factors-of-variation** (controlled, reproducible heterogeneity). That suite is
+**not vendored yet** (maintainer-gated, [#96](https://github.com/AbdelStark/Lensemble/issues/96)), so the
+severity axis here is **synthetic**: the partition shifts each silo's synthetic toy distribution by a
+per-silo mean offset. The real factors-of-variation path is wired as a **documented, fail-closed seam** —
+`partition_synthetic_noniid(..., factor=...)` accepts only `factor="synthetic"`; any other value (a real
+factor-of-variation name such as `"embodiment"`) raises `EvaluationError` (it never silently falls back to
+the synthetic partition), exactly mirroring `lensemble.eval.world.resolve_env`'s `stable-worldmodel://`
+fail-closed branch. When the suite is vendored, the real partition is wired behind this same seam.
+
+### Participant count `C` and inner horizon `H` — `participant_horizon_sweep`
+
+Varies `federation.participant_count` (`C`) and `federation.inner_horizon` (`H`) over a grid and runs the
+rungs at each `(C, H)` (the round quorum is clamped to `C` so the round closes). A longer `H` rotates the
+per-silo frames further apart before the outer step
+([RFC-0002 §2.1](rfcs/RFC-0002-gauge-and-aggregation.md#21-three-failures-that-compound-it), DiLoCo
+drift), so the **naive** rung's drift *grows with `H`* (e.g. ~20° at `H=8` → ~31° at `H=48`); varying `C`
+characterizes the DiLoCo robustness in the JEPA setting.
+
+### Scale — `scale_sweep`
+
+Repeats the key rungs at increasing `model.latent_dim` to show the recipe holds as the encoder grows
+(RFC-0005 §7 frames this as ViT-L → V-JEPA-2-class; the CPU step uses tiny dims, e.g. `8 → 16`). Each dim
+is a coherent ViT shape via the [#166](https://github.com/AbdelStark/Lensemble/issues/166) bridge —
+`num_heads` divides `latent_dim`, and `num_tokens` is a function of the patching geometry (independent of
+the hidden dim), so `d` / `cond_dim` / `predictor_width` track `latent_dim` together. The **anchored** rung
+stays below the **naive** rung at *every* scale (the anchor holds regardless of encoder width).
+
+### `O(C²)` drift-pair sampling — `sample_drift_pairs`
+
+Pairwise drift is `O(C²)` per round; full enumeration is the default for the paper's central figure, and at
+large `C` the documented degrade ([RFC-0005 Alternatives
+Considered](rfcs/RFC-0005-evaluation.md#alternatives-considered)) is a **seeded, bounded** sample of
+participant pairs. `sample_drift_pairs(ids, max_pairs, seed)` returns at most `max_pairs` distinct
+unordered pairs deterministically (same seed → same pairs; a different seed → a different set; capped at
+the `C-choose-2` total). The sampled set is **recorded in the `RunManifest`** (RFC-0005 §8: pair sampling
+at large `C` is seeded *and* recorded) — it serializes to a manifest-native list of `[a, b]` id lists, so
+no tensor crosses the residency redaction guard and the figure stays reproducible.
+
 ## Reproducibility
 
 The ladder is driven by config composition ([RFC-0009](rfcs/RFC-0009-configuration-reproducibility.md)):
