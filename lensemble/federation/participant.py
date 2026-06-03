@@ -545,7 +545,10 @@ def train_local(
     import hashlib
     import tempfile
 
-    from lensemble.artifacts.checkpoint import save_checkpoint
+    from lensemble.artifacts.checkpoint import (
+        model_arch_from_config,
+        save_checkpoint,
+    )
     from lensemble.config.manifest import build_manifest, config_hash
 
     cfg = config
@@ -614,6 +617,7 @@ def train_local(
         round_index=0,  # single-site Stage A is round 0
         config_hash=config_hash(_config_asdict(cfg)),
         parent_hash=None,
+        model_arch=model_arch_from_config(cfg),  # self-describing checkpoint (#171)
     )
 
     manifest = build_manifest(cfg, run_mode="train_local")

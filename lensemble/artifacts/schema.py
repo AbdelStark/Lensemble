@@ -17,8 +17,11 @@ from lensemble.errors import LensembleErrorCode, SchemaVersionMismatch
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-# Current on-disk header schema version (conventions 10).
-SCHEMA_VERSION: int = 1
+# Current on-disk header schema version (conventions 10). v2 (#171) adds the optional, additive
+# ``model_arch`` descriptor so a committed checkpoint is self-describing — the architecture (``num_heads``
+# in particular) needed to reconstruct ``f_theta`` for ``recompute_alignment`` (#62) is unrecoverable from
+# weight shapes alone (``in_proj_weight`` is ``(3d, d)`` for any head count).
+SCHEMA_VERSION: int = 2
 
 _HEX64 = set("0123456789abcdef")
 
@@ -36,6 +39,55 @@ class TensorEntry(BaseModel):
     group: str  # one of the header's param_groups
     dtype: str  # canonical dtype token, e.g. "float32", "bfloat16"
     shape: tuple[int, ...]  # tensor shape
+
+
+class ModelArchDescriptor(BaseModel):
+    """The encoder architecture a checkpoint was minted with — everything ``build_encoder`` needs (#171).
+
+    Self-describing checkpoint metadata (RFC-0010 §2): it carries the ViT shape (``num_heads`` in
+    particular) so ``recompute_alignment`` (#62) can reconstruct ``f_theta`` to recompute ``f_theta(P)``.
+    The descriptor is HEADER metadata only — like ``created_at`` and ``config_hash`` it is NEVER fed into
+    :class:`~lensemble.artifacts.hashing.StructuralFields` / ``content_hash`` (``INV-CHECKPOINT-HASH``
+    stays metadata-independent). Frozen; rejects extra/missing fields.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    d: int  # ViT hidden dim (== ModelConfig.latent_dim); the Encoder `d`
+    depth: int  # transformer block count (num_layers)
+    num_heads: int  # attention heads; must divide d (the field unrecoverable from weight shapes)
+    num_tokens: int  # N == (num_frames//tubelet) * (image_size//patch_size)**2
+    in_channels: int  # input video channels (RGB == 3)
+    num_frames: int  # T — clip frame count before tubelet pooling
+    image_size: int  # H == W — square frame side in pixels
+    patch_size: int  # spatial patch side; image_size divisible by it
+    tubelet: int  # temporal patch size; num_frames divisible by it
+    mlp_ratio: float  # transformer feed-forward expansion factor
+    wmcp_version: str  # pinned latent-contract version (INV-WMCP)
+
+    @field_validator(
+        "d",
+        "depth",
+        "num_heads",
+        "num_tokens",
+        "in_channels",
+        "num_frames",
+        "image_size",
+        "patch_size",
+        "tubelet",
+    )
+    @classmethod
+    def _positive_int(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("must be a positive integer")
+        return v
+
+    @field_validator("mlp_ratio")
+    @classmethod
+    def _positive_ratio(cls, v: float) -> float:
+        if not (v > 0):
+            raise ValueError("mlp_ratio must be > 0")
+        return v
 
 
 class CheckpointHeader(BaseModel):
@@ -59,6 +111,10 @@ class CheckpointHeader(BaseModel):
     ]  # per-tensor name/dtype/shape/group, name-sorted
     weight_files: tuple[str, ...]  # ("weights.safetensors",) or the ordered shard list
     created_at: datetime  # UTC, RFC 3339 (informational; never hashed)
+    # The self-describing encoder architecture (#171, schema v2+). OPTIONAL and additive: a legacy v1
+    # header reads back with model_arch=None (a non-self-describing checkpoint). HEADER metadata only —
+    # NEVER hashed (INV-CHECKPOINT-HASH stays metadata-independent; see ModelArchDescriptor).
+    model_arch: ModelArchDescriptor | None = None
 
     @field_validator("schema_version")
     @classmethod
@@ -91,9 +147,10 @@ class CheckpointHeader(BaseModel):
 
 # --- the ordered, forward-compatible migration chain (RFC-0010 §7 / 03 §15; #33) ---
 
-# Ordered, append-only chain: `_HEADER_MIGRATIONS[N]` upgrades a schema-version-N header dict to N+1. It
-# is empty at SCHEMA_VERSION == 1 (no prior versions). A reader is forward-compatible: it accepts any
-# `schema_version <= SCHEMA_VERSION` by running the chain, and fails closed on an unknown/too-new version.
+# Ordered, append-only chain: `_HEADER_MIGRATIONS[N]` upgrades a schema-version-N header dict to N+1. At
+# SCHEMA_VERSION == 2 it holds the v1 -> v2 link (`migrate_v1_to_v2`, #171). A reader is forward-compatible:
+# it accepts any `schema_version <= SCHEMA_VERSION` by running the chain, and fails closed on an
+# unknown/too-new version.
 #
 # To bump the schema (e.g. v1 -> v2), in one PR:
 #   1. def migrate_v1_to_v2(header: dict) -> dict: ...    # transform fields; do NOT set schema_version
@@ -103,7 +160,24 @@ class CheckpointHeader(BaseModel):
 #        ### Changed
 #        - `artifacts`: `CheckpointHeader` schema_version 1 -> 2 (<field>); readers migrate v1 on load
 #          (`INV-CHECKPOINT-HASH` unaffected). [area:artifacts]
-_HEADER_MIGRATIONS: dict[int, "Callable[[dict[str, Any]], dict[str, Any]]"] = {}
+
+
+def migrate_v1_to_v2(header: dict[str, Any]) -> dict[str, Any]:
+    """v1 -> v2 (#171): the additive ``model_arch`` field is optional and defaults to ``None``.
+
+    A no-op transform: a v1 header carries no architecture descriptor, so the upgraded header simply omits
+    ``model_arch`` (it validates as ``model_arch=None`` — a legacy/non-self-describing checkpoint). Per the
+    documented pattern this migrator does NOT set ``schema_version`` (the dispatcher bumps it). The content
+    hash is untouched (``model_arch`` is never in ``StructuralFields``), so an existing v1 artifact still
+    verifies byte-for-byte after migration.
+    """
+    return dict(header)
+
+
+# `_HEADER_MIGRATIONS[N]` upgrades a schema-version-N header to N+1. v1 -> v2 is the no-op #171 migrator.
+_HEADER_MIGRATIONS: dict[int, "Callable[[dict[str, Any]], dict[str, Any]]"] = {
+    1: migrate_v1_to_v2,
+}
 
 
 def _schema_mismatch(file_version: object, reader_max: int) -> SchemaVersionMismatch:

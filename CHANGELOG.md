@@ -27,6 +27,20 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:artifacts`: **self-describing checkpoints** via a `ModelArchDescriptor` on `CheckpointHeader`
+  (RFC-0010 §2; #171, unblocks #62). The new frozen pydantic-v2 `ModelArchDescriptor` records the encoder
+  architecture `build_encoder` needs — `d` / `depth` / `num_heads` / `num_tokens` / `in_channels` /
+  `num_frames` / `image_size` / `patch_size` / `tubelet` / `mlp_ratio` / `wmcp_version` — so
+  `recompute_alignment` (#62) can reconstruct `f_θ` to recompute `f_θ(P)` (`num_heads` is unrecoverable
+  from weight shapes: `in_proj_weight` is `(3d, d)` for any head count). `save_checkpoint` gains an optional
+  `model_arch=` keyword and `model_arch_from_config(cfg)` builds the descriptor reading `cfg.model` exactly
+  as `build_encoder` does; the `Coordinator` / `train_local` commit paths now pass it, so committed
+  checkpoints ARE self-describing. New `Encoder.from_header(header)` / `build_encoder_from_arch(arch)`
+  reconstruct an encoder with the SAME dims as `build_encoder(cfg)` (a legacy `model_arch=None` header
+  fails closed with a re-commit-with-a-descriptor remediation). The descriptor is HEADER metadata only —
+  it is NEVER fed into `StructuralFields` / `content_hash`, so the canonical hash is byte-identical with or
+  without it (`INV-CHECKPOINT-HASH` stays metadata-independent; pinned by a test). No `ModelConfig` change,
+  so the default-config golden hash is unchanged.
 - `area:foundation`: the autonomous **`third_party/` vendoring scaffold + `deploy/` IaC stubs** for the
   RFC-0016 topology backbone (#96). New `third_party/{stable_worldmodel,stable_pretraining}/UPSTREAM.md`
   VENDORING manifests record every RFC-0016 §2 field — source URL, candidate vendored commit SHA
@@ -297,6 +311,10 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Changed
 
+- `area:artifacts`: `CheckpointHeader` `schema_version` 1 → 2 (#171); readers migrate v1 on load via the
+  no-op `migrate_v1_to_v2` in `_HEADER_MIGRATIONS` (a v1 header reads back with `model_arch=None`, a
+  non-self-describing checkpoint). The added `model_arch` field is optional and additive and is NEVER
+  hashed, so `INV-CHECKPOINT-HASH` is unaffected and existing v1 artifacts still verify byte-for-byte.
 - `ModelConfig` → encoder/predictor bridge (#166): `ModelConfig` gained the ViT-shape fields
   `num_frames` / `tubelet` / `image_size` / `patch_size` / `depth` / `num_heads` / `in_channels` /
   `mlp_ratio` (coherent V-JEPA-class defaults: `(8//2)*(128//16)**2 == 256 == num_tokens`), and

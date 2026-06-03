@@ -427,8 +427,13 @@ class Coordinator:
         weights = {f"{_ENCODER_GROUP}.{k}": v for k, v in theta_weights.items()}
         weights.update({f"{_PREDICTOR_GROUP}.{k}": v for k, v in phi_weights.items()})
         # Import locally so the module import graph stays light and the checkpoint dep points inward.
-        from lensemble.artifacts.checkpoint import save_checkpoint
+        from lensemble.artifacts.checkpoint import (
+            model_arch_from_config,
+            save_checkpoint,
+        )
 
+        # The committed checkpoint is self-describing (#171): record the encoder architecture so
+        # recompute_alignment (#62) can reconstruct f_theta. Header metadata only — never hashed.
         return save_checkpoint(
             self._artifacts_dir / f"round-{round_index:05d}",
             weights,
@@ -436,6 +441,7 @@ class Coordinator:
             round_index=round_index,
             config_hash=self._config_hash,
             parent_hash=parent_hash,
+            model_arch=model_arch_from_config(self.config),
         )
 
     def _append_contribution(
