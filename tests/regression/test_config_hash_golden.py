@@ -17,8 +17,11 @@ from lensemble.config import config_hash, load
 # Re-pinned for #44: FederationConfig gained `secure_agg_threshold: int = 2` and
 # `collect_timeout_s: float = 30.0` (the elasticity quorum/timeout knobs, RFC-0013 §3), an intentional,
 # reviewed schema addition that shifts the default config's canonical encoding.
+# Re-pinned for #48: FederationConfig gained `aggregation_backend: Literal[...] = "masking"` (the
+# secure-aggregation backend selector, RFC-0011 §6 — masking #47 / tee #48 / simulated #46), an
+# intentional, reviewed schema addition that shifts the default config's canonical encoding.
 _GOLDEN_DEFAULT_CONFIG_HASH = (
-    "aaa0a3f7b98f89bead1c2e63c49fb66e0afdb081f88d85d44d8d03e03886f4fb"
+    "ccd59866aa2bc174b50f25025733147471c97c9e9f75011fa7ce7f950b45fa7b"
 )
 
 

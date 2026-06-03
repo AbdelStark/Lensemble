@@ -76,6 +76,11 @@ class FederationConfig:
     transport: Literal["in_process", "network"] = (
         "in_process"  # network => a real trust boundary
     )
+    # The secure-aggregation backend (RFC-0011 §6); both implement the SecureAggregator interface, so they
+    # are interchangeable in the round. "masking" is the default (Backend A, #47, lowest residual-trust
+    # assumption, no special hardware); "tee" is the attested-enclave backend (Backend B, #48); "simulated"
+    # is the in-process secure-sum harness (#46). `_validate_literals` enforces membership.
+    aggregation_backend: Literal["simulated", "masking", "tee"] = "masking"
 
 
 @dataclass(frozen=True)

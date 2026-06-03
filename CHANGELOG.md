@@ -152,6 +152,24 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
   field (`INV-AGG-DETERMINISM`); each masked update is hiding and the aggregator returns only the sum
   (`INV-RESIDENCY`); below the threshold it fails closed with no partial sum. The DH key-agreement /
   transport is the control plane's (#45); a toy prime-field DH stands in for the production X25519.
+- `lensemble.aggregation`: the TEE-attested secure-aggregation backend — `TEEAggregator` (Backend B,
+  RFC-0011 §5/§6), the `TEEAttestation` report (`enclave_measurement`/`quote`/`code_hash`), and the
+  participant-side `verify_attestation`, behind the same structural `SecureAggregator` interface as the
+  masking (#47) and simulated (#46) backends, so they are interchangeable in the round. A
+  **software-simulated enclave at v0.2**: the enclave measurement is a domain-separated hash of the pinned
+  `code_hash` and the attestation quote is an HMAC over `(enclave_measurement, code_hash)` keyed by the
+  vendor root; the participant verifies the report against the pinned `code_hash` and the vendor root
+  **before** opening the channel and refuses to send on failure (`SecureAggregationError`,
+  `cause="attestation_failed"`). The enclave computes the fp32 plaintext `Σ_c Δ_c` inside the boundary,
+  reusing the simulated backend's fixed-order integer-field summation + determinism self-check
+  (`INV-AGG-DETERMINISM`), and returns only the sum — below the threshold it fails closed with no partial
+  sum, and the single `TEEAggregator.egress` checkpoint routes any individual `Δ_c` through the residency
+  guard, which is fail-closed with `ResidencyViolation` (`INV-RESIDENCY`, never swallowed). The trust
+  assumption is hardware-attestation trust (a vendor root, with side-channel exposure), distinct from — and
+  neither stronger nor weaker than — the masking backend's collusion-bounded honest-but-curious assumption.
+  The real enclave provisioning, the production attestation channel, and the transport are RFC-0013's
+  (#45). `FederationConfig` gains `aggregation_backend: Literal["simulated", "masking", "tee"] = "masking"`
+  (the masking backend stays the default); the default-config `config_hash` golden is re-pinned. (#48)
 - `lensemble.eval`: the evaluation metric bodies (RFC-0005 §3-4) — `success_rate`, `planning_cost`,
   `effective_dim` (the participation-ratio collapse guard), `linear_probe_accuracy`, `comm_bytes`, and
   `quant_ratio`. Each carries a documented unit and an in-range contract (an out-of-range value raises
@@ -201,6 +219,10 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
   default-config `config_hash` golden vector is re-pinned to
   `aaa0a3f7b98f89bead1c2e63c49fb66e0afdb081f88d85d44d8d03e03886f4fb` to reflect the two new defaults
   (an intentional, reviewed schema addition that shifts the canonical encoding). (#44)
+- `FederationConfig`: gained `aggregation_backend: Literal["simulated", "masking", "tee"] = "masking"`,
+  the secure-aggregation backend selector (RFC-0011 §6); the default-config `config_hash` golden vector is
+  re-pinned to `ccd59866aa2bc174b50f25025733147471c97c9e9f75011fa7ce7f950b45fa7b` to reflect the new
+  default (an intentional, reviewed schema addition that shifts the canonical encoding). (#48)
 - `lensemble.federation.build_pseudogradient`: the `quantized` keyword is now `quantize` — the action
   flag that applies the int8 wire round-trip on the assembled flat delta and sets
   `PseudoGradient.quantized`. Pre-1.0 minor; no released callers passed the old keyword.
