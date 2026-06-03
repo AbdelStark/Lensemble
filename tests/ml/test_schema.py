@@ -10,12 +10,29 @@ from pydantic import ValidationError
 from lensemble.artifacts import (
     SCHEMA_VERSION,
     CheckpointHeader,
+    ModelArchDescriptor,
     TensorEntry,
     migrate_header,
 )
 from lensemble.errors import SchemaVersionMismatch
 
 _H = "a" * 64
+
+
+def _arch() -> ModelArchDescriptor:
+    return ModelArchDescriptor(
+        d=8,
+        depth=1,
+        num_heads=2,
+        num_tokens=4,
+        in_channels=3,
+        num_frames=2,
+        image_size=4,
+        patch_size=2,
+        tubelet=2,
+        mlp_ratio=2.0,
+        wmcp_version="wmcp-1.0.0",
+    )
 
 
 def _header(**over: object) -> CheckpointHeader:
@@ -34,6 +51,7 @@ def _header(**over: object) -> CheckpointHeader:
         ),
         weight_files=("weights.safetensors",),
         created_at=datetime.now(timezone.utc),
+        model_arch=_arch(),  # schema v2: the self-describing architecture descriptor (#171)
     )
     base.update(over)
     return CheckpointHeader(**base)  # type: ignore[arg-type]
@@ -74,24 +92,45 @@ def test_bad_schema_version_rejected() -> None:
 # --- forward-compatible migration chain (RFC-0010 §7 / 07 §2.10; #33) ---
 
 
-@pytest.mark.parametrize("offset", [-1, 0, 1])
-def test_schema_roundtrip_and_migration(offset: int) -> None:
+def test_schema_at_reader_version_passes_through() -> None:
+    # At the reader version (SCHEMA_VERSION == 2): passes through and round-trips JSON without loss.
     header = _header()
     raw = header.model_dump(mode="json")
-    version = SCHEMA_VERSION + offset
-    raw["schema_version"] = version
+    migrated = migrate_header(raw)
+    assert migrated["schema_version"] == SCHEMA_VERSION
+    assert CheckpointHeader.model_validate(migrated) == header
 
-    if (
-        offset == 0
-    ):  # at the reader version: passes through and round-trips JSON without loss
-        migrated = migrate_header(raw)
-        assert migrated["schema_version"] == SCHEMA_VERSION
-        assert CheckpointHeader.model_validate(migrated) == header
-    else:  # current-1 (unknown / below floor) and current+1 (too-new) both fail closed
-        with pytest.raises(SchemaVersionMismatch) as exc:
-            migrate_header(raw)
-        assert exc.value.file_schema_version == version  # type: ignore[attr-defined]
-        assert exc.value.reader_max_version == SCHEMA_VERSION  # type: ignore[attr-defined]
+
+def test_schema_too_new_fails_closed() -> None:
+    # current+1 (too-new) fails closed with the version metadata set.
+    raw = _header().model_dump(mode="json")
+    version = SCHEMA_VERSION + 1
+    raw["schema_version"] = version
+    with pytest.raises(SchemaVersionMismatch) as exc:
+        migrate_header(raw)
+    assert exc.value.file_schema_version == version  # type: ignore[attr-defined]
+    assert exc.value.reader_max_version == SCHEMA_VERSION  # type: ignore[attr-defined]
+
+
+def test_below_floor_version_fails_closed() -> None:
+    # An unknown / below-floor version (0) is a version problem, fail closed.
+    raw = _header().model_dump(mode="json")
+    raw["schema_version"] = 0
+    with pytest.raises(SchemaVersionMismatch) as exc:
+        migrate_header(raw)
+    assert exc.value.file_schema_version == 0  # type: ignore[attr-defined]
+
+
+def test_v1_header_migrates_to_v2_with_model_arch_none() -> None:
+    # A legacy v1 header (no model_arch) migrates up the chain: the no-op migrate_v1_to_v2 (#171) leaves
+    # model_arch absent, so it validates as model_arch=None (a non-self-describing checkpoint).
+    raw = _header().model_dump(mode="json")
+    raw["schema_version"] = 1
+    del raw["model_arch"]  # v1 headers carry no architecture descriptor
+    migrated = migrate_header(raw)
+    assert migrated["schema_version"] == SCHEMA_VERSION == 2
+    header = CheckpointHeader.model_validate(migrated)
+    assert header.model_arch is None
 
 
 def test_migration_chain_applies_in_order() -> None:
@@ -106,7 +145,8 @@ def test_migration_chain_applies_in_order() -> None:
         applied.append(2)
         return dict(h)
 
-    raw = _header().model_dump(mode="json")  # schema_version == 1
+    raw = _header().model_dump(mode="json")
+    raw["schema_version"] = 1  # drive the synthetic v1->v2->v3 chain from the start
     out = migrate_header(raw, target=3, migrations={1: v1_to_v2, 2: v2_to_v3})
     assert applied == [1, 2]  # ordered
     assert out["schema_version"] == 3

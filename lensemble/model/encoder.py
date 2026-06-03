@@ -19,7 +19,7 @@ from __future__ import annotations
 import copy
 import hashlib
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import torch
 from safetensors.torch import load as st_load
@@ -27,8 +27,18 @@ from safetensors.torch import save as st_save
 from torch import Tensor, nn
 
 from lensemble.contracts import WMCP_VERSION, LatentState
-from lensemble.errors import CheckpointIntegrityError, ConfigError, LensembleErrorCode
+from lensemble.errors import (
+    ArtifactError,
+    CheckpointIntegrityError,
+    ConfigError,
+    LensembleErrorCode,
+)
 from lensemble.model.numerics import apply_numerics, autocast_forward, resolve_device
+
+if (
+    TYPE_CHECKING
+):  # avoids importing artifacts at module load (keeps the dep direction inward)
+    from lensemble.artifacts.schema import CheckpointHeader, ModelArchDescriptor
 
 
 def _canonical_bytes(state_dict: dict[str, Tensor]) -> bytes:
@@ -125,6 +135,29 @@ class Encoder(nn.Module):
             dim=self.d,
             wmcp_version=self.wmcp_version,
         )
+
+    @classmethod
+    def from_header(cls, header: "CheckpointHeader") -> "Encoder":
+        """Reconstruct ``f_theta`` from a self-describing checkpoint header (#171; unblocks #62).
+
+        Reads ``header.model_arch`` (the :class:`~lensemble.artifacts.schema.ModelArchDescriptor` written
+        by ``save_checkpoint``) and builds an :class:`Encoder` with the SAME dims ``build_encoder`` would
+        produce for the config that minted it — so loading the committed weights into it reproduces a
+        byte-identical forward (``recompute_alignment`` can compute ``f_theta(P)``, #62).
+
+        Raises :class:`~lensemble.errors.ArtifactError` when ``header.model_arch is None`` (a legacy /
+        non-self-describing checkpoint, schema v1): the architecture — ``num_heads`` in particular — is
+        unrecoverable from weight shapes, so reconstruction fails closed with a clear remediation.
+        """
+        if header.model_arch is None:
+            raise ArtifactError(
+                "checkpoint is not self-describing: header.model_arch is None, so the encoder "
+                "architecture (num_heads is unrecoverable from weight shapes) cannot be reconstructed",
+                code=LensembleErrorCode.ARTIFACT_INVALID,
+                remediation="re-commit the checkpoint with a ModelArchDescriptor (#171) — e.g. "
+                "save_checkpoint(..., model_arch=model_arch_from_config(cfg))",
+            )
+        return build_encoder_from_arch(header.model_arch)
 
 
 class ReferenceEncoder(nn.Module):
@@ -226,6 +259,60 @@ def build_encoder(cfg: Any) -> Encoder:
     apply_numerics(
         encoder, resolve_device()
     )  # CUDA primary (bf16 forward) / CPU fallback (fp32)
+    return encoder
+
+
+def build_encoder_from_arch(arch: "ModelArchDescriptor") -> Encoder:
+    """Construct an :class:`Encoder` from a self-describing :class:`ModelArchDescriptor` (#171).
+
+    The descriptor records the exact ViT shape ``build_encoder`` derived from the minting config (notably
+    ``num_heads``, unrecoverable from weight shapes), and ``num_tokens`` is already the derived token count.
+    The resulting encoder has the SAME dims as ``build_encoder(cfg)`` for that cfg, so loading the committed
+    weights reproduces the saved forward (``INV-CHECKPOINT-HASH`` / #62). ``apply_numerics`` selects the
+    same CUDA(bf16)/CPU(fp32) compute path.
+
+    Raises :class:`~lensemble.errors.ConfigError` on an inconsistent descriptor (``num_heads`` not dividing
+    ``d``, or patching that does not derive ``num_tokens``) — the same guards ``build_encoder`` enforces.
+    """
+
+    def _bad(msg: str, remediation: str) -> ConfigError:
+        return ConfigError(
+            msg, code=LensembleErrorCode.CONFIG_INVALID, remediation=remediation
+        )
+
+    if arch.d % arch.num_heads != 0:
+        raise _bad(
+            f"model_arch.d ({arch.d}) must be divisible by num_heads ({arch.num_heads})",
+            "the descriptor is inconsistent; num_heads must divide d",
+        )
+    if arch.num_frames % arch.tubelet != 0 or arch.image_size % arch.patch_size != 0:
+        raise _bad(
+            "model_arch: num_frames must be divisible by tubelet and image_size by patch_size",
+            "the descriptor's patching is inconsistent",
+        )
+    derived_tokens = (arch.num_frames // arch.tubelet) * (
+        arch.image_size // arch.patch_size
+    ) ** 2
+    if arch.num_tokens != derived_tokens:
+        raise _bad(
+            f"model_arch.num_tokens ({arch.num_tokens}) inconsistent with patching (derived "
+            f"{derived_tokens})",
+            f"the descriptor is inconsistent; expected num_tokens = {derived_tokens}",
+        )
+    encoder = Encoder(
+        d=arch.d,
+        num_tokens=arch.num_tokens,
+        in_channels=arch.in_channels,
+        num_frames=arch.num_frames,
+        image_size=arch.image_size,
+        patch_size=arch.patch_size,
+        tubelet=arch.tubelet,
+        depth=arch.depth,
+        num_heads=arch.num_heads,
+        mlp_ratio=arch.mlp_ratio,
+        wmcp_version=arch.wmcp_version,
+    )
+    apply_numerics(encoder, resolve_device())
     return encoder
 
 

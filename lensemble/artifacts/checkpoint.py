@@ -29,10 +29,18 @@ from lensemble.artifacts.hashing import (
     load_weights_no_pickle,
     verify_hash,
 )
-from lensemble.artifacts.schema import SCHEMA_VERSION, CheckpointHeader, TensorEntry
+from lensemble.artifacts.schema import (
+    SCHEMA_VERSION,
+    CheckpointHeader,
+    ModelArchDescriptor,
+    TensorEntry,
+)
+from lensemble.contracts import WMCP_VERSION
 from lensemble.errors import ArtifactError, LensembleErrorCode, ResidencyViolation
 
 if TYPE_CHECKING:
+    from typing import Any
+
     from torch import Tensor
 
 _HEADER = "header.json"
@@ -108,12 +116,18 @@ def save_checkpoint(
     parent_hash: str | None,
     param_groups: tuple[str, ...] = ("encoder", "predictor"),
     shard_size_bytes: int | None = None,
+    model_arch: ModelArchDescriptor | None = None,
 ) -> str:
     """Write a model artifact and return its ``content_hash`` (the value to commit, RFC-0010 5).
 
     Rejects any action-head tensor (``INV-ACTIONHEAD-LOCAL``) before writing, then writes
     ``weights.safetensors`` (optionally sharded) + ``header.json`` into a temporary directory and
     atomically renames it to ``artifact_dir``.
+
+    ``model_arch`` (#171) is the optional self-describing encoder architecture (schema v2). It is HEADER
+    metadata only — it is NOT fed into :class:`StructuralFields` / ``content_hash`` (like ``created_at``
+    and ``config_hash``), so the returned hash is byte-identical with or without it
+    (``INV-CHECKPOINT-HASH`` stays metadata-independent). ``None`` writes a non-self-describing checkpoint.
     """
     artifact_dir = Path(artifact_dir)
     ordered = _ordered(weights)
@@ -144,6 +158,7 @@ def save_checkpoint(
         tensor_manifest=_tensor_manifest(ordered),
         weight_files=weight_files,
         created_at=datetime.now(timezone.utc),
+        model_arch=model_arch,  # header metadata only; NOT in `fields`/content_hash (#171)
     )
 
     artifact_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -186,3 +201,43 @@ def load_checkpoint(artifact_dir: Path) -> tuple[dict[str, "Tensor"], Checkpoint
 def verify(artifact_dir: Path, expected_hash: str | None = None) -> CheckpointHeader:
     """Header-and-hash-only integrity check (RFC-0010 5); used by public recomputation and ingress."""
     return verify_hash(artifact_dir, expected_hash)
+
+
+def model_arch_from_config(cfg: "Any") -> ModelArchDescriptor:
+    """Build the self-describing :class:`ModelArchDescriptor` from a model config (#171).
+
+    Reads ``cfg.model`` EXACTLY as :func:`~lensemble.model.encoder.build_encoder` does so the descriptor
+    records the architecture the committed weights were actually built with: ``latent_dim`` for ``d`` (with
+    the legacy ``d`` alias fallback some SimpleNamespace test/CLI configs use), the ViT-shape fields, and
+    the ``in_channels``/``mlp_ratio``/``wmcp_version`` ``getattr`` defaults. ``num_tokens`` is the derived
+    token count (``(num_frames//tubelet) * (image_size//patch_size)**2``), matching the encoder.
+
+    The result is HEADER metadata only — it never enters ``content_hash`` (``INV-CHECKPOINT-HASH``).
+    """
+    m = getattr(cfg, "model", None)
+    if m is None:
+        raise ArtifactError(
+            "config has no `model` sub-config; cannot build a ModelArchDescriptor",
+            code=LensembleErrorCode.ARTIFACT_INVALID,
+            remediation="provide cfg.model with latent_dim, num_frames, image_size, patch_size, "
+            "tubelet, depth, num_heads (the build_encoder fields, #171)",
+        )
+    d = int(m.latent_dim if hasattr(m, "latent_dim") else m.d)
+    num_frames = int(m.num_frames)
+    tubelet = int(m.tubelet)
+    image_size = int(m.image_size)
+    patch_size = int(m.patch_size)
+    num_tokens = (num_frames // tubelet) * (image_size // patch_size) ** 2
+    return ModelArchDescriptor(
+        d=d,
+        depth=int(m.depth),
+        num_heads=int(m.num_heads),
+        num_tokens=num_tokens,
+        in_channels=int(getattr(m, "in_channels", 3)),
+        num_frames=num_frames,
+        image_size=image_size,
+        patch_size=patch_size,
+        tubelet=tubelet,
+        mlp_ratio=float(getattr(m, "mlp_ratio", 4.0)),
+        wmcp_version=str(getattr(m, "wmcp_version", WMCP_VERSION)),
+    )
