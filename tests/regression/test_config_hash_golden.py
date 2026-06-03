@@ -20,8 +20,11 @@ from lensemble.config import config_hash, load
 # Re-pinned for #48: FederationConfig gained `aggregation_backend: Literal[...] = "masking"` (the
 # secure-aggregation backend selector, RFC-0011 §6 — masking #47 / tee #48 / simulated #46), an
 # intentional, reviewed schema addition that shifts the default config's canonical encoding.
+# Re-pinned for #166: ModelConfig gained the ViT-shape bridge fields (num_frames/tubelet/image_size/
+# patch_size/depth/num_heads/in_channels/mlp_ratio) so build_encoder/build_predictor are callable from a
+# load_config() config — another intentional, reviewed schema addition.
 _GOLDEN_DEFAULT_CONFIG_HASH = (
-    "ccd59866aa2bc174b50f25025733147471c97c9e9f75011fa7ce7f950b45fa7b"
+    "9fce731672c45ab4082ab67649d0ccb8af79a36e2c58f0103648ff68ff9685be"
 )
 
 

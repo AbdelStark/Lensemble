@@ -101,7 +101,7 @@ class ActionHead(nn.Module):
 def build_action_head(cfg: Any, spec: ActionSpec) -> ActionHead:
     """Construct a per-embodiment :class:`ActionHead` from a validated ``ActionSpec`` (RFC-0007/0008; #8).
 
-    Reads ``cond_dim = getattr(cfg.model, "cond_dim", cfg.model.d)`` (the federation-fixed conditioning
+    Reads ``cond_dim = getattr(cfg.model, "cond_dim", cfg.model.latent_dim)`` (the federation-fixed conditioning
     width). Validates ``spec`` (``dim > 0``; for a discrete space ``num_classes`` present with
     ``len == dim`` and each ``>= 2``) and enforces ``spec.wmcp_version == WMCP_VERSION`` (``INV-WMCP``).
     Raises :class:`~lensemble.errors.ConfigError` on an invalid config/spec.
@@ -116,12 +116,14 @@ def build_action_head(cfg: Any, spec: ActionSpec) -> ActionHead:
             code=LensembleErrorCode.CONFIG_INVALID,
             remediation="provide cfg.model carrying d (and optionally cond_dim)",
         )
-    cond_dim = int(getattr(model, "cond_dim", getattr(model, "d")))
+    # cond_dim defaults to the latent dim (ModelConfig.latent_dim, #166); `d` is the legacy alias.
+    _latent = model.latent_dim if hasattr(model, "latent_dim") else model.d
+    cond_dim = int(getattr(model, "cond_dim", _latent))
     if cond_dim <= 0:
         raise ConfigError(
             f"action-head cond_dim must be > 0, got {cond_dim}",
             code=LensembleErrorCode.CONFIG_INVALID,
-            remediation="set a positive cond_dim (or model.d) for the conditioning width",
+            remediation="set a positive cond_dim (or model.latent_dim) for the conditioning width",
         )
     if spec.wmcp_version != WMCP_VERSION:
         raise ConfigError(

@@ -30,10 +30,26 @@ ENCODER_DIM: dict[str, int] = {
 class ModelConfig:
     encoder: Literal["vjepa2-vit-l", "vjepa2-vit-h", "vjepa2-vit-g"] = "vjepa2-vit-l"
     warm_start_release: str = "vjepa2-2.0"
-    latent_dim: int = 1024  # d
-    num_tokens: int = 256  # N
+    latent_dim: int = (
+        1024  # d — the ViT hidden dim build_encoder/build_predictor read (#166)
+    )
+    num_tokens: int = 256  # N == (num_frames//tubelet) * (image_size//patch_size)**2
     predictor_depth: int = 12
     predictor_width: int = 1024
+    # ViT-shape fields (RFC-0008; the typed bridge into build_encoder/build_predictor, #166). The defaults
+    # are a V-JEPA-class shape coherent with num_tokens=256: (8//2)*(128//16)**2 = 4*64 = 256.
+    num_frames: int = 8  # T — clip frame count (temporal extent before tubelet pooling)
+    tubelet: int = (
+        2  # temporal patch size; num_frames must be divisible by it (8//2 = 4 temporal)
+    )
+    image_size: int = 128  # H == W — square frame side in pixels
+    patch_size: int = 16  # spatial patch side; image_size must be divisible by it (128//16 = 8 → 64 spatial)
+    depth: int = 24  # encoder transformer block count (ViT-L)
+    num_heads: int = (
+        16  # attention heads; must divide latent_dim (1024 % 16 == 0, ViT-L)
+    )
+    in_channels: int = 3  # input video channels (RGB)
+    mlp_ratio: float = 4.0  # transformer feed-forward expansion factor
     wmcp_version: str = "wmcp-1.0.0"  # gated at federation join (INV-WMCP)
     encoder_frozen: bool = False  # Fork A (RFC-0002): freeze the encoder at warm-start, federate g_phi only
 
@@ -303,6 +319,41 @@ def validate_config(cfg: LensembleConfig) -> None:
             f"== {expected_dim} for encoder {m.encoder}",
             "pin a matching V-JEPA 2 release or set latent_dim to the release's emitted dimension",
         )
+
+    # ViT-shape coherence (#166): the patching must divide and num_tokens must equal the derived token
+    # count, mirroring the runtime guard in Encoder.forward and the build_encoder consistency check, so a
+    # load_config() config that build_encoder/build_predictor consume is self-consistent at the boundary.
+    if m.tubelet <= 0 or m.patch_size <= 0:
+        raise _fail(
+            "model.tubelet",
+            (m.tubelet, m.patch_size),
+            "tubelet > 0 and patch_size > 0",
+            "set positive tubelet and patch_size",
+        )
+    if m.num_frames % m.tubelet != 0 or m.image_size % m.patch_size != 0:
+        raise _fail(
+            "model.num_tokens",
+            (m.num_frames, m.tubelet, m.image_size, m.patch_size),
+            "num_frames divisible by tubelet and image_size divisible by patch_size",
+            "align num_frames/tubelet and image_size/patch_size",
+        )
+    derived_tokens = (m.num_frames // m.tubelet) * (m.image_size // m.patch_size) ** 2
+    if m.num_tokens != derived_tokens:
+        raise _fail(
+            "model.num_tokens",
+            m.num_tokens,
+            f"== (num_frames//tubelet) * (image_size//patch_size)**2 (derived {derived_tokens})",
+            f"set num_tokens = {derived_tokens} or adjust num_frames/tubelet/image_size/patch_size",
+        )
+    # num_heads must divide the hidden dim (mirrors build_encoder's d % num_heads check).
+    if m.num_heads <= 0 or m.latent_dim % m.num_heads != 0:
+        raise _fail(
+            "model.num_heads",
+            m.num_heads,
+            f"> 0 and dividing latent_dim ({m.latent_dim})",
+            "choose a num_heads that divides latent_dim",
+        )
+
     if o.sigreg_sketch_dim > m.latent_dim:
         raise _fail(
             "objective.sigreg_sketch_dim",
