@@ -27,6 +27,24 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:verify`: **proof-readiness audit** — a single integration-test entry point
+  (`tests/integration/test_proofready_audit.py`) that exercises all five RFC-0006 §3 Phase-1 proof-ready
+  disciplines together over a tiny synthetic federated round, the v1.0 "proof-ready guarantees verified
+  end-to-end" gate of the reproducibility package (RFC-0006 § Migration / Rollout; #63). Each discipline
+  is asserted POSITIVE (the discipline holds) and NEGATIVE (the documented typed error / report fires and
+  fails closed): bitwise-reproducible aggregation (`INV-AGG-DETERMINISM`, a `Coordinator` round commits an
+  identical `(θ_{t+1}, φ_{t+1})` hash vs an injected nondeterministic reduction → `NonDeterministicAggregation`
+  with the global hash unchanged); committed `(θ_t, φ_t)` content hash with a valid `parent_hash` chain
+  (`INV-CHECKPOINT-HASH` vs a tampered `weights.safetensors` byte → `CheckpointIntegrityError`); each
+  `Δ_c` bound to exactly one 32-byte `R_c` (`INV-COMMIT-BINDING` vs a wrong/foreign root →
+  `CommitmentMismatch`); the pinned-probe hash equal to the `RoundOpen`/`GlobalState.probe_hash`
+  commitment with `landmark_targets` derived only from `f_ref` (`INV-PROBE-PIN` vs a mismatched hash →
+  `ProbeError`); and public recomputation reproducing the alignment from public inputs alone
+  (`recompute_alignment_claim(..., expected=)` → `matches_expected=True` vs a perturbed claim →
+  `matches_expected=False`). The audit composes the per-discipline primitives (no public Python symbol is
+  added) and is referenced from the v1.0 release checklist (09 §5.2). It reuses the toy fixtures from the
+  matching `tests/ml` tests (the 32-token recompute config so the honest LayerNorm-terminated encoder
+  recovers `Q* = I`), duplicating the small helpers since the `tests/` tree has no package `__init__`.
 - `area:verify`: **public recomputation of frame alignment** — the one Phase-2 verification mechanism that
   ships in Phase 1 because it is free (RFC-0006 §4; #62). `lensemble.verify.recompute_alignment(committed_weights:
   Path, probe: Path) -> FrameDriftReport` (the frozen 02 §1.8 signature) hash-verifies the committed checkpoint
