@@ -6,7 +6,7 @@
 #   "h5py",
 #   "safetensors",
 #   "huggingface-hub",
-#   "lensemble",
+#   "lensemble @ git+https://github.com/AbdelStark/Lensemble.git@main",
 # ]
 # ///
 """End-to-end LeWorldModel training on HF Jobs — the official path, on a real robot dataset.
@@ -45,6 +45,8 @@ import torch
 from lensemble.contracts import WMCP_VERSION, LatentState
 from lensemble.data.adapters import load_episodes
 from lensemble.data.episode import Window
+from lensemble.data.probe import build_probe
+from lensemble.gauge.anchor import FrameAnchor
 from lensemble.model import (
     build_action_head,
     build_encoder,
@@ -52,6 +54,7 @@ from lensemble.model import (
     build_sketch,
     sigreg_statistic,
 )
+from lensemble.model.encoder import snapshot_reference
 
 
 def _args() -> argparse.Namespace:
@@ -78,6 +81,13 @@ def _args() -> argparse.Namespace:
     p.add_argument("--steps", type=int, default=6000)
     p.add_argument("--lr", type=float, default=3e-4)
     p.add_argument("--lambda-sig", type=float, default=0.5)
+    p.add_argument(
+        "--lambda-anc",
+        type=float,
+        default=0.0,
+        help="frame-anchor weight (the design's anti-collapse, #184); 0 = bare LeJEPA. "
+        "~0.01 holds rank on small datasets",
+    )
     p.add_argument(
         "--out-repo",
         default=None,
@@ -138,6 +148,26 @@ def main() -> None:
     head = build_action_head(cfg, spec).to(dev)
     params = [*enc.parameters(), *pred.parameters(), *head.parameters()]
     opt = torch.optim.AdamW(params, lr=a.lr, weight_decay=0.05)
+
+    # Frame anchor (#184): pin f_theta on d generic landmarks to the round-0 f_ref snapshot — the
+    # design's gauge anti-collapse. Built once from a fixed-seed probe; the anchor loss pulls the encoder
+    # back onto the (high-rank) reference frame, holding representation rank that the bare objective drops.
+    anchor = None
+    if a.lambda_anc > 0:
+        gen = torch.Generator().manual_seed(20240601)
+        points = torch.randn(
+            a.latent_dim, 1, 3, a.image_size, a.image_size, generator=gen
+        ).to(dev)
+        f_ref = snapshot_reference(enc)
+        probe = build_probe(points, torch.arange(a.latent_dim), f_ref)
+        ref_emb = f_ref(probe.points[probe.landmark_idx]).tokens.detach()
+        anchor = FrameAnchor(
+            probe, ref_emb, variant="landmark", probe_hash=probe.content_hash.hex()
+        )
+        print(
+            f"frame anchor ON | lambda_anc={a.lambda_anc} | {a.latent_dim} landmarks",
+            flush=True,
+        )
     print(
         f"params(enc+pred) {sum(p.numel() for p in (*enc.parameters(), *pred.parameters())) / 1e6:.1f}M",
         flush=True,
@@ -184,6 +214,8 @@ def main() -> None:
         sk = build_sketch(1000 + step, a.latent_dim, 128).to(dev)
         predv, sig, _ = step_loss(*batch(train_w, rng), sk)
         total = predv + a.lambda_sig * sig
+        if anchor is not None:
+            total = total + a.lambda_anc * anchor.loss(enc).float()
         opt.zero_grad(set_to_none=True)
         total.backward()
         torch.nn.utils.clip_grad_norm_(params, 1.0)
