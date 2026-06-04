@@ -495,6 +495,7 @@ def _shared_probe(cfg: "LensembleConfig", global_state: "GlobalState") -> Public
     """
     from lensemble.data.probe import build_probe, load_probe
     from lensemble.model.encoder import snapshot_reference
+    from lensemble.model.numerics import resolve_device
 
     probe_path = getattr(cfg.data, "probe_path", None)
     if probe_path is not None:
@@ -510,10 +511,15 @@ def _shared_probe(cfg: "LensembleConfig", global_state: "GlobalState") -> Public
     in_channels = int(getattr(m, "in_channels", 3))
     image_size = int(getattr(m, "image_size"))
     d = int(getattr(m, "d", getattr(m, "latent_dim")))
+    # Build the probe on the compute device so the f_ref forward (here) and the later
+    # `probe_embeddings` forward run device/dtype-consistently with the encoder (CUDA inner loop). The CPU
+    # generator keeps the bits identical; `probe_content_hash` canonicalizes via `.cpu()`, so the content
+    # hash (INV-PROBE-PIN) is device-invariant and the CPU fallback is unchanged (#182).
+    device = resolve_device()
     gen = torch.Generator().manual_seed(20240601)
     points = torch.randn(
         d, num_frames, in_channels, image_size, image_size, generator=gen
-    )
+    ).to(device)
     f_ref = snapshot_reference(build_encoder(cfg))
     probe = build_probe(points, torch.arange(d), f_ref, probe_version=1)
     # Override the content hash to the broadcast placeholder so INV-PROBE-PIN holds for the bare rungs.
