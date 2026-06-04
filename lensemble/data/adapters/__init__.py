@@ -24,6 +24,7 @@ from lensemble.data.adapters.lerobot_adapter import (
     _validate_episode_conformance,
     load_lerobot,
 )
+from lensemble.data.adapters.lerobot_h5_backend import load_lerobot_h5
 from lensemble.data.adapters.registry import (
     load_episodes,
     register_adapter,
@@ -34,10 +35,13 @@ from lensemble.data.adapters.registry import (
 register_adapter("lance", loader=load_lance, saver=save_lance)
 register_adapter("hdf5", loader=load_hdf5, saver=save_hdf5)
 register_adapter("lerobot", loader=load_lerobot, saver=None)
+# Read-only LeRobot-layout single-file HDF5 (real robot datasets as a first-class data_source).
+register_adapter("lerobot-h5", loader=load_lerobot_h5, saver=None)
 
 __all__ = [
     "save_episodes",
     "load_episodes",
     "register_adapter",
+    "load_lerobot_h5",
     "_validate_episode_conformance",
 ]
