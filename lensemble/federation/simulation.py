@@ -499,7 +499,20 @@ def _shared_probe(cfg: "LensembleConfig", global_state: "GlobalState") -> Public
 
     probe_path = getattr(cfg.data, "probe_path", None)
     if probe_path is not None:
-        return load_probe(probe_path)
+        # Device-follow the loaded probe (#188): load_probe lands its tensors on CPU, but the anchored
+        # rung forwards the encoder / f_ref on the probe landmarks on the compute device (CUDA inner loop).
+        # Move points + targets onto resolve_device() so those forwards are single-device — the same fix
+        # the built branch below got (#182). content_hash canonicalizes via .cpu(), so INV-PROBE-PIN is
+        # device-invariant and the CPU fallback is a no-op.
+        loaded = load_probe(probe_path)
+        device = resolve_device()
+        return PublicProbe(
+            points=loaded.points.to(device),
+            landmark_idx=loaded.landmark_idx,
+            landmark_targets=loaded.landmark_targets.to(device),
+            content_hash=loaded.content_hash,
+            probe_version=loaded.probe_version,
+        )
 
     # No pinned probe path: build a probe whose content hash IS the broadcast probe_hash. The coordinator
     # uses the 32-byte placeholder when no probe is pinned, so a bare (lambda_anc=0) rung never reads the
