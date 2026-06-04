@@ -43,8 +43,10 @@ def sigreg_statistic(
     """Mean Epps-Pulley characteristic-function distance to ``N(0,1)`` over projected directions (RFC-0008 6b).
 
     Input: ``embeddings`` of shape ``(M, d)`` (flattened over ``(B, N)``) and ``sketch`` ``A`` of shape
-    ``(d, sketch_dim)``. Output: a 0-dim fp32 tensor — ~0 for a standard-normal sample, large for
-    non-normal. Projection and standardization are fp32 with a fixed per-knot reduction order, so the
+    ``(d, sketch_dim)``. Output: a 0-dim fp32 tensor — ~0 for an isotropic standard-normal sample, large
+    for non-normal OR anisotropic (e.g. a rank/correlation collapse). The projections are CENTERED but
+    not rescaled, so the statistic tests unit variance per direction (isotropy toward ``N(0, I_d)``), not
+    just shape (#184). Projection and centering are fp32 with a fixed per-knot reduction order, so the
     statistic is reproducible given identical inputs (``conventions 9``).
     """
     emb = embeddings.reshape(-1, embeddings.shape[-1]).to(torch.float32)
@@ -54,9 +56,14 @@ def sigreg_statistic(
     # moves are value-preserving (CPU<->CUDA fp32 copy), so the statistic is unchanged (conventions 9).
     device = emb.device
     proj = emb @ sketch.to(device=device, dtype=torch.float32)  # (M, sketch_dim)
+    # Center but DO NOT rescale (the SIGReg-collapse fix, #184): comparing the CENTERED projection to
+    # N(0,1) makes the statistic test UNIT VARIANCE per random direction — i.e. isotropy of the embedding
+    # covariance toward I_d (the LeJEPA N(0,I_d) target). Dividing by the per-direction std (the prior
+    # behavior) scaled the variance out, so the statistic tested only the projection's SHAPE; a
+    # rank/correlation collapse (every direction rescaled to unit variance) then passed unpenalized and
+    # the encoder could collapse f_theta into a low-rank subspace while keeping SIGReg ~ 0.
     mu = proj.mean(dim=0, keepdim=True)
-    sd = proj.std(dim=0, unbiased=False, keepdim=True).clamp_min(1e-8)
-    u = (proj - mu) / sd  # standardized per direction
+    u = proj - mu  # centered; the unit-variance N(0,1) target now enforces isotropy
 
     t = torch.linspace(
         -_T_MAX, _T_MAX, ep_knots, dtype=torch.float32, device=device
