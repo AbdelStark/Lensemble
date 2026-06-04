@@ -17,7 +17,7 @@ import torch
 from lensemble.data.episode import Episode, Transition, Window
 from lensemble.errors import ContractViolation, LensembleErrorCode
 
-Format = Literal["lance", "hdf5", "lerobot"]
+Format = Literal["lance", "hdf5", "lerobot", "lerobot-h5"]
 
 
 def _build_window(
