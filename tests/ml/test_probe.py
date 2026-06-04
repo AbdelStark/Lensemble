@@ -11,7 +11,7 @@ from safetensors.torch import save_file
 from typer.testing import CliRunner
 
 from lensemble.cli import app
-from lensemble.data.probe import build_probe, verify_probe_pin
+from lensemble.data.probe import build_probe, probe_content_hash, verify_probe_pin
 from lensemble.errors import LensembleErrorCode, ProbeError
 from lensemble.model.encoder import build_encoder, snapshot_reference
 
@@ -44,6 +44,29 @@ def test_verify_accepts_pinned_hash() -> None:
     probe = build_probe(_points(), torch.arange(4), f_ref)  # k=4, d=4
     assert verify_probe_pin(probe, probe.content_hash) is None
     assert tuple(probe.landmark_targets.shape) == (4, 4, 4)  # (k, N, d)
+
+
+@pytest.mark.parametrize(
+    "device", ["cpu", *(["cuda"] if torch.cuda.is_available() else [])]
+)
+def test_probe_build_and_forward_are_device_consistent(device: str) -> None:
+    """The probe build + a later encoder forward on ``probe.points`` are device-consistent (#182).
+
+    ``_shared_probe`` builds the probe on ``resolve_device()`` so the ``f_ref`` forward (in
+    ``build_probe``) and the ``probe_embeddings`` forward run on the encoder's device (CUDA in the inner
+    loop). Here the probe is built on ``device`` and an encoder forward is run on its points: it must not
+    raise a device/dtype mismatch (the GPU bug), and the content hash stays device-invariant
+    (``probe_content_hash`` canonicalizes via ``.cpu()``). On CPU this guards the contract; with CUDA
+    present it exercises the real path.
+    """
+    enc, f_ref = _f_ref()
+    enc, f_ref = enc.to(device), f_ref.to(device)
+    points = _points().to(device)
+    probe = build_probe(points, torch.arange(4), f_ref)
+    landmarks = probe.points[probe.landmark_idx]
+    tokens = enc(landmarks).tokens  # the probe_embeddings forward — must run on-device
+    assert tokens.device.type == device
+    assert probe.content_hash == probe_content_hash(points.cpu(), torch.arange(4))
 
 
 def test_verify_rejects_mismatched_hash() -> None:

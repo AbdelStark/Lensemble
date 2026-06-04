@@ -34,7 +34,7 @@ hooks to inject tiny fixtures. When #22 lands these hooks resolve from the real 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -504,9 +504,16 @@ def _inner_loop(
     encoder.train()
     predictor.train()
     action_head.train()
+    # Place each residency-bound window on the encoder's compute device so the forward runs single-device
+    # (CUDA inner loop): the encoder/predictor/head are built on `resolve_device()` while the loader yields
+    # CPU windows, and `autocast_forward` keys autocast on the input device — a CPU clip through a CUDA
+    # encoder otherwise crashes (`Input type (BFloat16) and bias type (float)`). The move is in-process
+    # (no boundary crossing, INV-RESIDENCY) and a no-op on the CPU fallback.
+    device = next(encoder.parameters()).device
     final_loss = 0.0
     for step in range(horizon):
-        window = windows[step % len(windows)]
+        raw = windows[step % len(windows)]
+        window = replace(raw, obs=raw.obs.to(device), actions=raw.actions.to(device))
         optimizer.zero_grad(set_to_none=True)
         action_embedding = action_head.encode(window.actions)
         loss = objective(encoder, predictor, window, action_embedding).total
