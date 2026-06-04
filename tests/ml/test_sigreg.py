@@ -31,6 +31,29 @@ def test_statistic_is_reproducible() -> None:
     assert torch.equal(sigreg_statistic(z, sketch), sigreg_statistic(z, sketch))
 
 
+@pytest.mark.parametrize(
+    "device", ["cpu", *(["cuda"] if torch.cuda.is_available() else [])]
+)
+def test_statistic_follows_embedding_device(device: str) -> None:
+    """``sigreg_statistic`` device-follows ``embeddings`` even when the sketch is CPU-built.
+
+    ``build_sketch`` always returns a CPU tensor (deterministic seed), but in the GPU inner loop the
+    embeddings live on CUDA. The statistic must move the sketch + Epps-Pulley grid onto the embedding
+    device rather than raising a cross-device matmul error (the bug the CPU toy never exercised). Runs
+    the true cross-device path only when CUDA is present; on CPU it still guards device-following and
+    that the move is value-preserving.
+    """
+    sketch = build_sketch(seed=5, d=8, sketch_dim=32)
+    assert sketch.device.type == "cpu"
+    emb = torch.randn(256, 8, device=device)
+    stat = sigreg_statistic(emb, sketch)
+    assert stat.device.type == device
+    assert stat.dtype == torch.float32 and stat.ndim == 0
+    # the CPU<->device move is value-preserving: the statistic matches the all-CPU computation
+    cpu_stat = sigreg_statistic(emb.cpu(), sketch)
+    assert torch.allclose(stat.cpu(), cpu_stat, atol=1e-5)
+
+
 def test_sketch_consistency_across_participants() -> None:
     # two participants given the same s_t derive the identical projection matrix A
     a_p1 = build_sketch(seed=42, d=16, sketch_dim=64)

@@ -48,12 +48,19 @@ def sigreg_statistic(
     statistic is reproducible given identical inputs (``conventions 9``).
     """
     emb = embeddings.reshape(-1, embeddings.shape[-1]).to(torch.float32)
-    proj = emb @ sketch.to(torch.float32)  # (M, sketch_dim)
+    # Device-follow the embeddings: the sketch is built deterministically on CPU (build_sketch) and the
+    # Epps-Pulley grid below would default to CPU, but `emb` lives on the encoder's device (CUDA in the
+    # GPU inner loop). Move both onto `emb.device` so the matmul/CF reduction stay on one device. The
+    # moves are value-preserving (CPU<->CUDA fp32 copy), so the statistic is unchanged (conventions 9).
+    device = emb.device
+    proj = emb @ sketch.to(device=device, dtype=torch.float32)  # (M, sketch_dim)
     mu = proj.mean(dim=0, keepdim=True)
     sd = proj.std(dim=0, unbiased=False, keepdim=True).clamp_min(1e-8)
     u = (proj - mu) / sd  # standardized per direction
 
-    t = torch.linspace(-_T_MAX, _T_MAX, ep_knots, dtype=torch.float32)  # (K,)
+    t = torch.linspace(
+        -_T_MAX, _T_MAX, ep_knots, dtype=torch.float32, device=device
+    )  # (K,)
     weight = torch.exp(-0.5 * t * t)  # Gaussian integration weight (K,)
     target_re = torch.exp(-0.5 * t * t)  # standard-normal CF (real; imag 0)
 
