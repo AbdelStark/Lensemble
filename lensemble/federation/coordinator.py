@@ -67,7 +67,9 @@ real probe would refuse such a round, ``INV-PROBE-PIN``). The real probe resolut
 
 from __future__ import annotations
 
+import shutil
 import tempfile
+import weakref
 from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
@@ -134,7 +136,13 @@ class Coordinator:
     signature fixed by conventions §5 / RFC-0013 §1: ``Coordinator(config, *, transport)``.
     """
 
-    def __init__(self, config: "LensembleConfig", *, transport: "Transport") -> None:
+    def __init__(
+        self,
+        config: "LensembleConfig",
+        *,
+        transport: "Transport",
+        artifacts_dir: "Path | None" = None,
+    ) -> None:
         self.config = config
         self.transport = transport
 
@@ -165,9 +173,27 @@ class Coordinator:
             momentum=cfg.federation.outer_nesterov_momentum,
         )
 
-        # The append-only contribution ledger + the artifacts dir (per-coordinator temp dir; the real run
-        # resolves these from cfg). Round artifacts are committed under artifacts_dir/round-XXXX.
-        self._artifacts_dir = Path(tempfile.mkdtemp(prefix="lensemble-coordinator-"))
+        # The append-only contribution ledger + the artifacts dir. A caller may pass an explicit
+        # ``artifacts_dir`` — a persistent run-dir it OWNS, where the committed checkpoints live (the real
+        # run). When it is None the coordinator creates a throwaway ``tempfile.mkdtemp`` it OWNS and cleans
+        # up: a ``weakref.finalize`` removes it when the coordinator is GC'd, and :meth:`close` / the context
+        # manager remove it eagerly — so a constructed-and-dropped coordinator leaks no temp dir (#178).
+        # Round artifacts are committed under ``artifacts_dir/round-XXXX``.
+        if artifacts_dir is None:
+            self._artifacts_dir = Path(
+                tempfile.mkdtemp(prefix="lensemble-coordinator-")
+            )
+            self._owns_artifacts_dir = True
+            self._artifacts_finalizer: weakref.finalize | None = weakref.finalize(
+                self, _rmtree_quiet, self._artifacts_dir
+            )
+        else:
+            self._artifacts_dir = Path(artifacts_dir)
+            self._artifacts_dir.mkdir(parents=True, exist_ok=True)
+            self._owns_artifacts_dir = (
+                False  # caller-owned; it persists with the committed checkpoints
+            )
+            self._artifacts_finalizer = None
         self._ledger = ContributionLedger(self._artifacts_dir / "ledger.jsonl", [])
         self._config_hash = config_hash(asdict(cfg))
         self._probe_hash = self._resolve_probe_hash(cfg)
@@ -189,6 +215,28 @@ class Coordinator:
         self._theta_weights = theta_weights
         self._phi_weights = phi_weights
         self._global_state = self._open_round(round_index=0, global_hash=initial_hash)
+
+    # --- lifecycle: temp-artifacts cleanup (#178) ---
+
+    def close(self) -> None:
+        """Remove the coordinator's OWNED temp artifacts dir (the ``tempfile.mkdtemp`` it created).
+
+        Idempotent and safe: a caller-provided ``artifacts_dir`` is never touched (it persists with its
+        committed checkpoints). For an auto-created temp dir this removes it eagerly and cancels the
+        GC finalizer (#178). Use the coordinator as a context manager (``with Coordinator(...) as c:``) to
+        clean up automatically, or pass an explicit ``artifacts_dir`` for a persistent run.
+        """
+        if self._owns_artifacts_dir:
+            _rmtree_quiet(self._artifacts_dir)
+            if self._artifacts_finalizer is not None:
+                self._artifacts_finalizer.detach()  # the dir is already gone; don't re-run on GC
+                self._artifacts_finalizer = None
+
+    def __enter__(self) -> "Coordinator":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
 
     # --- public surface (conventions §5 / RFC-0013 §1) ---
 
@@ -614,6 +662,16 @@ class Coordinator:
         if probe_path is None:
             return _PROBE_PLACEHOLDER
         return load_probe(Path(probe_path)).content_hash
+
+
+def _rmtree_quiet(path: Path) -> None:
+    """Remove ``path`` recursively, ignoring errors (the coordinator's owned temp dir; #178).
+
+    Module-level (not a bound method) so :func:`weakref.finalize` can hold it without keeping the
+    coordinator alive — the finalizer fires when the coordinator is GC'd, removing the throwaway
+    ``tempfile.mkdtemp`` artifacts dir even if the caller never calls :meth:`Coordinator.close`.
+    """
+    shutil.rmtree(path, ignore_errors=True)
 
 
 def _flatten_groups(

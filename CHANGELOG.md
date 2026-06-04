@@ -411,6 +411,15 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
   surfacing `DegenerateProcrustes` (`PROCRUSTES_DEGENERATE`) on an under-determined frame rather than a
   silent garbage consensus. (#20)
 
+### Fixed
+
+- `lensemble.federation.Coordinator`: stopped leaking its `tempfile.mkdtemp` artifacts dir (#178). The
+  coordinator now accepts an explicit `artifacts_dir` (a persistent, caller-owned run-dir where the
+  committed checkpoints live); when omitted it creates a throwaway temp dir it OWNS and cleans up — a
+  `weakref.finalize` removes it on GC, and `Coordinator.close()` / using it as a context manager remove it
+  eagerly. A constructed-and-dropped coordinator now leaves no `lensemble-coordinator-*` dir behind
+  (previously every construction leaked one, which accumulated to fill the disk).
+
 ### Changed
 
 - `area:artifacts`: `CheckpointHeader` `schema_version` 1 → 2 (#171); readers migrate v1 on load via the
