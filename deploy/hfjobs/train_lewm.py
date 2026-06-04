@@ -192,6 +192,11 @@ def main() -> None:
         obs: torch.Tensor, acts: torch.Tensor, sk: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         b, span = obs.shape[0], obs.shape[1]
+        # Per-channel mean-center the [0,1] pixels (the lerobot-h5 adapter yields raw [0,1]). All-positive,
+        # low-variance inputs give a low-rank embedding even at init; centering restores the healthy regime.
+        c = obs.mean(dim=(0, 1, 3, 4), keepdim=True)
+        s = obs.std(dim=(0, 1, 3, 4), keepdim=True).clamp_min(1e-6)
+        obs = (obs - c) / s
         tok = enc(obs.reshape(b * span, *obs.shape[2:])).tokens
         d = tok.shape[-1]
         tok = tok.reshape(b, span, tokens_n, d)
