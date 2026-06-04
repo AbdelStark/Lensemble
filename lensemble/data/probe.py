@@ -75,7 +75,17 @@ def build_probe(
 
     ``landmark_targets`` of shape ``(k, N, d)`` is computed only from ``f_ref`` — never a later-round
     encoder — and the content hash is pinned over ``points + landmark_idx``.
+
+    Device-follows ``f_ref`` (#188): ``points`` may be CPU-built while the round-0 encoder snapshot lives
+    on the compute device (CUDA), so the target forward runs on ``f_ref``'s device and the returned probe
+    is single-device. ``save_probe`` / ``probe_content_hash`` canonicalize via ``.cpu()``, so storage and
+    the pinned hash (``INV-PROBE-PIN``) are device-invariant and the CPU fallback is a no-op.
     """
+    try:
+        device = next(f_ref.parameters()).device
+    except StopIteration:  # pragma: no cover - f_ref always carries parameters
+        device = points.device
+    points = points.to(device)
     landmarks = points[landmark_idx]
     targets = f_ref(landmarks).tokens.detach()
     return PublicProbe(
