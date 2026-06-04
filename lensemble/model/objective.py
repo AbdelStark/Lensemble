@@ -173,7 +173,9 @@ class Objective:
         if self.anchor is not None:
             anchor = self.anchor(encoder).to(torch.float32)
         else:
-            anchor = torch.zeros((), dtype=torch.float32)
+            # On the encoder's device so the weighted total stays single-device (CUDA inner loop);
+            # `pred` and `sigreg` already follow `tokens.device`.
+            anchor = torch.zeros((), dtype=torch.float32, device=tokens.device)
 
         total = (
             self.lambda_pred * pred
