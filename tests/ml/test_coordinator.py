@@ -23,6 +23,7 @@ runtime object, so tests/ml is its home (mirrors tests/ml/test_participant.py).
 from __future__ import annotations
 
 import dataclasses
+import gc
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -594,3 +595,48 @@ def test_probe_hash_resolved_from_pinned_probe_path(tmp_path: Path) -> None:
     # The broadcast probe_hash equals the pinned probe's content hash (not the placeholder).
     assert coord.global_state().probe_hash == probe.content_hash
     assert coord.global_state().probe_hash != b"\x00" * 32
+
+
+# --- temp-artifacts-dir cleanup (#178: the Coordinator must not leak its mkdtemp dir) ---
+
+
+def test_owned_temp_artifacts_dir_removed_when_coordinator_is_dropped() -> None:
+    # A constructed-and-dropped Coordinator (auto temp dir) leaves no lensemble-coordinator-* dir behind
+    # — the weakref.finalize removes it on GC (#178).
+    coord = Coordinator(_cfg(), transport=InProcessTransport())
+    artifacts_dir = coord._artifacts_dir  # noqa: SLF001 — assert on the owned temp dir
+    assert artifacts_dir.exists() and artifacts_dir.name.startswith(
+        "lensemble-coordinator-"
+    )
+    del coord
+    gc.collect()
+    assert not artifacts_dir.exists()  # the finalizer cleaned it up
+
+
+def test_close_removes_owned_temp_dir_idempotently() -> None:
+    coord = Coordinator(_cfg(), transport=InProcessTransport())
+    artifacts_dir = coord._artifacts_dir  # noqa: SLF001
+    coord.close()
+    assert not artifacts_dir.exists()
+    coord.close()  # idempotent — no error on a second close
+
+
+def test_context_manager_cleans_up_the_temp_dir() -> None:
+    with Coordinator(_cfg(), transport=InProcessTransport()) as coord:
+        artifacts_dir = coord._artifacts_dir  # noqa: SLF001
+        assert artifacts_dir.exists()
+    assert not artifacts_dir.exists()  # removed on __exit__
+
+
+def test_explicit_artifacts_dir_is_caller_owned_and_persists(tmp_path: Path) -> None:
+    # A caller-provided artifacts_dir is never removed by close()/GC (it holds the committed checkpoints).
+    run_dir = tmp_path / "run-artifacts"
+    coord = Coordinator(_cfg(), transport=InProcessTransport(), artifacts_dir=run_dir)
+    assert coord._artifacts_dir == run_dir and run_dir.exists()  # noqa: SLF001
+    assert (
+        run_dir / "round-00000"
+    ).exists()  # round-0 committed here, not in a temp dir
+    coord.close()
+    del coord
+    gc.collect()
+    assert run_dir.exists()  # caller-owned: persists
