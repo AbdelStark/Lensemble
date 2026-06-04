@@ -25,6 +25,7 @@ from torch import Tensor, nn
 from lensemble.contracts import WMCP_VERSION, ActionKind, ActionSpec
 from lensemble.contracts.conformance import validate_action_spec
 from lensemble.errors import ConfigError, EvaluationError, LensembleErrorCode
+from lensemble.model.numerics import apply_numerics, resolve_device
 
 
 class ActionHead(nn.Module):
@@ -150,4 +151,9 @@ def build_action_head(cfg: Any, spec: ActionSpec) -> ActionHead:
                 code=LensembleErrorCode.CONFIG_INVALID,
                 remediation="a discrete action dimension needs at least two categories",
             )
-    return ActionHead(spec, cond_dim=cond_dim)
+    head = ActionHead(spec, cond_dim=cond_dim)
+    # Place the head on the compute device, consistent with build_encoder/build_predictor — the federated
+    # inner loop conditions the CUDA-resident predictor with this head, so a CPU head would crash the
+    # action-embedding matmul (mat1 cuda vs weight cpu). A no-op on the CPU fallback.
+    apply_numerics(head, resolve_device())
+    return head
