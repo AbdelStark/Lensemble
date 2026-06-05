@@ -57,7 +57,24 @@ Render the current experiment matrix with:
 uv run --extra dev python scripts/phase2_matrix.py --format markdown
 ```
 
-Start every expensive run with `--dry-run` and a pinned SHA. A representative GPU command is:
+Smoke-test mounted dataset refs before starting a GPU job:
+
+```bash
+uv run --extra dev python scripts/phase2_dataset_smoke.py \
+  --data-source lerobot-h5:///data/a/<silo-a>.h5 \
+  --data-source lerobot-h5:///data/b/<silo-b>.h5 \
+  --participant-id phase2-a \
+  --participant-id phase2-b \
+  --window-steps 4 \
+  --output phase2_dataset_smoke.json
+```
+
+The smoke report is residency-safe metadata: participant ids, adapter format,
+episode/window counts, Merkle roots, action specs, and first-window tensor
+shapes. It contains no raw observations/actions.
+
+Start every expensive run with the dataset smoke, `--dry-run`, and a pinned SHA.
+A representative GPU command is:
 
 ```bash
 hf jobs uv run --flavor h200 --timeout 2h --secrets HF_TOKEN \

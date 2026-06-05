@@ -11,6 +11,13 @@ from __future__ import annotations
 from lensemble.data.adapters import load_episodes, register_adapter, save_episodes
 from lensemble.data.dataset import EpisodeDataset
 from lensemble.data.episode import Episode, Transition, Window
+from lensemble.data.phase2 import (
+    PHASE2_DATASET_SMOKE_SCHEMA_VERSION,
+    Phase2ActionSpecEvidence,
+    Phase2DatasetSmokeReport,
+    Phase2SiloSmokeEvidence,
+    build_phase2_dataset_smoke_report,
+)
 from lensemble.data.quality import DataQualityMetadata, validate_join_precondition
 from lensemble.data.residency import EgressRole, guard_egress
 
@@ -26,4 +33,9 @@ __all__ = [
     "EgressRole",
     "DataQualityMetadata",
     "validate_join_precondition",
+    "PHASE2_DATASET_SMOKE_SCHEMA_VERSION",
+    "Phase2ActionSpecEvidence",
+    "Phase2SiloSmokeEvidence",
+    "Phase2DatasetSmokeReport",
+    "build_phase2_dataset_smoke_report",
 ]
