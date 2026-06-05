@@ -538,8 +538,18 @@ def test_lerobot_h5_two_silo_federated_round_uses_default_data_hooks(
     assert {p.participant_id: p.dataset_root for p in report.participants} == records[
         -1
     ].dataset_roots
+    assert len(report.round_metrics) == 1
+    assert report.round_metrics[0].round_index == records[-1].round_index
+    assert report.round_metrics[0].global_model_hash == records[-1].global_model_hash
+    assert report.round_metrics[0].dataset_roots == records[-1].dataset_roots
     restored = parse_claim_mvp_report(report.model_dump(mode="json"))
     assert restored == report
+    legacy_raw = report.model_dump(mode="json")
+    legacy_raw["schema_version"] = 1
+    legacy_raw.pop("round_metrics")
+    legacy_report = parse_claim_mvp_report(legacy_raw)
+    assert legacy_report.schema_version == 1
+    assert legacy_report.round_metrics == ()
 
     launcher = _load_hfjob_launcher()
     metrics = launcher._claim_metrics(

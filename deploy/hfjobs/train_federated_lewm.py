@@ -39,6 +39,7 @@ from lensemble.data.probe import build_probe, load_probe, save_probe
 from lensemble.eval import (
     ClaimMetricEvidence,
     ClaimPublicationEvidence,
+    ClaimRoundMetricEvidence,
     build_claim_mvp_report,
 )
 from lensemble.federation import (
@@ -611,6 +612,7 @@ def main() -> None:
         coord_cfg, transport=transport, artifacts_dir=out_dir / "artifacts"
     )
     updates: dict[str, Any] = {}
+    round_metric_series: list[ClaimRoundMetricEvidence] = []
     round_state: RoundState | str = "dry_run"
     if not args.dry_run:
         for _ in range(args.num_rounds):
@@ -634,6 +636,26 @@ def main() -> None:
                     update=update,
                 )
             round_state = coordinator.try_round()
+            round_metric_series.append(
+                ClaimRoundMetricEvidence(
+                    round_index=int(state.round_index),
+                    round_state=(
+                        round_state.value
+                        if isinstance(round_state, RoundState)
+                        else str(round_state)
+                    ),
+                    global_model_hash=coordinator.global_state_hash(),
+                    participant_ids=tuple(sorted(updates)),
+                    dataset_roots={
+                        participant_id: update.dataset_root.hex()
+                        for participant_id, update in sorted(updates.items())
+                    },
+                    update_l2_norms={
+                        participant_id: float(update.l2_norm)
+                        for participant_id, update in sorted(updates.items())
+                    },
+                )
+            )
             if round_state is not RoundState.CLOSED:
                 break
 
@@ -653,6 +675,7 @@ def main() -> None:
         participant_sources=sources,
         round_state=round_state,
         metrics=metrics,
+        round_metrics=round_metric_series,
         publication=_publication(args, out_dir),
     )
     report_path.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
@@ -666,6 +689,7 @@ def main() -> None:
             participant_sources=sources,
             round_state=round_state,
             metrics=metrics,
+            round_metrics=round_metric_series,
             publication=publication,
         )
         report_path.write_text(

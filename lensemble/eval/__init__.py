@@ -15,6 +15,7 @@ from .claim_mvp import (
     ClaimMVPReport,
     ClaimParticipantEvidence,
     ClaimPublicationEvidence,
+    ClaimRoundMetricEvidence,
     build_claim_mvp_report,
     parse_claim_mvp_report,
 )
@@ -54,6 +55,7 @@ __all__ = [
     "ClaimMetricEvidence",
     "ClaimParticipantEvidence",
     "ClaimPublicationEvidence",
+    "ClaimRoundMetricEvidence",
     "CLAIM_MVP_REPORT_SCHEMA_VERSION",
     "build_claim_mvp_report",
     "parse_claim_mvp_report",
