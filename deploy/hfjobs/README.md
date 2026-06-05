@@ -57,21 +57,30 @@ Render the current experiment matrix with:
 uv run --extra dev python scripts/phase2_matrix.py --format markdown
 ```
 
-Smoke-test mounted dataset refs before starting a GPU job:
+Split a single publishable LeRobot-H5 source into participant silos, then
+smoke-test the mounted refs before starting a GPU job:
 
 ```bash
+uv run --extra dev python scripts/phase2_split_lerobot_h5.py \
+  --input /data/source/svla_so100_pickplace.h5 \
+  --output-dir /tmp/lensemble-phase2-silos \
+  --prefix phase2-so100-silo \
+  --num-silos 2
+
 uv run --extra dev python scripts/phase2_dataset_smoke.py \
-  --data-source lerobot-h5:///data/a/<silo-a>.h5 \
-  --data-source lerobot-h5:///data/b/<silo-b>.h5 \
+  --data-source lerobot-h5:///tmp/lensemble-phase2-silos/phase2-so100-silo0.h5 \
+  --data-source lerobot-h5:///tmp/lensemble-phase2-silos/phase2-so100-silo1.h5 \
   --participant-id phase2-a \
   --participant-id phase2-b \
   --window-steps 4 \
   --output phase2_dataset_smoke.json
 ```
 
-The smoke report is residency-safe metadata: participant ids, adapter format,
-episode/window counts, Merkle roots, action specs, and first-window tensor
-shapes. It contains no raw observations/actions.
+The split policy is deterministic episode-level modulo assignment (`episode k →
+k % num_silos`) and writes a manifest with source/output hashes and selected
+source episode ids. The smoke report is residency-safe metadata: participant
+ids, adapter format, episode/window counts, Merkle roots, action specs, and
+first-window tensor shapes. It contains no raw observations/actions.
 
 Start every expensive run with the dataset smoke, `--dry-run`, and a pinned SHA.
 A representative GPU command is:

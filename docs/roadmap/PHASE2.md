@@ -45,18 +45,29 @@ uv run --extra dev python scripts/phase2_matrix.py --format json
 Dataset refs must pass the participant-silo smoke gate before a GPU run starts:
 
 ```bash
+uv run --extra dev python scripts/phase2_split_lerobot_h5.py \
+  --input /data/source/svla_so100_pickplace.h5 \
+  --output-dir /tmp/lensemble-phase2-silos \
+  --prefix phase2-so100-silo \
+  --num-silos 2
+
 uv run --extra dev python scripts/phase2_dataset_smoke.py \
-  --data-source lerobot-h5:///data/a/<silo-a>.h5 \
-  --data-source lerobot-h5:///data/b/<silo-b>.h5 \
+  --data-source lerobot-h5:///tmp/lensemble-phase2-silos/phase2-so100-silo0.h5 \
+  --data-source lerobot-h5:///tmp/lensemble-phase2-silos/phase2-so100-silo1.h5 \
   --participant-id phase2-a \
   --participant-id phase2-b \
   --window-steps 4 \
   --output phase2_dataset_smoke.json
 ```
 
-The JSON report records participant ids, adapter format, episode/window counts,
-dataset Merkle roots, action specs, and first-window tensor shapes. It does not
-serialize raw observations, raw actions, or private embeddings.
+The split policy is deterministic episode-level modulo assignment: source
+episode `k` goes to silo `k % num_silos`, frames are never duplicated, and each
+output HDF5 remaps `episode_index` to local 0-based ids. The split manifest
+records the source hash, output hashes, selected source episode ids, frame
+counts, and file paths. The smoke JSON report records participant ids, adapter
+format, episode/window counts, dataset Merkle roots, action specs, and
+first-window tensor shapes. It does not serialize raw observations, raw actions,
+or private embeddings.
 
 ## Minimum Evidence Contract
 
