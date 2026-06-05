@@ -27,6 +27,18 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:federation` / `area:docs`: **Phase 3 final evidence bundle and
+  model card** (#230) — `lensemble.federation.Phase3EvidenceBundle` aggregates
+  the run-specific consortium manifest, dataset/probe registry, long-run
+  training report, aggregation/privacy rows, observability/dropout report,
+  eval/control report, final checkpoint header/weights hashes, publication
+  targets, and generated model-card text. `scripts/phase3_bundle.py`
+  materializes the run-specific manifest/registry, verifies every referenced
+  local artifact exists before writing a success bundle, and emits
+  `docs/evidence/phase3_evidence_bundle.json` plus
+  `docs/evidence/phase3_model_card.md` with explicit non-claims for provenance
+  ledger implementation, cryptographic honest-computation proof, paper-scale
+  LeWorldModel performance, and public SO-100 task success.
 - `area:federation` / `area:observability`: **Phase 3 consortium
   observability and dropout report** (#229) —
   `lensemble.federation.Phase3ObservabilityReport` links participant lifecycle
