@@ -21,9 +21,10 @@ set its ``compute_dtype``; ``Encoder.forward``/``Predictor.forward`` run their c
 from __future__ import annotations
 
 from contextlib import contextmanager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import torch
+from torch import Tensor
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -54,6 +55,26 @@ def apply_numerics(module: nn.Module, device: torch.device) -> None:
     """Place ``module`` on ``device`` and record its forward ``compute_dtype`` (called by ``build_*``)."""
     module.to(device)
     module.compute_dtype = forward_dtype(device)  # type: ignore[assignment]
+
+
+def module_input_tensor(module: Any, tensor: Tensor) -> Tensor:
+    """Move floating model inputs to the module's parameter device and dtype.
+
+    Public probes can be stored as bf16 tensors, but the model contract keeps master weights in fp32 and
+    relies on forward autocast for bf16 compute. Feed fp32 weights with fp32 inputs; autocast can then choose
+    the compute dtype without Conv3D seeing a pre-cast bf16 input against an fp32 bias.
+    """
+    try:
+        ref = next(
+            parameter
+            for parameter in module.parameters()
+            if parameter.is_floating_point()
+        )
+    except StopIteration:
+        return tensor
+    if torch.is_floating_point(tensor):
+        return tensor.to(device=ref.device, dtype=ref.dtype)
+    return tensor.to(device=ref.device)
 
 
 @contextmanager

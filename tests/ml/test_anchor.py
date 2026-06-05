@@ -120,6 +120,20 @@ def test_loss_is_zero_dim_fp32(synthetic_probe: SimpleNamespace) -> None:
     assert value.ndim == 0 and value.dtype == torch.float32
 
 
+def test_loss_accepts_bfloat16_probe_points(synthetic_probe: SimpleNamespace) -> None:
+    f_ref = _RefEncoder().eval()
+    probe = SimpleNamespace(
+        points=synthetic_probe.points.to(torch.bfloat16),
+        landmark_idx=synthetic_probe.landmark_idx,
+    )
+    targets = f_ref(probe.points[probe.landmark_idx].to(torch.float32)).tokens.detach()
+    anchor = FrameAnchor(probe, targets, probe_hash=_hash(probe))
+
+    value = anchor.loss(f_ref)
+
+    assert value.ndim == 0 and value.dtype == torch.float32
+
+
 def test_k_less_than_d_is_rejected() -> None:
     # only 3 landmarks for d=8 -> the frame is under-determined -> fail closed at construction
     probe = SimpleNamespace(points=torch.randn(16, _D), landmark_idx=torch.arange(3))

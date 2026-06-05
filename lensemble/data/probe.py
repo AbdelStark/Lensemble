@@ -16,7 +16,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import torch
 from safetensors import safe_open
@@ -86,7 +86,7 @@ def build_probe(
     except StopIteration:  # pragma: no cover - f_ref always carries parameters
         device = points.device
     points = points.to(device)
-    landmarks = points[landmark_idx]
+    landmarks = _reference_input_tensor(f_ref, points[landmark_idx])
     targets = f_ref(landmarks).tokens.detach()
     return PublicProbe(
         points=points,
@@ -95,6 +95,21 @@ def build_probe(
         content_hash=probe_content_hash(points, landmark_idx),
         probe_version=probe_version,
     )
+
+
+def _reference_input_tensor(module: Any, tensor: Tensor) -> Tensor:
+    """Cast temporary reference-forward inputs without changing the pinned probe tensor."""
+    try:
+        ref = next(
+            parameter
+            for parameter in module.parameters()
+            if parameter.is_floating_point()
+        )
+    except StopIteration:
+        return tensor
+    if torch.is_floating_point(tensor):
+        return tensor.to(device=ref.device, dtype=ref.dtype)
+    return tensor.to(device=ref.device)
 
 
 def reanchor_probe(

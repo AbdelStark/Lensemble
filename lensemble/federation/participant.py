@@ -58,6 +58,7 @@ from lensemble.model.encoder import (
     encoder_content_hash,
     snapshot_reference,
 )
+from lensemble.model.numerics import module_input_tensor
 from lensemble.model.objective import AnchorTerm, Objective
 from lensemble.model.predictor import Predictor, build_predictor
 from lensemble.model.sigreg import build_sketch
@@ -437,7 +438,7 @@ class Participant:
         anchor: AnchorTerm | None = None
         if float(o.lambda_anc) > 0.0:
             f_ref = snapshot_reference(encoder)
-            landmarks = probe.points[probe.landmark_idx]
+            landmarks = module_input_tensor(f_ref, probe.points[probe.landmark_idx])
             ref_embeddings = f_ref(landmarks).tokens.detach()
             anchor_obj = FrameAnchor(
                 probe,
@@ -599,7 +600,7 @@ def train_local(
     if float(o.lambda_anc) > 0.0:
         probe = site._pinned_probe()
         f_ref = snapshot_reference(encoder)
-        landmarks = probe.points[probe.landmark_idx]
+        landmarks = module_input_tensor(f_ref, probe.points[probe.landmark_idx])
         ref_embeddings = f_ref(landmarks).tokens.detach()
         anchor = FrameAnchor(
             probe,

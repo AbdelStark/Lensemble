@@ -56,6 +56,7 @@ from lensemble.model import (
     sigreg_statistic,
 )
 from lensemble.model.encoder import build_encoder, snapshot_reference
+from lensemble.model.numerics import module_input_tensor
 
 
 @dataclass(frozen=True)
@@ -461,11 +462,7 @@ def _apply_theta_delta(
 
 
 def _probe_embedding(encoder: Any, probe: Any) -> torch.Tensor:
-    try:
-        device = next(encoder.parameters()).device
-    except StopIteration:  # pragma: no cover - encoders used here have parameters
-        device = probe.points.device
-    encoded = encoder(probe.points.to(device))
+    encoded = encoder(module_input_tensor(encoder, probe.points))
     return encoded.tokens.reshape(-1, encoded.tokens.shape[-1]).detach().cpu()
 
 
