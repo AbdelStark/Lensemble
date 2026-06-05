@@ -40,6 +40,11 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
   output hashes, selected source episode ids, frame counts, and paths. The splitter copies row-aligned HDF5
   datasets in chunks so larger camera stacks can be prepared for Phase 2 without materializing the full
   source in memory.
+- `area:data` / `area:docs`: **Published Phase 2 SO-100 data refs** (#201) — README, the Phase 2 roadmap,
+  and the HF Jobs runbook now record `abdelstark/lensemble-phase2-so100-silos` revision
+  `97336927606fea6fbfda308bb7cee6e7b48999fa`, the two participant HDF5 file refs, dataset roots, window
+  counts, source/license provenance, adapter normalization, and the declared held-out episode policy for
+  downstream evaluation.
 - `area:eval` / `area:docs`: **Phase 2 empirical evidence matrix and roadmap** (#200, #203, #204) —
   `lensemble.eval.Phase2MatrixRow`, `default_phase2_matrix`, and `render_phase2_matrix_markdown` define
   the reviewer-facing Phase 2 experiment matrix: dataset refs, GPU HF Jobs, downstream eval,
