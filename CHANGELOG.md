@@ -27,6 +27,19 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:federation` / `area:observability`: **Phase 3 consortium
+  observability and dropout report** (#229) —
+  `lensemble.federation.Phase3ObservabilityReport` links participant lifecycle
+  events, round states, event-index timing, released-update communication
+  volume, dropout/retry decisions, aggregation/privacy mode, artifact
+  publication status, and training/eval metric cross-references to run ids,
+  participant ids, config hashes, checkpoint hashes, and source-report hashes.
+  `scripts/phase3_observability_report.py` generates or validates
+  `docs/evidence/phase3_observability_report.json` and runs a deterministic
+  induced-dropout smoke where one of four participant agents drops while the
+  remaining quorum closes the round. The report enforces a fail-closed
+  redaction contract for raw data, raw actions, latents, embeddings, private
+  action-head weights, model tokens, secrets, and sensitive host-local paths.
 - `area:eval` / `area:docs`: **Phase 3 eval and matched-control report**
   (#228) — `lensemble.eval.Phase3EvalReport` binds completed Phase 3
   consortium-runtime metrics to checkpoint, config, run-manifest, task/env,
