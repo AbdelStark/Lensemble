@@ -37,6 +37,44 @@ By default the federated launcher runs claim-grade LeWorldModel target mode
 (`objective.target_stop_gradient=false`). Pass `--target-stop-gradient` only for the legacy detached
 target helper.
 
+The final claim-MVP job
+[`6a229653e52fdd2a02ed9125`](https://huggingface.co/jobs/abdelstark/6a229653e52fdd2a02ed9125) published
+`claim_mvp_report.json` to `abdelstark/lensemble-claim-mvp-checkpoint` with a closed round, pushed
+artifacts, final global hash
+`cf1c99a7e94ca610daa3bfc00c99d9ee68e9e34a302a96d848508e88edf4c0d5`, and non-null
+`frame_drift_deg`.
+
+## Phase 2 Run Shape
+
+Phase 2 is tracked in [#200](https://github.com/AbdelStark/Lensemble/issues/200) and
+[`docs/roadmap/PHASE2.md`](../../docs/roadmap/PHASE2.md). It raises the evidence bar from a tiny
+claim-MVP smoke to larger participant silos, GPU-backed multi-round jobs, downstream evaluation,
+baselines/ablations, curves, and a model-card/evidence bundle.
+
+Render the current experiment matrix with:
+
+```bash
+uv run --extra dev python scripts/phase2_matrix.py --format markdown
+```
+
+Start every expensive run with `--dry-run` and a pinned SHA. A representative GPU command is:
+
+```bash
+hf jobs uv run --flavor h200 --timeout 2h --secrets HF_TOKEN \
+  --with 'lensemble @ git+https://github.com/AbdelStark/Lensemble.git@<SHA>' \
+  -v hf://datasets/<org>/<phase2-silo-a>:/data/a \
+  -v hf://datasets/<org>/<phase2-silo-b>:/data/b \
+  -d https://raw.githubusercontent.com/AbdelStark/Lensemble/<SHA>/deploy/hfjobs/train_federated_lewm.py \
+  --data-source lerobot-h5:///data/a/<silo-a>.h5 \
+  --data-source lerobot-h5:///data/b/<silo-b>.h5 \
+  --out-dir /tmp/lensemble-phase2 \
+  --image-size 224 --patch-size 14 --latent-dim 192 \
+  --depth 12 --predictor-depth 6 --num-heads 3 \
+  --probe-points 1024 --inner-horizon 4 --window-steps 4 \
+  --num-rounds 8 --metric-windows 256 \
+  --push --out-repo <org>/lensemble-phase2-checkpoint
+```
+
 ## Single-Site Run
 
 The dataset is mounted read-only at `/data`; the script is a PEP-723 uv script with inline deps:
