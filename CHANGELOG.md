@@ -50,6 +50,10 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
   and the default participant inner loop materializes only the bounded prefix it can consume for
   `inner_horizon`. This keeps published SO-100 Phase 2 silos from copying thousands of large image windows
   into memory during mount validation or short inner-loop runs.
+- `area:eval` / `area:deploy`: **Claim report v2 round metric series** (#202) —
+  `ClaimMVPReport.round_metrics` records curve-ready per-round global hashes, participant ids, dataset
+  roots, and update L2 norms for HF Jobs, while the report builder derives a minimal series from the
+  contribution ledger for non-launcher callers.
 - `area:eval` / `area:docs`: **Phase 2 empirical evidence matrix and roadmap** (#200, #203, #204) —
   `lensemble.eval.Phase2MatrixRow`, `default_phase2_matrix`, and `render_phase2_matrix_markdown` define
   the reviewer-facing Phase 2 experiment matrix: dataset refs, GPU HF Jobs, downstream eval,

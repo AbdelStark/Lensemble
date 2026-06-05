@@ -10,14 +10,14 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import datetime, timezone
-from typing import Any, Literal, Mapping
+from typing import Any, Literal, Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from lensemble.config.manifest import config_hash
 from lensemble.errors import LensembleErrorCode, SchemaVersionMismatch
 
-CLAIM_MVP_REPORT_SCHEMA_VERSION = 1
+CLAIM_MVP_REPORT_SCHEMA_VERSION = 2
 ReportRoundState = Literal["closed", "aborted", "dry_run"]
 
 
@@ -60,6 +60,19 @@ class ClaimMetricEvidence(BaseModel):
     run_manifest_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
+class ClaimRoundMetricEvidence(BaseModel):
+    """Curve-ready per-round evidence for Phase 2 HF Jobs."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    round_index: int = Field(ge=0)
+    round_state: ReportRoundState
+    global_model_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    participant_ids: tuple[str, ...]
+    dataset_roots: dict[str, str]
+    update_l2_norms: dict[str, float] = Field(default_factory=dict)
+
+
 class ClaimMVPReport(BaseModel):
     """Schema-versioned, residency-safe report for the end-to-end federated claim MVP."""
 
@@ -81,6 +94,7 @@ class ClaimMVPReport(BaseModel):
     participants: tuple[ClaimParticipantEvidence, ...]
     ledger_records: tuple[dict[str, Any], ...]
     metrics: ClaimMetricEvidence = Field(default_factory=ClaimMetricEvidence)
+    round_metrics: tuple[ClaimRoundMetricEvidence, ...] = ()
     publication: ClaimPublicationEvidence = Field(
         default_factory=ClaimPublicationEvidence
     )
@@ -95,6 +109,7 @@ def build_claim_mvp_report(
     participant_sources: Mapping[str, str],
     round_state: Any,
     metrics: ClaimMetricEvidence | None = None,
+    round_metrics: Sequence[ClaimRoundMetricEvidence] | None = None,
     publication: ClaimPublicationEvidence | None = None,
     created_at: datetime | None = None,
 ) -> ClaimMVPReport:
@@ -143,8 +158,27 @@ def build_claim_mvp_report(
         participants=tuple(participants),
         ledger_records=tuple(r.model_dump(mode="json") for r in records),
         metrics=metrics or ClaimMetricEvidence(),
+        round_metrics=tuple(round_metrics)
+        if round_metrics is not None
+        else _round_metrics_from_records(records),
         publication=publication or ClaimPublicationEvidence(),
         created_at=created_at or datetime.now(timezone.utc),
+    )
+
+
+def _round_metrics_from_records(
+    records: Sequence[Any],
+) -> tuple[ClaimRoundMetricEvidence, ...]:
+    """Derive a minimal curve-ready series from contribution-ledger records."""
+    return tuple(
+        ClaimRoundMetricEvidence(
+            round_index=int(record.round_index),
+            round_state="closed",
+            global_model_hash=str(record.global_model_hash),
+            participant_ids=tuple(record.participants),
+            dataset_roots=dict(record.dataset_roots),
+        )
+        for record in records
     )
 
 

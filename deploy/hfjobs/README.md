@@ -140,7 +140,10 @@ on the SO-100 set runs in ~5 min. Omit `--out-repo` to skip the checkpoint push.
 Each eval prints `val_pred` (held-out next-latent prediction), `val_sigreg`, and **`eff_rank`** — the
 effective rank of the embedding covariance (`exp(entropy of eigenvalues)`). `eff_rank ≈ 1–3 / d` means
 the representation has **collapsed** (prediction is trivially low); a healthy run keeps a large fraction
-of `d`.
+of `d`. Multi-round federated reports also include `round_metrics`: one record
+per attempted round with the post-round global hash, participant ids, dataset
+roots, and update L2 norms, so Phase 2 runs can generate curve-ready
+round/update-norm tables without exposing raw data.
 
 ## Anti-collapse (#184) — use `--lambda-anc`
 
