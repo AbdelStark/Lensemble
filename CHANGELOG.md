@@ -43,6 +43,13 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
   `cfg.data.data_source`. A new e2e smoke writes two deterministic LeRobot-H5 silos, runs the un-subclassed
   `Participant` + `Coordinator` in claim mode (`objective.target_stop_gradient=false`), commits the round,
   and asserts both participants' distinct dataset roots enter the contribution ledger.
+- `area:eval` / `area:deploy`: **claim-MVP evidence hardening** (#192, #194, #196) — claim reports now
+  include scalar metric slots (`val_pred`, `val_sigreg`, `effective_rank`, `frame_drift_deg`, and a
+  launcher-input hash), and the HF Jobs federated launcher populates the available validation metrics from
+  the final committed checkpoint over a bounded window sample. New LeWorldModel contract tests assert
+  action `a_t -> z_{t+1}` alignment, no future transition-row leakage in the predictor batch path, and a
+  SIGReg low-rank/zero-latent collapse guard. The README now links the published claim-MVP HF job,
+  datasets, checkpoint/report repo, final checkpoint hash, and the remaining limitations.
 - `area:eval`: **Non-IID severity, C/H, and scale sweeps — Claim 4 (robustness)** (RFC-0005 §7; #56) — the
   three §7 robustness sweeps run **over** the §6 ladder rungs, reusing #55's runner (`run_ablation_ladder`)
   and harness (`run_federated_simulation`). Split across the RFC-0001 §3 band (eval may not import
