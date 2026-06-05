@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import hashlib
 import json
 import os
 from dataclasses import dataclass
@@ -30,11 +31,13 @@ from typing import Any
 
 import torch
 
+from lensemble.artifacts import load_checkpoint
 from lensemble.config import LensembleConfig
-from lensemble.contracts import WMCP_VERSION
+from lensemble.contracts import WMCP_VERSION, LatentState
 from lensemble.data.adapters import load_episodes
 from lensemble.data.probe import build_probe, save_probe
 from lensemble.eval import (
+    ClaimMetricEvidence,
     ClaimPublicationEvidence,
     build_claim_mvp_report,
 )
@@ -43,6 +46,12 @@ from lensemble.federation import (
     InProcessTransport,
     Participant,
     RoundState,
+)
+from lensemble.model import (
+    build_action_head,
+    build_predictor,
+    build_sketch,
+    sigreg_statistic,
 )
 from lensemble.model.encoder import build_encoder, snapshot_reference
 
@@ -112,6 +121,12 @@ def _args() -> argparse.Namespace:
     parser.add_argument("--predictor-depth", type=int, default=8)
     parser.add_argument("--num-heads", type=int, default=6)
     parser.add_argument("--mlp-ratio", type=float, default=4.0)
+    parser.add_argument(
+        "--metric-windows",
+        type=int,
+        default=32,
+        help="Maximum windows used for scalar report metrics.",
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--push", action="store_true")
     parser.add_argument(
@@ -357,6 +372,100 @@ def _push_report(args: argparse.Namespace, report_path: Path) -> None:
     )
 
 
+def _effective_rank(embeddings: torch.Tensor) -> float:
+    x = embeddings.reshape(-1, embeddings.shape[-1]).to(torch.float32)
+    x = x - x.mean(dim=0, keepdim=True)
+    cov = (x.T @ x) / max(1, x.shape[0] - 1)
+    ev = torch.linalg.eigvalsh(cov).clamp_min(1e-12)
+    p = ev / ev.sum()
+    return float(torch.exp(-(p * p.log()).sum()))
+
+
+def _launcher_inputs_hash(out_dir: Path) -> str | None:
+    path = out_dir / "launcher_inputs.json"
+    if not path.exists():
+        return None
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _load_final_models(cfg: LensembleConfig, checkpoint_dir: Path) -> tuple[Any, Any]:
+    weights, _header = load_checkpoint(checkpoint_dir)
+    encoder = build_encoder(cfg).eval()
+    predictor = build_predictor(cfg).eval()
+    encoder.load_state_dict(
+        {
+            k.removeprefix("encoder."): v
+            for k, v in weights.items()
+            if k.startswith("encoder.")
+        },
+        strict=True,
+    )
+    predictor.load_state_dict(
+        {
+            k.removeprefix("predictor."): v
+            for k, v in weights.items()
+            if k.startswith("predictor.")
+        },
+        strict=True,
+    )
+    return encoder, predictor
+
+
+def _claim_metrics(
+    args: argparse.Namespace,
+    cfg: LensembleConfig,
+    *,
+    out_dir: Path,
+    committed_rounds: int,
+) -> ClaimMetricEvidence:
+    if args.dry_run or committed_rounds <= 0:
+        return ClaimMetricEvidence(run_manifest_hash=_launcher_inputs_hash(out_dir))
+    checkpoint_dir = out_dir / "artifacts" / f"round-{committed_rounds:05d}"
+    encoder, predictor = _load_final_models(cfg, checkpoint_dir)
+    sketch = build_sketch(0, int(args.latent_dim), 64)
+    pred_losses: list[float] = []
+    sigreg_losses: list[float] = []
+    embeddings: list[torch.Tensor] = []
+    remaining = max(0, int(args.metric_windows))
+    with torch.no_grad():
+        for source in args.data_source:
+            if remaining <= 0:
+                break
+            dataset = load_episodes(source, fmt=args.data_format)
+            action_head = build_action_head(cfg, dataset.episodes[0].action_spec).eval()
+            for window in dataset.windows(args.window_steps):
+                encoded = encoder(window.obs)
+                tokens = encoded.tokens
+                input_latent = LatentState(
+                    tokens=tokens[:-1],
+                    num_tokens=encoded.num_tokens,
+                    dim=encoded.dim,
+                    wmcp_version=encoded.wmcp_version,
+                )
+                target = tokens[1:]
+                action_embedding = action_head.encode(window.actions)
+                pred_tokens = predictor(input_latent, action_embedding).tokens
+                pred_losses.append(float((pred_tokens - target).pow(2).mean()))
+                sigreg_losses.append(
+                    float(
+                        sigreg_statistic(tokens.reshape(-1, tokens.shape[-1]), sketch)
+                    )
+                )
+                embeddings.append(tokens.reshape(-1, tokens.shape[-1]).cpu())
+                remaining -= 1
+                if remaining <= 0:
+                    break
+    if not pred_losses or not embeddings:
+        return ClaimMetricEvidence(run_manifest_hash=_launcher_inputs_hash(out_dir))
+    return ClaimMetricEvidence(
+        val_pred=sum(pred_losses) / len(pred_losses),
+        val_sigreg=sum(sigreg_losses) / len(sigreg_losses),
+        effective_rank=_effective_rank(torch.cat(embeddings, dim=0)),
+        frame_drift_deg=None,
+        run_manifest_hash=_launcher_inputs_hash(out_dir),
+    )
+
+
 def main() -> None:
     args = _args()
     out_dir = Path(args.out_dir)
@@ -412,12 +521,19 @@ def main() -> None:
 
     report_path = out_dir / "claim_mvp_report.json"
     sources = dict(zip(participant_ids, args.data_source))
+    metrics = _claim_metrics(
+        args,
+        coord_cfg,
+        out_dir=out_dir,
+        committed_rounds=len(coordinator.ledger_records()),
+    )
     report = build_claim_mvp_report(
         cfg=coord_cfg,
         coordinator=coordinator,
         participant_updates=updates,
         participant_sources=sources,
         round_state=round_state,
+        metrics=metrics,
         publication=_publication(args, out_dir),
     )
     report_path.write_text(report.model_dump_json(indent=2) + "\n", encoding="utf-8")
@@ -430,6 +546,7 @@ def main() -> None:
             participant_updates=updates,
             participant_sources=sources,
             round_state=round_state,
+            metrics=metrics,
             publication=publication,
         )
         report_path.write_text(

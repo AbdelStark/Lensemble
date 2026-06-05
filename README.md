@@ -65,9 +65,32 @@ Read order for the paper: 0002 → 0005 → 0001. Read order to build: 0001 → 
 - **Project Tapestry** (AI Alliance) — the sovereignty/governance framing for federated frontier models; Lensemble is the JEPA-world-model instance of that premise.
 - **Stwo** — Circle-STARK prover for the Phase-2 aggregation-correctness proof.
 
-## Status & working assumptions
+## Implementation Status
 
-This is a v0.1 design corpus, not yet an implementation. Assumptions, all overridable:
+Lensemble now has an operational claim-MVP path in addition to the design corpus:
+
+- **Federated LeWorldModel-style training path:** claim mode sets
+  `objective.target_stop_gradient=false`, keeping the `f_theta(o_{t+1})` target branch live while using
+  prediction MSE + SIGReg + the public-probe frame anchor.
+- **Two-silo LeRobot-H5 federation:** default `Participant` hooks consume `cfg.data.data_source`,
+  produce dataset Merkle roots, release encoder/predictor pseudo-gradients only, and close a
+  `Coordinator` round.
+- **Published HF evidence bundle:** HF Job
+  [`6a228f0de52fdd2a02ed90f3`](https://huggingface.co/jobs/abdelstark/6a228f0de52fdd2a02ed90f3) ran
+  the federated launcher on `cpu-basic` and published private smoke datasets
+  `abdelstark/lensemble-claim-mvp-silo0` / `abdelstark/lensemble-claim-mvp-silo1` plus checkpoint/report
+  artifacts in `abdelstark/lensemble-claim-mvp-checkpoint`.
+
+The published `claim_mvp_report.json` records `round_state=closed`, `publication.pushed=true`,
+`blocker=None`, final global checkpoint hash
+`cf1c99a7e94ca610daa3bfc00c99d9ee68e9e34a302a96d848508e88edf4c0d5`, and distinct participant
+dataset roots. This is still a **claim MVP**, not a full paper-scale result: the current HF evidence uses
+tiny smoke silos, and the architecture/report hardening tracker remains open for richer frame-drift,
+effective-rank, and environment-scale evaluation.
+
+## Working assumptions
+
+Assumptions, all overridable:
 
 - **Goal**: a research paper plus an open reference implementation; the corpus is written to be scientifically self-contained.
 - **Fork B (end-to-end)** is the target; Fork A (frozen shared encoder) is the documented fallback if gauge control proves unstable at scale ([RFC-0002, Fork A fallback](docs/rfcs/RFC-0002-gauge-and-aggregation.md#fork-a-fallback)).

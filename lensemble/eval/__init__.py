@@ -11,6 +11,7 @@ from .ablation import (
 from .baselines import BASELINES, gap_recovery_fraction, load_baseline
 from .claim_mvp import (
     CLAIM_MVP_REPORT_SCHEMA_VERSION,
+    ClaimMetricEvidence,
     ClaimMVPReport,
     ClaimParticipantEvidence,
     ClaimPublicationEvidence,
@@ -42,6 +43,7 @@ __all__ = [
     "EVAL_REPORT_SCHEMA_VERSION",
     "parse_eval_report",
     "ClaimMVPReport",
+    "ClaimMetricEvidence",
     "ClaimParticipantEvidence",
     "ClaimPublicationEvidence",
     "CLAIM_MVP_REPORT_SCHEMA_VERSION",

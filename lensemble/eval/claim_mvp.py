@@ -48,6 +48,18 @@ class ClaimPublicationEvidence(BaseModel):
     blocker: str | None = None
 
 
+class ClaimMetricEvidence(BaseModel):
+    """Scalar metric evidence for the claim-MVP report."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    val_pred: float | None = Field(default=None, ge=0.0)
+    val_sigreg: float | None = Field(default=None, ge=0.0)
+    effective_rank: float | None = Field(default=None, ge=0.0)
+    frame_drift_deg: float | None = Field(default=None, ge=0.0)
+    run_manifest_hash: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
 class ClaimMVPReport(BaseModel):
     """Schema-versioned, residency-safe report for the end-to-end federated claim MVP."""
 
@@ -68,6 +80,7 @@ class ClaimMVPReport(BaseModel):
     participant_count_configured: int = Field(ge=1)
     participants: tuple[ClaimParticipantEvidence, ...]
     ledger_records: tuple[dict[str, Any], ...]
+    metrics: ClaimMetricEvidence = Field(default_factory=ClaimMetricEvidence)
     publication: ClaimPublicationEvidence = Field(
         default_factory=ClaimPublicationEvidence
     )
@@ -81,6 +94,7 @@ def build_claim_mvp_report(
     participant_updates: Mapping[str, Any],
     participant_sources: Mapping[str, str],
     round_state: Any,
+    metrics: ClaimMetricEvidence | None = None,
     publication: ClaimPublicationEvidence | None = None,
     created_at: datetime | None = None,
 ) -> ClaimMVPReport:
@@ -128,6 +142,7 @@ def build_claim_mvp_report(
         participant_count_configured=int(cfg.federation.participant_count),
         participants=tuple(participants),
         ledger_records=tuple(r.model_dump(mode="json") for r in records),
+        metrics=metrics or ClaimMetricEvidence(),
         publication=publication or ClaimPublicationEvidence(),
         created_at=created_at or datetime.now(timezone.utc),
     )
