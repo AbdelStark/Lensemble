@@ -69,6 +69,17 @@ def test_probe_build_and_forward_are_device_consistent(device: str) -> None:
     assert probe.content_hash == probe_content_hash(points.cpu(), torch.arange(4))
 
 
+def test_build_probe_accepts_bfloat16_points_with_float32_reference() -> None:
+    _, f_ref = _f_ref()
+    points = _points().to(torch.bfloat16)
+
+    probe = build_probe(points, torch.arange(4), f_ref)
+
+    assert probe.points.dtype == torch.bfloat16
+    assert probe.landmark_targets.dtype == torch.float32
+    assert probe.content_hash == probe_content_hash(points, torch.arange(4))
+
+
 def test_verify_rejects_mismatched_hash() -> None:
     _, f_ref = _f_ref()
     probe = build_probe(_points(), torch.arange(4), f_ref)

@@ -22,6 +22,7 @@ from torch import Tensor
 from lensemble.data.probe import probe_content_hash
 from lensemble.errors import FrameDriftExceeded, LensembleErrorCode, ProbeError
 from lensemble.gauge.procrustes import procrustes_align
+from lensemble.model.numerics import module_input_tensor
 
 if TYPE_CHECKING:
     from lensemble.model.objective import _EncoderLike  # structural encoder protocol
@@ -90,7 +91,9 @@ class FrameAnchor:
         free, with gradients flowing through the differentiable SVD into ``f_theta``. A near-degenerate
         SVD raises :class:`~lensemble.errors.DegenerateProcrustes` rather than a NaN gradient.
         """
-        landmarks = self.probe.points[self.probe.landmark_idx]
+        landmarks = module_input_tensor(
+            encoder, self.probe.points[self.probe.landmark_idx]
+        )
         predicted = encoder(landmarks).tokens.to(torch.float32)
         if self.variant == "landmark":
             return (predicted - self.targets).pow(2).sum() / self._k
@@ -98,5 +101,5 @@ class FrameAnchor:
         rotation, _ = procrustes_align(
             predicted.reshape(-1, self._d), self.targets.reshape(-1, self._d)
         )
-        identity = torch.eye(self._d, dtype=rotation.dtype)
+        identity = torch.eye(self._d, dtype=rotation.dtype, device=rotation.device)
         return (rotation - identity).pow(2).sum()

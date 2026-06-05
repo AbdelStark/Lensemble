@@ -387,6 +387,32 @@ def test_local_round_returns_well_formed_pseudogradient() -> None:
     assert pg.delta.dtype == torch.float32
 
 
+def test_local_round_accepts_bfloat16_probe_points() -> None:
+    cfg = _cfg()
+    base_probe = _build_probe()
+    probe_points = base_probe.points.to(torch.bfloat16)
+    probe = PublicProbe(
+        points=probe_points,
+        landmark_idx=base_probe.landmark_idx,
+        landmark_targets=base_probe.landmark_targets,
+        content_hash=probe_content_hash(probe_points, base_probe.landmark_idx),
+        probe_version=base_probe.probe_version,
+    )
+    transport, gs, _, _ = _seed_transport(cfg, probe, sketch_seed=7)
+    p = _TestParticipant(
+        cfg,
+        participant_id="c-bf16-probe",
+        transport=transport,
+        probe=probe,
+        windows=_build_windows(),
+    )
+
+    pg = p.local_round(gs, round_seed=7)
+
+    assert pg.clipped is True
+    assert bool(torch.isfinite(pg.delta).all())
+
+
 def test_action_head_group_cannot_enter_the_released_delta() -> None:
     # The released delta covers only (θ, φ); injecting an action_head.* group into build_pseudogradient
     # is rejected fail-closed (INV-ACTIONHEAD-LOCAL) — proving the head can never be federated.
