@@ -82,17 +82,34 @@ source episode ids. The smoke report is residency-safe metadata: participant
 ids, adapter format, episode/window counts, Merkle roots, action specs, and
 first-window tensor shapes. It contains no raw observations/actions.
 
+The published Phase 2 SO-100 refs are in
+[`abdelstark/lensemble-phase2-so100-silos`](https://huggingface.co/datasets/abdelstark/lensemble-phase2-so100-silos)
+at revision `97336927606fea6fbfda308bb7cee6e7b48999fa`:
+
+- `phase2-so100-a`: `phase2-so100-silo0.h5`, 25 episodes, 3149 windows at
+  `window_steps=4`, dataset root
+  `df4dceed9ee55b95f2827f8b02ec3aa6b86a02421052eb84cfd96b41d7947c0a`.
+- `phase2-so100-b`: `phase2-so100-silo1.h5`, 25 episodes, 3210 windows at
+  `window_steps=4`, dataset root
+  `ce6a42bab6edbdefd47f53f4cfc306cb4ed3db84d9f8ac8f7fcb2adc103c7b52`.
+
+The current adapter reads `observation/pixels_top`, decodes uint8 frames to
+`[0,1]` float clips, and uses the continuous `lerobot-6dof` action spec. The
+declared held-out policy reserves the final local episode in each silo for #206
+evaluation (`source_episode=48` and `49` respectively).
+
 Start every expensive run with the dataset smoke, `--dry-run`, and a pinned SHA.
 A representative GPU command is:
 
 ```bash
 hf jobs uv run --flavor h200 --timeout 2h --secrets HF_TOKEN \
   --with 'lensemble @ git+https://github.com/AbdelStark/Lensemble.git@<SHA>' \
-  -v hf://datasets/<org>/<phase2-silo-a>:/data/a \
-  -v hf://datasets/<org>/<phase2-silo-b>:/data/b \
+  -v hf://datasets/abdelstark/lensemble-phase2-so100-silos:/data/phase2 \
   -d https://raw.githubusercontent.com/AbdelStark/Lensemble/<SHA>/deploy/hfjobs/train_federated_lewm.py \
-  --data-source lerobot-h5:///data/a/<silo-a>.h5 \
-  --data-source lerobot-h5:///data/b/<silo-b>.h5 \
+  --data-source lerobot-h5:///data/phase2/phase2-so100-silo0.h5 \
+  --data-source lerobot-h5:///data/phase2/phase2-so100-silo1.h5 \
+  --participant-id phase2-so100-a \
+  --participant-id phase2-so100-b \
   --out-dir /tmp/lensemble-phase2 \
   --image-size 224 --patch-size 14 --latent-dim 192 \
   --depth 12 --predictor-depth 6 --num-heads 3 \

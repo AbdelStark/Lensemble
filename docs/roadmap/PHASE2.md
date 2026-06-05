@@ -69,6 +69,42 @@ format, episode/window counts, dataset Merkle roots, action specs, and
 first-window tensor shapes. It does not serialize raw observations, raw actions,
 or private embeddings.
 
+## Published Phase 2 Data Refs
+
+The first Phase 2 dataset refs are published at
+[`abdelstark/lensemble-phase2-so100-silos`](https://huggingface.co/datasets/abdelstark/lensemble-phase2-so100-silos)
+revision `97336927606fea6fbfda308bb7cee6e7b48999fa`:
+
+| Participant | File ref | Episodes | Windows (`window_steps=4`) | Dataset root |
+|---|---|---:|---:|---|
+| `phase2-so100-a` | `hf://datasets/abdelstark/lensemble-phase2-so100-silos/phase2-so100-silo0.h5` | 25 | 3149 | `df4dceed9ee55b95f2827f8b02ec3aa6b86a02421052eb84cfd96b41d7947c0a` |
+| `phase2-so100-b` | `hf://datasets/abdelstark/lensemble-phase2-so100-silos/phase2-so100-silo1.h5` | 25 | 3210 | `ce6a42bab6edbdefd47f53f4cfc306cb4ed3db84d9f8ac8f7fcb2adc103c7b52` |
+
+Source/provenance:
+
+- derived from `abdelstark/so100-pickplace-lewm-ready/svla_so100_pickplace.h5`
+  at revision `c210cb2f37b42954d31a17027e142c4cbdc7f7f8`;
+- upstream HDF5 attrs identify `lerobot/svla_so100_pickplace` at revision
+  `3d6d687a25cdf1565cdf24550814f72d999a861d`;
+- upstream Hub metadata is public, ungated, and tagged `license:apache-2.0`;
+- source SHA-256:
+  `9dbeba303311d61a0129a6dcf3d0196524e7d8f58bb823e05dde0101546535ed`;
+- silo file SHA-256 values are recorded in
+  `phase2_silo_manifest.json` in the dataset repo.
+
+Data contract:
+
+- accepted format: `lerobot-h5`;
+- camera/windowing: the current adapter reads `observation/pixels_top`,
+  decodes uint8 frames to `[0,1]` float clips of shape `(1, 3, 224, 224)`,
+  and produces windows with observation shape `(5, 1, 3, 224, 224)` for
+  `window_steps=4`;
+- action spec: continuous `lerobot-6dof`, action shape `(4, 6)`;
+- declared held-out split policy for #206: the final local episode in each
+  silo is reserved for held-out evaluation (`source_episode=48` for
+  `phase2-so100-a`, `source_episode=49` for `phase2-so100-b`); train/eval
+  reports must record whether they honor or intentionally override this split.
+
 ## Minimum Evidence Contract
 
 Before #200 closes, the final report must include:
@@ -90,11 +126,12 @@ dry-run before any expensive run:
 ```bash
 hf jobs uv run --flavor h200 --timeout 2h --secrets HF_TOKEN \
   --with 'lensemble @ git+https://github.com/AbdelStark/Lensemble.git@<SHA>' \
-  -v hf://datasets/<org>/<phase2-silo-a>:/data/a \
-  -v hf://datasets/<org>/<phase2-silo-b>:/data/b \
+  -v hf://datasets/abdelstark/lensemble-phase2-so100-silos:/data/phase2 \
   -d https://raw.githubusercontent.com/AbdelStark/Lensemble/<SHA>/deploy/hfjobs/train_federated_lewm.py \
-  --data-source lerobot-h5:///data/a/<silo-a>.h5 \
-  --data-source lerobot-h5:///data/b/<silo-b>.h5 \
+  --data-source lerobot-h5:///data/phase2/phase2-so100-silo0.h5 \
+  --data-source lerobot-h5:///data/phase2/phase2-so100-silo1.h5 \
+  --participant-id phase2-so100-a \
+  --participant-id phase2-so100-b \
   --out-dir /tmp/lensemble-phase2 \
   --image-size 224 --patch-size 14 --latent-dim 192 \
   --depth 12 --predictor-depth 6 --num-heads 3 \

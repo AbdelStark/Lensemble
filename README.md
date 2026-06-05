@@ -90,6 +90,13 @@ uses tiny smoke silos. The next empirical evidence tier is tracked in
 [#200](https://github.com/AbdelStark/Lensemble/issues/200) and
 [`docs/roadmap/PHASE2.md`](docs/roadmap/PHASE2.md).
 
+Phase 2 data refs have started landing: the public
+[`abdelstark/lensemble-phase2-so100-silos`](https://huggingface.co/datasets/abdelstark/lensemble-phase2-so100-silos)
+dataset contains two deterministic SO-100 LeRobot-H5 participant silos, their
+split manifest, and the smoke report with Merkle roots and window counts. The
+remaining Phase 2 gates are GPU multi-round jobs, downstream evaluation,
+baselines/curves, and the final model-card evidence bundle.
+
 ## Working assumptions
 
 Assumptions, all overridable:
