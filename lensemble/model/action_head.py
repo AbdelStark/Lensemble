@@ -25,7 +25,7 @@ from torch import Tensor, nn
 from lensemble.contracts import WMCP_VERSION, ActionKind, ActionSpec
 from lensemble.contracts.conformance import validate_action_spec
 from lensemble.errors import ConfigError, EvaluationError, LensembleErrorCode
-from lensemble.model.numerics import apply_numerics, resolve_device
+from lensemble.model.numerics import apply_numerics, module_input_tensor, resolve_device
 
 
 class ActionHead(nn.Module):
@@ -78,8 +78,8 @@ class ActionHead(nn.Module):
                 remediation="pass a batched action tensor whose last dim equals spec.dim",
             )
         if self.spec.kind is ActionKind.CONTINUOUS:
-            return self.mlp(actions.to(torch.float32))
-        indices = actions.to(torch.int64)
+            return self.mlp(module_input_tensor(self, actions).to(torch.float32))
+        indices = module_input_tensor(self, actions).to(torch.int64)
         out = self.embeddings[0](indices[:, 0])
         for i in range(1, self.spec.dim):
             out = out + self.embeddings[i](indices[:, i])

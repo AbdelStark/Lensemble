@@ -68,6 +68,15 @@ def test_continuous_head_encodes_to_cond_dim() -> None:
     assert torch.equal(head(torch.zeros(2, 3)), head.encode(torch.zeros(2, 3)))
 
 
+def test_continuous_head_moves_actions_to_head_device() -> None:
+    head = build_action_head(_cfg(), _continuous_spec(dim=3))
+    actions = torch.randn(5, 3, device="cpu")
+
+    out = head.encode(actions)
+
+    assert out.device == next(head.parameters()).device
+
+
 def test_cond_dim_defaults_to_model_d_when_absent() -> None:
     head = build_action_head(_cfg(cond_dim=None, d=_COND), _continuous_spec())
     assert head.cond_dim == _COND  # falls back to cfg.model.d
@@ -91,6 +100,15 @@ def test_discrete_head_sums_per_dim_embeddings() -> None:
     # the sum is the per-dim embedding contribution (independent of dtype of the input indices)
     out_float_idx = head.encode(indices.to(torch.float32))  # encode casts to int64
     assert torch.allclose(out, out_float_idx)
+
+
+def test_discrete_head_moves_actions_to_head_device() -> None:
+    head = build_action_head(_cfg(), _discrete_spec((4, 3)))
+    indices = torch.tensor([[0, 0], [3, 2], [1, 1]], device="cpu")
+
+    out = head.encode(indices)
+
+    assert out.device == next(head.parameters()).device
 
 
 def test_discrete_head_state_dict_local_is_the_local_seam() -> None:
