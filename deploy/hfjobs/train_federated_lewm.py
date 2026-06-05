@@ -27,7 +27,7 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import torch
 
@@ -35,7 +35,7 @@ from lensemble.artifacts import load_checkpoint
 from lensemble.config import LensembleConfig
 from lensemble.contracts import WMCP_VERSION, LatentState
 from lensemble.data.adapters import load_episodes
-from lensemble.data.probe import build_probe, save_probe
+from lensemble.data.probe import build_probe, load_probe, save_probe
 from lensemble.eval import (
     ClaimMetricEvidence,
     ClaimPublicationEvidence,
@@ -47,6 +47,7 @@ from lensemble.federation import (
     Participant,
     RoundState,
 )
+from lensemble.gauge import frame_drift
 from lensemble.model import (
     build_action_head,
     build_predictor,
@@ -388,27 +389,136 @@ def _launcher_inputs_hash(out_dir: Path) -> str | None:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _load_final_models(cfg: LensembleConfig, checkpoint_dir: Path) -> tuple[Any, Any]:
+def _load_checkpoint_groups(
+    checkpoint_dir: Path,
+) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
     weights, _header = load_checkpoint(checkpoint_dir)
+    theta = {
+        k.removeprefix("encoder."): v
+        for k, v in weights.items()
+        if k.startswith("encoder.")
+    }
+    phi = {
+        k.removeprefix("predictor."): v
+        for k, v in weights.items()
+        if k.startswith("predictor.")
+    }
+    return theta, phi
+
+
+def _load_final_models(cfg: LensembleConfig, checkpoint_dir: Path) -> tuple[Any, Any]:
+    theta, phi = _load_checkpoint_groups(checkpoint_dir)
     encoder = build_encoder(cfg).eval()
     predictor = build_predictor(cfg).eval()
-    encoder.load_state_dict(
-        {
-            k.removeprefix("encoder."): v
-            for k, v in weights.items()
-            if k.startswith("encoder.")
-        },
-        strict=True,
-    )
-    predictor.load_state_dict(
-        {
-            k.removeprefix("predictor."): v
-            for k, v in weights.items()
-            if k.startswith("predictor.")
-        },
-        strict=True,
-    )
+    encoder.load_state_dict(theta, strict=True)
+    predictor.load_state_dict(phi, strict=True)
     return encoder, predictor
+
+
+def _unflatten_update_delta(
+    theta_template: Mapping[str, torch.Tensor],
+    phi_template: Mapping[str, torch.Tensor],
+    flat: torch.Tensor,
+) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
+    theta: dict[str, torch.Tensor] = {}
+    phi: dict[str, torch.Tensor] = {}
+    offset = 0
+    for group, template, out in (
+        ("encoder", theta_template, theta),
+        ("predictor", phi_template, phi),
+    ):
+        for name in sorted(template):
+            ref = template[name]
+            end = offset + ref.numel()
+            if end > flat.numel():
+                raise ValueError(
+                    f"released delta ended inside {group}.{name}; expected {end} values, "
+                    f"got {flat.numel()}"
+                )
+            out[name] = flat[offset:end].reshape(ref.shape)
+            offset = end
+    if offset != flat.numel():
+        raise ValueError(
+            f"released delta has {flat.numel() - offset} trailing values after encoder/predictor groups"
+        )
+    return theta, phi
+
+
+def _apply_theta_delta(
+    theta: Mapping[str, torch.Tensor], delta: Mapping[str, torch.Tensor]
+) -> dict[str, torch.Tensor]:
+    updated: dict[str, torch.Tensor] = {}
+    for name, base in theta.items():
+        change = delta[name].to(device=base.device)
+        if torch.is_floating_point(base):
+            updated[name] = base + change.to(dtype=base.dtype)
+        else:
+            updated[name] = (
+                (base.to(torch.float32) + change).round().to(dtype=base.dtype)
+            )
+    return updated
+
+
+def _probe_embedding(encoder: Any, probe: Any) -> torch.Tensor:
+    try:
+        device = next(encoder.parameters()).device
+    except StopIteration:  # pragma: no cover - encoders used here have parameters
+        device = probe.points.device
+    encoded = encoder(probe.points.to(device))
+    return encoded.tokens.reshape(-1, encoded.tokens.shape[-1]).detach().cpu()
+
+
+def _mean_frame_drift_deg(report: Any) -> float | None:
+    angles = [pair.rotation_angle_deg for pair in report.pairs]
+    if not angles:
+        angles = list(report.drift_from_global.values())
+    if not angles:
+        return None
+    return sum(float(angle) for angle in angles) / len(angles)
+
+
+def _claim_frame_drift_deg(
+    cfg: LensembleConfig,
+    *,
+    out_dir: Path,
+    committed_rounds: int,
+    participant_updates: Mapping[str, Any],
+    final_encoder: Any,
+) -> float | None:
+    if committed_rounds <= 0 or not participant_updates:
+        return None
+    probe_path = getattr(cfg.data, "probe_path", None)
+    if probe_path is None:
+        return None
+
+    prior_round = committed_rounds - 1
+    prior_theta, prior_phi = _load_checkpoint_groups(
+        out_dir / "artifacts" / f"round-{prior_round:05d}"
+    )
+    probe = load_probe(Path(probe_path))
+    embeddings = {"global": _probe_embedding(final_encoder, probe)}
+    for participant_id, update in sorted(participant_updates.items()):
+        if int(update.round_index) != prior_round:
+            raise ValueError(
+                f"participant {participant_id!r} update is for round {update.round_index}, "
+                f"but the latest committed round expects {prior_round}"
+            )
+        theta_delta, _phi_delta = _unflatten_update_delta(
+            prior_theta, prior_phi, update.delta
+        )
+        local_encoder = build_encoder(cfg).eval()
+        local_encoder.load_state_dict(
+            _apply_theta_delta(prior_theta, theta_delta), strict=True
+        )
+        embeddings[participant_id] = _probe_embedding(local_encoder, probe)
+
+    report = frame_drift(
+        embeddings,
+        round_index=prior_round,
+        probe=probe,
+        expected_probe_hash=probe.content_hash.hex(),
+    )
+    return _mean_frame_drift_deg(report)
 
 
 def _claim_metrics(
@@ -417,6 +527,7 @@ def _claim_metrics(
     *,
     out_dir: Path,
     committed_rounds: int,
+    participant_updates: Mapping[str, Any],
 ) -> ClaimMetricEvidence:
     if args.dry_run or committed_rounds <= 0:
         return ClaimMetricEvidence(run_manifest_hash=_launcher_inputs_hash(out_dir))
@@ -457,11 +568,18 @@ def _claim_metrics(
                     break
     if not pred_losses or not embeddings:
         return ClaimMetricEvidence(run_manifest_hash=_launcher_inputs_hash(out_dir))
+    frame_drift_deg = _claim_frame_drift_deg(
+        cfg,
+        out_dir=out_dir,
+        committed_rounds=committed_rounds,
+        participant_updates=participant_updates,
+        final_encoder=encoder,
+    )
     return ClaimMetricEvidence(
         val_pred=sum(pred_losses) / len(pred_losses),
         val_sigreg=sum(sigreg_losses) / len(sigreg_losses),
         effective_rank=_effective_rank(torch.cat(embeddings, dim=0)),
-        frame_drift_deg=None,
+        frame_drift_deg=frame_drift_deg,
         run_manifest_hash=_launcher_inputs_hash(out_dir),
     )
 
@@ -526,6 +644,7 @@ def main() -> None:
         coord_cfg,
         out_dir=out_dir,
         committed_rounds=len(coordinator.ledger_records()),
+        participant_updates=updates,
     )
     report = build_claim_mvp_report(
         cfg=coord_cfg,

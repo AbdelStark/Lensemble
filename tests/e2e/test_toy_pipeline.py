@@ -27,8 +27,12 @@ Placed in tests/e2e — the §8 CI gate scans tests/{unit,property,integration,m
 from __future__ import annotations
 
 import dataclasses
+import importlib.util
+import sys
 from dataclasses import dataclass
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import numpy as np
 import torch
@@ -415,6 +419,22 @@ def _write_robot_probe(tmp_path: Path, cfg: LensembleConfig) -> Path:
     return path
 
 
+def _load_hfjob_launcher() -> Any:
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "deploy"
+        / "hfjobs"
+        / "train_federated_lewm.py"
+    )
+    spec = importlib.util.spec_from_file_location("lensemble_claim_hfjob", path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def _robot_cfg(
     *, data_source: Path | None, probe_path: Path, run_mode: str
 ) -> LensembleConfig:
@@ -475,7 +495,10 @@ def test_lerobot_h5_two_silo_federated_round_uses_default_data_hooks(
     )
 
     transport = InProcessTransport()
-    coordinator = Coordinator(coord_cfg, transport=transport)
+    out_dir = tmp_path / "claim-run"
+    coordinator = Coordinator(
+        coord_cfg, transport=transport, artifacts_dir=out_dir / "artifacts"
+    )
     global_state = coordinator.global_state()
     hash_before = coordinator.global_state_hash()
     updates = {}
@@ -517,6 +540,27 @@ def test_lerobot_h5_two_silo_federated_round_uses_default_data_hooks(
     ].dataset_roots
     restored = parse_claim_mvp_report(report.model_dump(mode="json"))
     assert restored == report
+
+    launcher = _load_hfjob_launcher()
+    metrics = launcher._claim_metrics(
+        SimpleNamespace(
+            data_source=[str(silo0), str(silo1)],
+            data_format="lerobot-h5",
+            dry_run=False,
+            latent_dim=_D,
+            metric_windows=2,
+            window_steps=1,
+        ),
+        coord_cfg,
+        out_dir=out_dir,
+        committed_rounds=1,
+        participant_updates=updates,
+    )
+    assert metrics.val_pred is not None
+    assert metrics.val_sigreg is not None
+    assert metrics.effective_rank is not None
+    assert metrics.frame_drift_deg is not None
+    assert metrics.frame_drift_deg >= 0.0
 
 
 # --- the CLI smoke: the wired train / eval commands run end-to-end ---
