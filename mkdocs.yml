@@ -51,6 +51,7 @@ nav:
   - Roadmap:
       - Implementation: roadmap/IMPLEMENTATION.md
       - Phase 2 Empirical Evidence: roadmap/PHASE2.md
+      - Phase 3 Consortium Training: roadmap/PHASE3.md
   - Evidence:
       - Phase 2 Model Card: evidence/phase2_model_card.md
   - Specification:

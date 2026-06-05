@@ -11,11 +11,19 @@ claim-MVP epic [#190](https://github.com/AbdelStark/Lensemble/issues/190)
 established the end-to-end federated LeWorldModel smoke path with published HF
 datasets, checkpoint, and report artifacts.
 
-The active scaled empirical evidence stream is
+The scaled empirical evidence stream closed in
 [#200](https://github.com/AbdelStark/Lensemble/issues/200) and
 [PHASE2.md](PHASE2.md). It covers GPU-backed HF Jobs, larger participant silos,
 downstream eval, baselines/ablations, performance curves, and the model-card
-evidence bundle. This is separate from the RFC-0006 cryptographic proof track.
+evidence bundle.
+
+The final operational consortium-training stream is
+[#220](https://github.com/AbdelStark/Lensemble/issues/220) and
+[PHASE3.md](PHASE3.md). It covers governed multi-party training with separate
+participant agents, a networked coordinator, secure aggregation and DP runtime
+controls, downstream evaluation, lifecycle reporting, and a final evidence
+bundle. It explicitly excludes the provenance ledger and RFC-0006
+cryptographic-proof implementation.
 
 ## Milestone: v0.1 (Stage A — single-site upper bound + scaffolding)
 

@@ -149,6 +149,12 @@ Assumptions, all overridable:
   layer in [RFC-0006](docs/rfcs/RFC-0006-verifiable-contribution.md). Phase 1 stays proof-ready
   ([RFC-0006 §3](docs/rfcs/RFC-0006-verifiable-contribution.md#3-phase-1-proof-ready-requirements-cheap-to-honor-now))
   so the proof layer should not require reworking artifact contracts.
+- **Phase 3 is the final operational consortium-training stream** in
+  [#220](https://github.com/AbdelStark/Lensemble/issues/220) and
+  [`docs/roadmap/PHASE3.md`](docs/roadmap/PHASE3.md): governed multi-party training with separate
+  participant agents, a networked coordinator, secure aggregation and DP runtime controls, downstream
+  evaluation, lifecycle reporting, and a final evidence bundle. It explicitly excludes the provenance
+  ledger and RFC-0006 cryptographic-proof implementation.
 - **Warm-start from released V-JEPA 2** — foundation-scale credibility without an INTELLECT-class pretraining bill, and a shared frame at $t{=}0$.
 - **License**: code Apache-2.0, docs CC-BY-4.0, data CDLA-Permissive-2.0 — matching ecosystem norms (see [License](#license)).
 
