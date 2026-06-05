@@ -34,6 +34,16 @@ from .phase2 import (
     default_phase2_matrix,
     render_phase2_matrix_markdown,
 )
+from .phase2_downstream import (
+    PHASE2_DOWNSTREAM_REPORT_SCHEMA_VERSION,
+    Phase2CheckpointRef,
+    Phase2DownstreamEvalReport,
+    Phase2EvalTask,
+    Phase2PlannerBudget,
+    build_phase2_downstream_eval_report,
+    parse_phase2_downstream_eval_report,
+    phase2_eval_config_from_checkpoint,
+)
 from .report import EVAL_REPORT_SCHEMA_VERSION, EvalReport, parse_eval_report
 from .sweeps import (
     SiloPartition,
@@ -48,6 +58,14 @@ __all__ = [
     "Phase2MatrixRow",
     "default_phase2_matrix",
     "render_phase2_matrix_markdown",
+    "Phase2CheckpointRef",
+    "Phase2DownstreamEvalReport",
+    "Phase2EvalTask",
+    "Phase2PlannerBudget",
+    "PHASE2_DOWNSTREAM_REPORT_SCHEMA_VERSION",
+    "build_phase2_downstream_eval_report",
+    "parse_phase2_downstream_eval_report",
+    "phase2_eval_config_from_checkpoint",
     "EvalReport",
     "EVAL_REPORT_SCHEMA_VERSION",
     "parse_eval_report",

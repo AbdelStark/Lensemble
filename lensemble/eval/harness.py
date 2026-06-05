@@ -32,6 +32,7 @@ import torch
 from lensemble.artifacts import load_checkpoint
 from lensemble.config import build_manifest
 from lensemble.contracts import LatentState
+from lensemble.errors import EvaluationError, LensembleErrorCode
 from lensemble.eval.metrics import effective_dim, success_rate
 from lensemble.eval.mpc import Planner
 from lensemble.eval.report import EVAL_REPORT_SCHEMA_VERSION, EvalReport
@@ -53,7 +54,14 @@ def _split_weights(weights: dict[str, "Tensor"], prefix: str) -> dict[str, "Tens
     return {name[cut:]: t for name, t in weights.items() if name.startswith(prefix)}
 
 
-def evaluate(checkpoint: Path, env_id: str, *, cfg: "LensembleConfig") -> EvalReport:
+def evaluate(
+    checkpoint: Path,
+    env_id: str,
+    *,
+    cfg: "LensembleConfig",
+    num_episodes: int = _NUM_EPISODES,
+    planner_iters: int = 4,
+) -> EvalReport:
     """Run latent-MPC evaluation on a held-out env and return an :class:`EvalReport` (RFC-0005 §3).
 
     Preconditions: ``checkpoint`` is a hash-verified artifact (``INV-CHECKPOINT-HASH``) whose weights are
@@ -77,6 +85,19 @@ def evaluate(checkpoint: Path, env_id: str, *, cfg: "LensembleConfig") -> EvalRe
     ``env_id`` or a diverging plan; :class:`~lensemble.errors.ConfigError` on an invalid ``cfg.model`` /
     ``ActionSpec``. Determinism is best-effort and seed-pinned (conventions 9).
     """
+    if num_episodes < 2:
+        raise EvaluationError(
+            f"num_episodes must be at least 2, got {num_episodes}",
+            code=LensembleErrorCode.EVALUATION_FAILED,
+            remediation="evaluate at least two held-out episodes so effective_dim is defined",
+        )
+    if planner_iters <= 0:
+        raise EvaluationError(
+            f"planner_iters must be positive, got {planner_iters}",
+            code=LensembleErrorCode.EVALUATION_FAILED,
+            remediation="run at least one planner refinement iteration",
+        )
+
     # 1. Hash-verified load (propagates CheckpointIntegrityError / SchemaVersionMismatch).
     weights, header = load_checkpoint(Path(checkpoint))
 
@@ -107,7 +128,7 @@ def evaluate(checkpoint: Path, env_id: str, *, cfg: "LensembleConfig") -> EvalRe
 
     # 5. Seed-pinned episodes: derive the seeds deterministically from root_seed.
     root_seed = int(cfg.determinism.root_seed)
-    seeds = [root_seed + i for i in range(_NUM_EPISODES)]
+    seeds = [root_seed + i for i in range(num_episodes)]
     action_dim = world.action_spec.dim
 
     successes: list[bool] = []
@@ -115,10 +136,13 @@ def evaluate(checkpoint: Path, env_id: str, *, cfg: "LensembleConfig") -> EvalRe
     per_action_seconds: list[float] = []
 
     with torch.no_grad():
-        zg = encoder(world.goal().unsqueeze(0)).tokens.reshape(1, -1)
-        for seed in seeds:
-            obs0 = world.reset(seed)
-            z0 = encoder(obs0.unsqueeze(0)).tokens.reshape(1, -1)
+        goal_clip = world.goal()
+        initial_clips = [world.reset(seed) for seed in seeds]
+        encoded = encoder(torch.stack([goal_clip, *initial_clips], dim=0)).tokens
+        encoded = encoded.reshape(len(seeds) + 1, -1)
+        zg = encoded[:1]
+        for idx, seed in enumerate(seeds):
+            z0 = encoded[idx + 1 : idx + 2]
             episode_latents.append(z0.reshape(-1))
 
             planner = Planner(
@@ -127,13 +151,15 @@ def evaluate(checkpoint: Path, env_id: str, *, cfg: "LensembleConfig") -> EvalRe
                 num_samples=cfg.eval.planning_samples,
                 action_dim=action_dim,
                 seed=seed,
+                num_iters=planner_iters,
             )
             start = time.perf_counter()
             plan = planner.plan(dynamics, z0, zg)
             per_action_seconds.append((time.perf_counter() - start) / cfg.eval.horizon)
 
+            world.reset(seed)
             for t in range(plan.actions.shape[0]):
-                world.step(plan.actions[t])
+                world.step(plan.actions[t].detach().cpu())
             successes.append(bool(world.succeeded()))
 
     # 6. Metrics (consume lensemble.eval.metrics); probe is unwired here -> None.

@@ -104,20 +104,21 @@ class Planner:
         the planning-cost telemetry. Raises :class:`~lensemble.errors.EvaluationError` if the rollout
         diverges (a non-finite cost).
         """
-        gen = torch.Generator().manual_seed(self.seed)
+        device = initial_latent.device
+        gen = torch.Generator(device=device).manual_seed(self.seed)
         d = initial_latent.shape[-1]
         n, h, a = self.num_samples, self.horizon, self.action_dim
         elites_k = max(1, int(self.elite_frac * n))
 
-        mean = torch.zeros(h, a)
-        std = self.init_std * torch.ones(h, a)
+        mean = torch.zeros(h, a, device=device)
+        std = self.init_std * torch.ones(h, a, device=device)
         best_actions = mean.clone()
         best_cost = float("inf")
         prev_elites: Tensor | None = None
 
         start = time.perf_counter()
         for _ in range(self.num_iters):
-            samples = mean + std * torch.randn(n, h, a, generator=gen)
+            samples = mean + std * torch.randn(n, h, a, generator=gen, device=device)
             if self.family == "icem" and prev_elites is not None:
                 # iCEM: carry the previous iteration's elites into the population (elite memory).
                 keep = max(0, n - prev_elites.shape[0])
@@ -141,7 +142,7 @@ class Planner:
                 std = elites.std(dim=0, unbiased=False).clamp_min(1e-6)
                 prev_elites = elites
 
-        if not torch.isfinite(torch.tensor(best_cost)):
+        if not torch.isfinite(torch.tensor(best_cost, device=device)):
             raise EvaluationError(
                 "latent MPC rollout diverged (non-finite goal-energy)",
                 code=LensembleErrorCode.EVALUATION_FAILED,
@@ -168,7 +169,7 @@ class Planner:
         n, h, _ = samples.shape
         latent = initial_latent.reshape(1, d).expand(n, d).contiguous()
         goal = goal_latent.reshape(1, d)
-        cost = torch.zeros(n)
+        cost = torch.zeros(n, device=samples.device)
         for t in range(h):
             latent = dynamics(latent, samples[:, t, :])
             cost = cost + (latent - goal).abs().sum(dim=-1)
