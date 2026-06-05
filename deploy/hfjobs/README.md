@@ -98,6 +98,28 @@ The current adapter reads `observation/pixels_top`, decodes uint8 frames to
 declared held-out policy reserves the final local episode in each silo for #206
 evaluation (`source_episode=48` and `49` respectively).
 
+The first published GPU-backed Phase 2 job completed on `t4-small`:
+
+- job
+  [`6a22ba68e6aa50b87b9ebef7`](https://huggingface.co/jobs/abdelstark/6a22ba68e6aa50b87b9ebef7);
+- pinned commit `4b446a558882f25e47ee6410a4c32982bbf33477`;
+- three closed federated rounds over the two SO-100 silos;
+- checkpoint/report repo
+  [`abdelstark/lensemble-phase2-so100-checkpoint`](https://huggingface.co/abdelstark/lensemble-phase2-so100-checkpoint)
+  at revision `da52ef380ac87317c89e87f048d65bae65c16b9e`;
+- final global hash
+  `8f1494fd9e57b7496daf96e379a3de1457a435080b81b9e0ea1d20a52f4827c4`;
+- report metrics: `val_pred=1.513671025633812`,
+  `val_sigreg=0.15686095133423805`,
+  `effective_rank=1.5215493440628052`, and
+  `frame_drift_deg=10.538757949205232`.
+
+The run used a compact Phase 2 shape (`latent_dim=96`, `depth=4`,
+`inner_horizon=1`, `metric_windows=8`) to prove the GPU publication path before
+larger sweeps. Its `claim_mvp_report.json` uses schema v2 and contains three
+`round_metrics` rows with post-round global hashes, participant ids, dataset
+roots, and update L2 norms.
+
 Start every expensive run with the dataset smoke, `--dry-run`, and a pinned SHA.
 A representative GPU command is:
 

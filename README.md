@@ -94,8 +94,21 @@ Phase 2 data refs have started landing: the public
 [`abdelstark/lensemble-phase2-so100-silos`](https://huggingface.co/datasets/abdelstark/lensemble-phase2-so100-silos)
 dataset contains two deterministic SO-100 LeRobot-H5 participant silos, their
 split manifest, and the smoke report with Merkle roots and window counts. The
-remaining Phase 2 gates are GPU multi-round jobs, downstream evaluation,
-baselines/curves, and the final model-card evidence bundle.
+first GPU-backed Phase 2 HF Job
+[`6a22ba68e6aa50b87b9ebef7`](https://huggingface.co/jobs/abdelstark/6a22ba68e6aa50b87b9ebef7)
+ran three closed federated rounds from pinned commit
+`4b446a558882f25e47ee6410a4c32982bbf33477` on `t4-small` and published
+checkpoint/report artifacts to
+[`abdelstark/lensemble-phase2-so100-checkpoint`](https://huggingface.co/abdelstark/lensemble-phase2-so100-checkpoint)
+at revision `da52ef380ac87317c89e87f048d65bae65c16b9e`. The report records
+schema v2 round metrics, final global hash
+`8f1494fd9e57b7496daf96e379a3de1457a435080b81b9e0ea1d20a52f4827c4`,
+participant dataset roots, `val_pred=1.513671025633812`,
+`val_sigreg=0.15686095133423805`, `effective_rank=1.5215493440628052`,
+`frame_drift_deg=10.538757949205232`, and `publication.blocker=None`. This is
+still compact engineering evidence (`latent_dim=96`, `depth=4`,
+`inner_horizon=1`); downstream eval, baselines/curves, and the final
+model-card evidence bundle remain tracked in Phase 2.
 
 ## Working assumptions
 

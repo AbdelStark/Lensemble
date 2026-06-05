@@ -29,7 +29,7 @@ Phase 2 starts from that working substrate and raises the evidence bar.
 | Issue | Workstream | Exit gate |
 |---|---|---|
 | [#201](https://github.com/AbdelStark/Lensemble/issues/201) | Participant-silo dataset contract and refs | Publish or mount at least two non-toy silo refs, or record the exact blocker. |
-| [#202](https://github.com/AbdelStark/Lensemble/issues/202) | GPU-backed multi-round HF Jobs | Complete at least one pinned GPU HF Job that publishes checkpoint/report artifacts. |
+| [#202](https://github.com/AbdelStark/Lensemble/issues/202) | GPU-backed multi-round HF Jobs | Completed by job [`6a22ba68e6aa50b87b9ebef7`](https://huggingface.co/jobs/abdelstark/6a22ba68e6aa50b87b9ebef7), which published checkpoint/report artifacts. |
 | [#206](https://github.com/AbdelStark/Lensemble/issues/206) | Downstream planning/eval report | Generate an EvalReport-style artifact from a Phase 2 checkpoint. |
 | [#205](https://github.com/AbdelStark/Lensemble/issues/205) | Baselines, ablations, and curves | Produce generated curve/table artifacts tied to run/config/checkpoint hashes. |
 | [#204](https://github.com/AbdelStark/Lensemble/issues/204) | Evidence bundle and model card | Publish one model-card/report bundle with artifact refs and claim boundaries. |
@@ -104,6 +104,52 @@ Data contract:
   silo is reserved for held-out evaluation (`source_episode=48` for
   `phase2-so100-a`, `source_episode=49` for `phase2-so100-b`); train/eval
   reports must record whether they honor or intentionally override this split.
+
+## Published Phase 2 GPU Job
+
+The first GPU-backed multi-round Phase 2 run completed on Hugging Face Jobs:
+
+- HF Job:
+  [`6a22ba68e6aa50b87b9ebef7`](https://huggingface.co/jobs/abdelstark/6a22ba68e6aa50b87b9ebef7);
+- pinned code SHA:
+  `4b446a558882f25e47ee6410a4c32982bbf33477`;
+- HF flavor: `t4-small`;
+- run shape: two SO-100 silos, `window_steps=4`, `inner_horizon=1`,
+  `num_rounds=3`, `metric_windows=8`, `latent_dim=96`, `depth=4`;
+- checkpoint repo:
+  [`abdelstark/lensemble-phase2-so100-checkpoint`](https://huggingface.co/abdelstark/lensemble-phase2-so100-checkpoint)
+  at revision `da52ef380ac87317c89e87f048d65bae65c16b9e`;
+- report fields: `schema_version=2`, `round_state=closed`,
+  `committed_rounds=3`, `publication.pushed=true`,
+  `publication.blocker=None`;
+- final global hash:
+  `8f1494fd9e57b7496daf96e379a3de1457a435080b81b9e0ea1d20a52f4827c4`;
+- config hash:
+  `82296109ed452a1aaf494306b100bd4f2b7e3b968a8d4219bc89a3461b0294a3`;
+- run manifest hash:
+  `890057f5b22a8390f2d3e8b71f1081150694eba70cad0b0ad2b646f99ef75b67`.
+
+The published `claim_mvp_report.json` records these scalar metrics:
+
+| Metric | Value |
+|---|---:|
+| `val_pred` | 1.513671025633812 |
+| `val_sigreg` | 0.15686095133423805 |
+| `effective_rank` | 1.5215493440628052 |
+| `frame_drift_deg` | 10.538757949205232 |
+
+The schema v2 `round_metrics` series records curve-ready per-round hashes and
+update norms:
+
+| Round | Global hash | `phase2-so100-a` update L2 | `phase2-so100-b` update L2 |
+|---:|---|---:|---:|
+| 0 | `f13dd109b88fc0df26a19153d8406e14a69f1583037e41bb9712325c4ccbb26d` | 0.8818898797 | 0.8815023303 |
+| 1 | `541b3c453116c3016d86ff20a7aa09af6860c77c7c6e892976c447818eeb4cd0` | 0.8853848577 | 0.8813801408 |
+| 2 | `8f1494fd9e57b7496daf96e379a3de1457a435080b81b9e0ea1d20a52f4827c4` | 0.8827524185 | 0.8824784756 |
+
+This satisfies the #202 engineering gate, but it is intentionally compact. It
+does not replace downstream evaluation (#206), baseline/ablation evidence
+(#205), or the final model-card/evidence bundle (#204).
 
 ## Minimum Evidence Contract
 
