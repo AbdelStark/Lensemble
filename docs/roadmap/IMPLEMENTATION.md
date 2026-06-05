@@ -4,6 +4,19 @@ Generated from the specification corpus in [PR #1](https://github.com/AbdelStark
 
 Totals: 94 issues (77 implementation + 17 tracking). Milestones: v0.1 (40), v0.2 (28), v0.3 (5), v1.0 (4).
 
+## Current Evidence Track
+
+The original generated tracker has been substantially implemented. The closed
+claim-MVP epic [#190](https://github.com/AbdelStark/Lensemble/issues/190)
+established the end-to-end federated LeWorldModel smoke path with published HF
+datasets, checkpoint, and report artifacts.
+
+The active scaled empirical evidence stream is
+[#200](https://github.com/AbdelStark/Lensemble/issues/200) and
+[PHASE2.md](PHASE2.md). It covers GPU-backed HF Jobs, larger participant silos,
+downstream eval, baselines/ablations, performance curves, and the model-card
+evidence bundle. This is separate from the RFC-0006 cryptographic proof track.
+
 ## Milestone: v0.1 (Stage A — single-site upper bound + scaffolding)
 
 | # | Title | Area | Priority | Effort | RFC | Status |
@@ -150,4 +163,3 @@ Selected cross-subsystem edges (the full graph is encoded in each issue's Depend
 - #10 (model: video-ViT encoder with V-JEPA 2 warm-start) blocks #51 (eval: latent MPC planner)
 - #11 (model: action-conditioned latent predictor) blocks #51 (eval: latent MPC planner)
 - … and 28 further cross-subsystem edges (see issue bodies).
-

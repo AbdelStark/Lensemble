@@ -75,18 +75,20 @@ Lensemble now has an operational claim-MVP path in addition to the design corpus
 - **Two-silo LeRobot-H5 federation:** default `Participant` hooks consume `cfg.data.data_source`,
   produce dataset Merkle roots, release encoder/predictor pseudo-gradients only, and close a
   `Coordinator` round.
-- **Published HF evidence bundle:** HF Job
-  [`6a228f0de52fdd2a02ed90f3`](https://huggingface.co/jobs/abdelstark/6a228f0de52fdd2a02ed90f3) ran
-  the federated launcher on `cpu-basic` and published private smoke datasets
+- **Published HF evidence bundle:** final HF Job
+  [`6a229653e52fdd2a02ed9125`](https://huggingface.co/jobs/abdelstark/6a229653e52fdd2a02ed9125) ran
+  the federated launcher from merge `e76b680` on `cpu-basic` and published private smoke datasets
   `abdelstark/lensemble-claim-mvp-silo0` / `abdelstark/lensemble-claim-mvp-silo1` plus checkpoint/report
   artifacts in `abdelstark/lensemble-claim-mvp-checkpoint`.
 
 The published `claim_mvp_report.json` records `round_state=closed`, `publication.pushed=true`,
 `blocker=None`, final global checkpoint hash
-`cf1c99a7e94ca610daa3bfc00c99d9ee68e9e34a302a96d848508e88edf4c0d5`, and distinct participant
-dataset roots. This is still a **claim MVP**, not a full paper-scale result: the current HF evidence uses
-tiny smoke silos, and the architecture/report hardening tracker remains open for richer frame-drift,
-effective-rank, and environment-scale evaluation.
+`cf1c99a7e94ca610daa3bfc00c99d9ee68e9e34a302a96d848508e88edf4c0d5`, distinct participant dataset
+roots, and scalar metrics: `val_pred`, `val_sigreg`, `effective_rank`, `frame_drift_deg`, and
+`run_manifest_hash`. This is still a **claim MVP**, not a full paper-scale result: the current HF evidence
+uses tiny smoke silos. The next empirical evidence tier is tracked in
+[#200](https://github.com/AbdelStark/Lensemble/issues/200) and
+[`docs/roadmap/PHASE2.md`](docs/roadmap/PHASE2.md).
 
 ## Working assumptions
 
@@ -94,7 +96,11 @@ Assumptions, all overridable:
 
 - **Goal**: a research paper plus an open reference implementation; the corpus is written to be scientifically self-contained.
 - **Fork B (end-to-end)** is the target; Fork A (frozen shared encoder) is the documented fallback if gauge control proves unstable at scale ([RFC-0002, Fork A fallback](docs/rfcs/RFC-0002-gauge-and-aggregation.md#fork-a-fallback)).
-- **Verifiability is Phase 2**; Phase 1 ships "proof-ready" ([RFC-0006 §3](docs/rfcs/RFC-0006-verifiable-contribution.md#3-phase-1-proof-ready-requirements-cheap-to-honor-now)) so no rework is needed later.
+- **Phase 2 has two tracks**: the empirical scale/evaluation stream in
+  [#200](https://github.com/AbdelStark/Lensemble/issues/200), and the cryptographic contribution-proof
+  layer in [RFC-0006](docs/rfcs/RFC-0006-verifiable-contribution.md). Phase 1 stays proof-ready
+  ([RFC-0006 §3](docs/rfcs/RFC-0006-verifiable-contribution.md#3-phase-1-proof-ready-requirements-cheap-to-honor-now))
+  so the proof layer should not require reworking artifact contracts.
 - **Warm-start from released V-JEPA 2** — foundation-scale credibility without an INTELLECT-class pretraining bill, and a shared frame at $t{=}0$.
 - **License**: code Apache-2.0, docs CC-BY-4.0, data CDLA-Permissive-2.0 — matching ecosystem norms (see [License](#license)).
 

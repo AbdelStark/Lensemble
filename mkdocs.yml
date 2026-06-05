@@ -48,7 +48,9 @@ nav:
   - Home: index.md
   - API Reference: reference.md
   - Ablation Ladder: ablation-ladder.md
-  - Roadmap: roadmap/IMPLEMENTATION.md
+  - Roadmap:
+      - Implementation: roadmap/IMPLEMENTATION.md
+      - Phase 2 Empirical Evidence: roadmap/PHASE2.md
   - Specification:
       - Overview: spec/00-overview.md
       - Architecture: spec/01-architecture.md

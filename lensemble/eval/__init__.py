@@ -28,6 +28,11 @@ from .metrics import (
     success_rate,
 )
 from .mpc import Planner
+from .phase2 import (
+    Phase2MatrixRow,
+    default_phase2_matrix,
+    render_phase2_matrix_markdown,
+)
 from .report import EVAL_REPORT_SCHEMA_VERSION, EvalReport, parse_eval_report
 from .sweeps import (
     SiloPartition,
@@ -39,6 +44,9 @@ from .world import EvalWorld, register_env, resolve_env
 __all__ = [
     "evaluate",
     "Planner",
+    "Phase2MatrixRow",
+    "default_phase2_matrix",
+    "render_phase2_matrix_markdown",
     "EvalReport",
     "EVAL_REPORT_SCHEMA_VERSION",
     "parse_eval_report",

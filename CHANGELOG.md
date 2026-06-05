@@ -27,6 +27,14 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:eval` / `area:docs`: **Phase 2 empirical evidence matrix and roadmap** (#200, #203, #204) —
+  `lensemble.eval.Phase2MatrixRow`, `default_phase2_matrix`, and `render_phase2_matrix_markdown` define
+  the reviewer-facing Phase 2 experiment matrix: dataset refs, GPU HF Jobs, downstream eval,
+  baselines/ablations, evidence bundle, and docs gates, each with expected and falsifying results. New
+  `scripts/phase2_matrix.py` renders the matrix as Markdown or JSON for tracker comments, docs, and future
+  model-card automation. `docs/roadmap/PHASE2.md`, README, and HF Jobs docs now distinguish the empirical
+  scale/evaluation stream (#200) from RFC-0006 cryptographic proof work and point at the final verified
+  claim-MVP HF evidence.
 - `area:model`: **claim-mode LeWorldModel base prediction target switch** (RFC-0008; #191) —
   `ObjectiveConfig.target_stop_gradient` is now a semantic config field. The default remains `true` to
   preserve the existing proof-ready JEPA-family path, but claim-grade LeWorldModel base runs set
