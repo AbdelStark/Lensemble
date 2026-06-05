@@ -27,6 +27,17 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:federation` / `area:runtime`: **Phase 3 sovereign participant agent** (#223) —
+  `lensemble.federation.Phase3ParticipantAgent` validates the consortium
+  manifest, participant-local data ref/window count, action and observation
+  contracts, public-probe pin, model/runtime/DP agreement, and residency flags
+  before contacting a coordinator. It executes assigned rounds through the
+  existing claim-mode `Participant.local_round`, releases only the permitted
+  `PseudoGradient`, writes deterministic local resume state
+  (`delta.safetensors` plus redacted JSON metadata), emits residency-safe logs
+  and metrics, and can replay the same committed update hash on rejoin. The new
+  `lensemble federate participant-agent` command exposes the manifest-aware
+  preflight surface while #224 owns live network coordinator assignment.
 - `area:config` / `area:docs`: **Phase 3 consortium manifest and run agreement** (#222) —
   `lensemble.config.Phase3ConsortiumManifest` and `scripts/phase3_consortium_manifest.py`
   define the operational, non-cryptographic membership contract for Phase 3
