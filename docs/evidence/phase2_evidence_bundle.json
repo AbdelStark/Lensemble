@@ -1,0 +1,215 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-06-05T13:52:31.796124Z",
+  "bundle": "phase2-federated-leworldmodel-evidence",
+  "artifact_checks": [
+    {
+      "kind": "dataset-smoke-report",
+      "label": "Phase 2 dataset smoke report",
+      "repo_type": "dataset",
+      "repo_id": "abdelstark/lensemble-phase2-so100-silos",
+      "revision": "97336927606fea6fbfda308bb7cee6e7b48999fa",
+      "path_in_repo": "phase2_dataset_smoke.json",
+      "uri": "hf://datasets/abdelstark/lensemble-phase2-so100-silos@97336927606fea6fbfda308bb7cee6e7b48999fa/phase2_dataset_smoke.json",
+      "checked_at": "2026-06-05T13:52:28.770739Z",
+      "exists": true,
+      "status_code": 200,
+      "error": null
+    },
+    {
+      "kind": "dataset-split-manifest",
+      "label": "Phase 2 dataset split manifest",
+      "repo_type": "dataset",
+      "repo_id": "abdelstark/lensemble-phase2-so100-silos",
+      "revision": "97336927606fea6fbfda308bb7cee6e7b48999fa",
+      "path_in_repo": "phase2_silo_manifest.json",
+      "uri": "hf://datasets/abdelstark/lensemble-phase2-so100-silos@97336927606fea6fbfda308bb7cee6e7b48999fa/phase2_silo_manifest.json",
+      "checked_at": "2026-06-05T13:52:29.105438Z",
+      "exists": true,
+      "status_code": 200,
+      "error": null
+    },
+    {
+      "kind": "training-claim-report",
+      "label": "Phase 2 anchored training report",
+      "repo_type": "model",
+      "repo_id": "abdelstark/lensemble-phase2-so100-checkpoint",
+      "revision": "da52ef380ac87317c89e87f048d65bae65c16b9e",
+      "path_in_repo": "claim_mvp_report.json",
+      "uri": "hf://models/abdelstark/lensemble-phase2-so100-checkpoint@da52ef380ac87317c89e87f048d65bae65c16b9e/claim_mvp_report.json",
+      "checked_at": "2026-06-05T13:52:29.474832Z",
+      "exists": true,
+      "status_code": 200,
+      "error": null
+    },
+    {
+      "kind": "training-checkpoint-header",
+      "label": "Phase 2 final checkpoint header",
+      "repo_type": "model",
+      "repo_id": "abdelstark/lensemble-phase2-so100-checkpoint",
+      "revision": "da52ef380ac87317c89e87f048d65bae65c16b9e",
+      "path_in_repo": "artifacts/round-00003/header.json",
+      "uri": "hf://models/abdelstark/lensemble-phase2-so100-checkpoint@da52ef380ac87317c89e87f048d65bae65c16b9e/artifacts/round-00003/header.json",
+      "checked_at": "2026-06-05T13:52:29.844333Z",
+      "exists": true,
+      "status_code": 200,
+      "error": null
+    },
+    {
+      "kind": "downstream-eval-report",
+      "label": "Phase 2 downstream eval report",
+      "repo_type": "model",
+      "repo_id": "abdelstark/lensemble-phase2-so100-checkpoint",
+      "revision": "021a461eb789700209fcb49e99bb9bcc5d84bfe5",
+      "path_in_repo": "reports/phase2_downstream_eval_report.json",
+      "uri": "hf://models/abdelstark/lensemble-phase2-so100-checkpoint@021a461eb789700209fcb49e99bb9bcc5d84bfe5/reports/phase2_downstream_eval_report.json",
+      "checked_at": "2026-06-05T13:52:30.183005Z",
+      "exists": true,
+      "status_code": 200,
+      "error": null
+    },
+    {
+      "kind": "baselines-curves-report",
+      "label": "Phase 2 baselines/curves report",
+      "repo_type": "model",
+      "repo_id": "abdelstark/lensemble-phase2-so100-checkpoint",
+      "revision": "8643d9f60eeb997afd5b254d525a145769d59c68",
+      "path_in_repo": "reports/phase2_baselines_curves_report.json",
+      "uri": "hf://models/abdelstark/lensemble-phase2-so100-checkpoint@8643d9f60eeb997afd5b254d525a145769d59c68/reports/phase2_baselines_curves_report.json",
+      "checked_at": "2026-06-05T13:52:30.554512Z",
+      "exists": true,
+      "status_code": 200,
+      "error": null
+    },
+    {
+      "kind": "dataset-silo",
+      "label": "Phase 2 dataset silo phase2-so100-silo0.h5",
+      "repo_type": "dataset",
+      "repo_id": "abdelstark/lensemble-phase2-so100-silos",
+      "revision": "97336927606fea6fbfda308bb7cee6e7b48999fa",
+      "path_in_repo": "phase2-so100-silo0.h5",
+      "uri": "hf://datasets/abdelstark/lensemble-phase2-so100-silos@97336927606fea6fbfda308bb7cee6e7b48999fa/phase2-so100-silo0.h5",
+      "checked_at": "2026-06-05T13:52:30.974671Z",
+      "exists": true,
+      "status_code": 200,
+      "error": null
+    },
+    {
+      "kind": "dataset-silo",
+      "label": "Phase 2 dataset silo phase2-so100-silo1.h5",
+      "repo_type": "dataset",
+      "repo_id": "abdelstark/lensemble-phase2-so100-silos",
+      "revision": "97336927606fea6fbfda308bb7cee6e7b48999fa",
+      "path_in_repo": "phase2-so100-silo1.h5",
+      "uri": "hf://datasets/abdelstark/lensemble-phase2-so100-silos@97336927606fea6fbfda308bb7cee6e7b48999fa/phase2-so100-silo1.h5",
+      "checked_at": "2026-06-05T13:52:31.412014Z",
+      "exists": true,
+      "status_code": 200,
+      "error": null
+    }
+  ],
+  "dataset": {
+    "dataset_repo_id": "abdelstark/lensemble-phase2-so100-silos",
+    "dataset_revision": "97336927606fea6fbfda308bb7cee6e7b48999fa",
+    "source_repo_id": "abdelstark/so100-pickplace-lewm-ready",
+    "source_file": "svla_so100_pickplace.h5",
+    "source_sha256": "9dbeba303311d61a0129a6dcf3d0196524e7d8f58bb823e05dde0101546535ed",
+    "split_policy": "episode_modulo",
+    "heldout_split_policy": "final_local_episode_per_silo for held-out evaluation for Phase 2 issue #206",
+    "participants": [
+      {
+        "participant_id": "phase2-so100-a",
+        "hf_file_ref": "hf://datasets/abdelstark/lensemble-phase2-so100-silos/phase2-so100-silo0.h5",
+        "episode_count": 25,
+        "window_count": 3149,
+        "dataset_root": "df4dceed9ee55b95f2827f8b02ec3aa6b86a02421052eb84cfd96b41d7947c0a",
+        "silo_sha256": "271a24bf3746cb13aede6d6a3d8083f2c1c4fd5d1cd2d73647188ced2b9898da",
+        "action_dim": 6,
+        "observation_shape": [
+          5,
+          1,
+          3,
+          224,
+          224
+        ],
+        "action_shape": [
+          4,
+          6
+        ]
+      },
+      {
+        "participant_id": "phase2-so100-b",
+        "hf_file_ref": "hf://datasets/abdelstark/lensemble-phase2-so100-silos/phase2-so100-silo1.h5",
+        "episode_count": 25,
+        "window_count": 3210,
+        "dataset_root": "ce6a42bab6edbdefd47f53f4cfc306cb4ed3db84d9f8ac8f7fcb2adc103c7b52",
+        "silo_sha256": "01993df96e02966fdb6f5ab5eb06c483424ac1f8b6149d3e81c7182597c0a4e0",
+        "action_dim": 6,
+        "observation_shape": [
+          5,
+          1,
+          3,
+          224,
+          224
+        ],
+        "action_shape": [
+          4,
+          6
+        ]
+      }
+    ]
+  },
+  "training": {
+    "job_id": "6a22ba68e6aa50b87b9ebef7",
+    "job_url": "https://huggingface.co/jobs/abdelstark/6a22ba68e6aa50b87b9ebef7",
+    "code_sha": "4b446a558882f25e47ee6410a4c32982bbf33477",
+    "checkpoint_repo_id": "abdelstark/lensemble-phase2-so100-checkpoint",
+    "checkpoint_revision": "da52ef380ac87317c89e87f048d65bae65c16b9e",
+    "config_hash": "82296109ed452a1aaf494306b100bd4f2b7e3b968a8d4219bc89a3461b0294a3",
+    "final_global_hash": "8f1494fd9e57b7496daf96e379a3de1457a435080b81b9e0ea1d20a52f4827c4",
+    "committed_rounds": 3,
+    "val_pred": 1.513671025633812,
+    "val_sigreg": 0.15686095133423805,
+    "effective_rank": 1.5215493440628052,
+    "frame_drift_deg": 10.538757949205232,
+    "run_manifest_hash": "890057f5b22a8390f2d3e8b71f1081150694eba70cad0b0ad2b646f99ef75b67"
+  },
+  "downstream_eval": {
+    "job_id": "6a22c9e3ece949d7b3dca25a",
+    "job_url": "https://huggingface.co/jobs/abdelstark/6a22c9e3ece949d7b3dca25a",
+    "report_revision": "021a461eb789700209fcb49e99bb9bcc5d84bfe5",
+    "env_id": "synthetic://toy",
+    "planner": "icem",
+    "success_rate": 0.5,
+    "time_per_action_ms": 91.15450602257624,
+    "effective_dim": 1.0000066342911489,
+    "eval_config_hash": "f926ca5d1f230c960b6c10810a7f42620e99a05f144ac2a45991541940d014d4",
+    "claim_boundary": "Compact engineering-scale downstream eval of a published Phase 2 checkpoint on the built-in synthetic://toy harness. It verifies checkpoint load, latent MPC execution, planner-cost reporting, and residency-safe EvalReport emission; it does not claim SO-100 task success or paper-scale LeWorldModel performance."
+  },
+  "baselines_curves": {
+    "report_revision": "8643d9f60eeb997afd5b254d525a145769d59c68",
+    "curve_point_count": 23,
+    "run_roles": [
+      "anchored-federation",
+      "naive-fedavg"
+    ],
+    "blocked_comparisons": [
+      "local-only",
+      "centralized-pooled",
+      "fork-a"
+    ],
+    "model_card_baseline_text": "Phase 2 baseline coverage is partial: the generated table includes only completed, hash-bound public runs. Blocked comparisons: local-only, centralized-pooled, fork-a. Blocked rows must not be described as completed comparisons."
+  },
+  "claim_boundaries": [
+    "Engineering-scale evidence: published SO-100 participant silos, a GPU-backed three-round federated JEPA-style run, downstream synthetic planning eval, and a matched lambda_anc=0 control.",
+    "Does not claim paper-scale LeWorldModel performance, SO-100 task success, broad robotics generalization, or completed RFC-0006 cryptographic contribution proofs.",
+    "Baseline coverage is partial; blocked comparisons remain blocked until matched public runs exist."
+  ],
+  "known_gaps": [
+    "local-only: No matched local-only Phase 2 SO-100 run is published for the same silos, seed, model size, and eval budget.",
+    "centralized-pooled: No centralized/pooled run is published; pooling these participant silos was not executed for this artifact.",
+    "fork-a: The RFC-0005 Fork-A safe-degrade baseline has not been run on the Phase 2 SO-100 silos."
+  ],
+  "raw_data_in_report": false,
+  "model_card_markdown": "---\nlicense: apache-2.0\nlibrary_name: lensemble\ntags:\n- federated-learning\n- world-model\n- jepa\n- robotics\n- phase2\n---\n\n# Lensemble Phase 2 SO-100 Federated JEPA World Model\n\nThis model repository contains the Phase 2 engineering evidence bundle for a\nfederated JEPA-style world-model run over two public SO-100 participant silos.\n\n## Dataset Refs\n\nDataset repo: `hf://datasets/abdelstark/lensemble-phase2-so100-silos@97336927606fea6fbfda308bb7cee6e7b48999fa`\n\n| Participant | File ref | Episodes | Windows | Dataset root |\n|---|---|---:|---:|---|\n| phase2-so100-a | hf://datasets/abdelstark/lensemble-phase2-so100-silos/phase2-so100-silo0.h5 | 25 | 3149 | `df4dceed9ee55b95f2827f8b02ec3aa6b86a02421052eb84cfd96b41d7947c0a` |\n| phase2-so100-b | hf://datasets/abdelstark/lensemble-phase2-so100-silos/phase2-so100-silo1.h5 | 25 | 3210 | `ce6a42bab6edbdefd47f53f4cfc306cb4ed3db84d9f8ac8f7fcb2adc103c7b52` |\n\nSplit policy: `episode_modulo`. Held-out policy:\nfinal_local_episode_per_silo for held-out evaluation for Phase 2 issue #206\n\n## Training\n\n- HF Job: [6a22ba68e6aa50b87b9ebef7](https://huggingface.co/jobs/abdelstark/6a22ba68e6aa50b87b9ebef7)\n- Pinned code SHA: `4b446a558882f25e47ee6410a4c32982bbf33477`\n- Checkpoint revision: `abdelstark/lensemble-phase2-so100-checkpoint@da52ef380ac87317c89e87f048d65bae65c16b9e`\n- Config hash: `82296109ed452a1aaf494306b100bd4f2b7e3b968a8d4219bc89a3461b0294a3`\n- Final global hash: `8f1494fd9e57b7496daf96e379a3de1457a435080b81b9e0ea1d20a52f4827c4`\n- Committed rounds: 3\n- Metrics: `val_pred=1.513671025633812`, `val_sigreg=0.15686095133423805`,\n  `effective_rank=1.5215493440628052`,\n  `frame_drift_deg=10.538757949205232`\n\n## Downstream Eval\n\n- HF Job: [6a22c9e3ece949d7b3dca25a](https://huggingface.co/jobs/abdelstark/6a22c9e3ece949d7b3dca25a)\n- Env/planner: `synthetic://toy` / `icem`\n- Success rate: 0.5\n- Time per action: 91.15450602257624 ms\n- Effective dimension: 1.0000066342911489\n- Eval config hash: `f926ca5d1f230c960b6c10810a7f42620e99a05f144ac2a45991541940d014d4`\n\n## Baselines And Curves\n\nThe generated curve report has 23 rows over\n`anchored-federation`, `naive-fedavg`. Phase 2 baseline coverage is partial: the generated table includes only completed, hash-bound public runs. Blocked comparisons: local-only, centralized-pooled, fork-a. Blocked rows must not be described as completed comparisons.\n\n## Claim Boundaries\n\n- Engineering-scale evidence: published SO-100 participant silos, a GPU-backed three-round federated JEPA-style run, downstream synthetic planning eval, and a matched lambda_anc=0 control.\n- Does not claim paper-scale LeWorldModel performance, SO-100 task success, broad robotics generalization, or completed RFC-0006 cryptographic contribution proofs.\n- Baseline coverage is partial; blocked comparisons remain blocked until matched public runs exist.\n\n## Known Gaps\n\n- local-only: No matched local-only Phase 2 SO-100 run is published for the same silos, seed, model size, and eval budget.\n- centralized-pooled: No centralized/pooled run is published; pooling these participant silos was not executed for this artifact.\n- fork-a: The RFC-0005 Fork-A safe-degrade baseline has not been run on the Phase 2 SO-100 silos.\n\n## Public Reports\n\n- `reports/phase2_downstream_eval_report.json`\n- `reports/phase2_baselines_curves_report.json`\n- `reports/phase2_evidence_bundle.json`\n"
+}

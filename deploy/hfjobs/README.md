@@ -169,6 +169,24 @@ centralized/pooled, and Fork-A comparisons remain blocked until matched public
 runs exist. Do not describe those blocked rows as completed baselines in
 model-card text.
 
+Generate the final Phase 2 evidence bundle and model card after the curves
+report has been uploaded to the checkpoint repo:
+
+```bash
+uv run --extra dev python scripts/phase2_bundle.py \
+  --dataset-smoke /tmp/lensemble-phase2-data-hf/phase2_dataset_smoke.json \
+  --dataset-manifest /tmp/lensemble-phase2-data-hf/phase2_silo_manifest.json \
+  --training-claim-report /tmp/lensemble-phase2-hf/claim_mvp_report.json \
+  --curves-revision 8643d9f60eeb997afd5b254d525a145769d59c68 \
+  --output docs/evidence/phase2_evidence_bundle.json \
+  --model-card-output docs/evidence/phase2_model_card.md
+```
+
+The published checkpoint repo revision
+`eaf13136b42cde324758a191c98e377636ded7f8` contains the generated `README.md`,
+`reports/phase2_evidence_bundle.json`, `reports/phase2_model_card.md`, and
+`reports/phase2_baselines_curves_report.json`.
+
 Start every expensive run with the dataset smoke, `--dry-run`, and a pinned SHA.
 A representative GPU command is:
 

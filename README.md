@@ -128,7 +128,15 @@ run-manifest hashes. Current coverage is partial: anchored training scalars,
 per-round update norms, a matched `lambda_anc=0` naive-FedAvg control, and
 downstream eval rows are present. Missing local-only, centralized/pooled, and
 Fork-A controls are explicitly marked blocked until matched public runs exist.
-The final model-card evidence bundle remains tracked in Phase 2.
+The final Phase 2 evidence bundle is checked in at
+[`docs/evidence/phase2_evidence_bundle.json`](docs/evidence/phase2_evidence_bundle.json)
+with the generated model card at
+[`docs/evidence/phase2_model_card.md`](docs/evidence/phase2_model_card.md). The
+checkpoint repo
+[`abdelstark/lensemble-phase2-so100-checkpoint`](https://huggingface.co/abdelstark/lensemble-phase2-so100-checkpoint)
+now contains `README.md`, `reports/phase2_evidence_bundle.json`,
+`reports/phase2_model_card.md`, and `reports/phase2_baselines_curves_report.json`
+at revision `eaf13136b42cde324758a191c98e377636ded7f8`.
 
 ## Working assumptions
 
