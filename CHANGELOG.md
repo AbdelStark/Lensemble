@@ -34,6 +34,12 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
   shapes. The gate fails closed on duplicate participant ids, mismatched participant/source counts, or
   underfilled silos so Phase 2 GPU HF Jobs start from validated dataset refs rather than private paths or
   zero-window data.
+- `area:data`: **Phase 2 LeRobot-H5 silo splitter** (#201) — `scripts/phase2_split_lerobot_h5.py`
+  deterministically partitions one LeRobot-H5 source into participant silo files by episode-level modulo
+  assignment, remaps each output `episode_index` to local ids, and writes a split manifest with source and
+  output hashes, selected source episode ids, frame counts, and paths. The splitter copies row-aligned HDF5
+  datasets in chunks so larger camera stacks can be prepared for Phase 2 without materializing the full
+  source in memory.
 - `area:eval` / `area:docs`: **Phase 2 empirical evidence matrix and roadmap** (#200, #203, #204) —
   `lensemble.eval.Phase2MatrixRow`, `default_phase2_matrix`, and `render_phase2_matrix_markdown` define
   the reviewer-facing Phase 2 experiment matrix: dataset refs, GPU HF Jobs, downstream eval,
