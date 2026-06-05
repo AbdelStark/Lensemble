@@ -7,17 +7,17 @@ import argparse
 import json
 from pathlib import Path
 
-from lensemble.artifacts.phase2_bundle import (
+from lensemble.eval import (
+    parse_claim_mvp_report,
+    parse_phase2_baselines_curves_report,
+    parse_phase2_downstream_eval_report,
+)
+from lensemble.eval.phase2_bundle import (
     Phase2HubArtifactCheck,
     build_phase2_evidence_bundle,
     check_hf_artifact_exists,
     local_artifact_check,
     write_phase2_bundle_outputs,
-)
-from lensemble.eval import (
-    parse_claim_mvp_report,
-    parse_phase2_baselines_curves_report,
-    parse_phase2_downstream_eval_report,
 )
 
 _DATASET_REPO = "abdelstark/lensemble-phase2-so100-silos"

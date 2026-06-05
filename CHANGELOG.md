@@ -84,8 +84,8 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
   centralized/pooled, and Fork-A comparisons are explicitly marked blocked so
   model-card text cannot overstate baseline coverage. The checked-in artifact
   lives at `docs/evidence/phase2_baselines_curves_report.json`.
-- `area:artifacts` / `area:docs`: **Phase 2 evidence bundle and model card** (#204) —
-  `lensemble.artifacts.phase2_bundle.Phase2EvidenceBundle` and `scripts/phase2_bundle.py`
+- `area:eval` / `area:docs`: **Phase 2 evidence bundle and model card** (#204) —
+  `lensemble.eval.phase2_bundle.Phase2EvidenceBundle` and `scripts/phase2_bundle.py`
   aggregate the Phase 2 dataset smoke/manifest, training claim report,
   downstream eval report, and baseline/curve report into one generated,
   residency-safe bundle with Hub existence checks for every referenced data,

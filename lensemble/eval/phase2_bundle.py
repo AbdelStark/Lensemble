@@ -19,11 +19,9 @@ from typing import Any, Literal, Mapping, Sequence
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from lensemble.errors import ConfigError, LensembleErrorCode, SchemaVersionMismatch
-from lensemble.eval import (
-    ClaimMVPReport,
-    Phase2BaselinesCurvesReport,
-    Phase2DownstreamEvalReport,
-)
+from lensemble.eval.claim_mvp import ClaimMVPReport
+from lensemble.eval.phase2_curves import Phase2BaselinesCurvesReport
+from lensemble.eval.phase2_downstream import Phase2DownstreamEvalReport
 
 PHASE2_EVIDENCE_BUNDLE_SCHEMA_VERSION = 1
 

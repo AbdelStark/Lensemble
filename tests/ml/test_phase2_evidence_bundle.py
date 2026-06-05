@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from lensemble.artifacts.phase2_bundle import parse_phase2_evidence_bundle
 from lensemble.errors import ConfigError, SchemaVersionMismatch
+from lensemble.eval.phase2_bundle import parse_phase2_evidence_bundle
 
 
 def test_checked_in_phase2_evidence_bundle_is_schema_valid() -> None:
