@@ -54,6 +54,15 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
   `ClaimMVPReport.round_metrics` records curve-ready per-round global hashes, participant ids, dataset
   roots, and update L2 norms for HF Jobs, while the report builder derives a minimal series from the
   contribution ledger for non-launcher callers.
+- `area:deploy` / `area:docs`: **Published Phase 2 GPU HF Job evidence** (#202, #204) — README, the
+  Phase 2 roadmap, and the HF Jobs runbook now record job
+  `6a22ba68e6aa50b87b9ebef7`, pinned code SHA
+  `4b446a558882f25e47ee6410a4c32982bbf33477`, checkpoint repo
+  `abdelstark/lensemble-phase2-so100-checkpoint` revision
+  `da52ef380ac87317c89e87f048d65bae65c16b9e`, final global hash
+  `8f1494fd9e57b7496daf96e379a3de1457a435080b81b9e0ea1d20a52f4827c4`, scalar
+  metrics, and the schema v2 per-round update-norm series while preserving the
+  compact engineering-evidence claim boundary.
 - `area:eval` / `area:docs`: **Phase 2 empirical evidence matrix and roadmap** (#200, #203, #204) —
   `lensemble.eval.Phase2MatrixRow`, `default_phase2_matrix`, and `render_phase2_matrix_markdown` define
   the reviewer-facing Phase 2 experiment matrix: dataset refs, GPU HF Jobs, downstream eval,
