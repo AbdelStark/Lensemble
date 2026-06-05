@@ -73,6 +73,17 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
   `6a22c9e3ece949d7b3dca25a` for checkpoint hash
   `8f1494fd9e57b7496daf96e379a3de1457a435080b81b9e0ea1d20a52f4827c4` and is
   checked in at `docs/evidence/phase2_downstream_eval_report.json`.
+- `area:eval` / `area:docs`: **Phase 2 baseline/curve evidence report** (#205, #204) —
+  `lensemble.eval.Phase2BaselinesCurvesReport` and
+  `scripts/phase2_curves_report.py` aggregate completed Phase 2 training and
+  downstream reports into a generated, residency-safe curve table. Every point
+  records its source-report URI/hash, config hash, checkpoint/global-model hash,
+  and run-manifest or eval-config hash. The first checked-in report includes the
+  matched `lambda_anc=0` naive-FedAvg control from HF Job
+  `6a22cd9eece949d7b3dca260`, while unmatched local-only,
+  centralized/pooled, and Fork-A comparisons are explicitly marked blocked so
+  model-card text cannot overstate baseline coverage. The checked-in artifact
+  lives at `docs/evidence/phase2_baselines_curves_report.json`.
 - `area:eval` / `area:docs`: **Phase 2 empirical evidence matrix and roadmap** (#200, #203, #204) —
   `lensemble.eval.Phase2MatrixRow`, `default_phase2_matrix`, and `render_phase2_matrix_markdown` define
   the reviewer-facing Phase 2 experiment matrix: dataset refs, GPU HF Jobs, downstream eval,

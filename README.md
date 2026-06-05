@@ -118,8 +118,17 @@ ran `scripts/phase2_eval_checkpoint.py` from commit
 [`docs/evidence/phase2_downstream_eval_report.json`](docs/evidence/phase2_downstream_eval_report.json).
 It records `success_rate=0.5`, `effective_dim=1.0000066342911489`,
 `planning_samples=1`, `planner_iterations=1`, and a `synthetic://toy` task
-boundary. Baselines/curves and the final model-card evidence bundle remain
-tracked in Phase 2.
+boundary.
+
+The Phase 2 baseline/curve table is generated at
+[`docs/evidence/phase2_baselines_curves_report.json`](docs/evidence/phase2_baselines_curves_report.json)
+by [`scripts/phase2_curves_report.py`](scripts/phase2_curves_report.py). It
+binds every curve point to source-report, config, checkpoint/global-model, and
+run-manifest hashes. Current coverage is partial: anchored training scalars,
+per-round update norms, a matched `lambda_anc=0` naive-FedAvg control, and
+downstream eval rows are present. Missing local-only, centralized/pooled, and
+Fork-A controls are explicitly marked blocked until matched public runs exist.
+The final model-card evidence bundle remains tracked in Phase 2.
 
 ## Working assumptions
 

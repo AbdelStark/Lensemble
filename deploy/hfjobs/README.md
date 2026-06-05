@@ -133,6 +133,42 @@ It records `synthetic://toy`, `success_rate=0.5`,
 planner iteration, and no action clipping beyond recording the continuous
 `[-1, 1]` bounds.
 
+Generate the Phase 2 baseline/curve report from local copies of the public
+training and downstream reports:
+
+```bash
+hf download abdelstark/lensemble-phase2-so100-checkpoint \
+  claim_mvp_report.json \
+  --repo-type model \
+  --revision da52ef380ac87317c89e87f048d65bae65c16b9e \
+  --local-dir /tmp/lensemble-phase2-hf
+
+hf download abdelstark/lensemble-phase2-so100-naive-fedavg \
+  claim_mvp_report.json \
+  --repo-type model \
+  --revision 8e90bbd09dea96d90c4ae70770e3d6614073971d \
+  --local-dir /tmp/lensemble-phase2-naive-hf
+
+uv run --extra dev python scripts/phase2_curves_report.py \
+  --anchored-claim-report /tmp/lensemble-phase2-hf/claim_mvp_report.json \
+  --naive-fedavg-claim-report /tmp/lensemble-phase2-naive-hf/claim_mvp_report.json \
+  --naive-fedavg-job-id 6a22cd9eece949d7b3dca260 \
+  --naive-fedavg-revision 8e90bbd09dea96d90c4ae70770e3d6614073971d \
+  --output docs/evidence/phase2_baselines_curves_report.json
+```
+
+The checked-in
+[`phase2_baselines_curves_report.json`](../../docs/evidence/phase2_baselines_curves_report.json)
+binds every curve row to source-report/config/checkpoint hashes. It includes the
+matched `lambda_anc=0` naive-FedAvg control from HF Job
+[`6a22cd9eece949d7b3dca260`](https://huggingface.co/jobs/abdelstark/6a22cd9eece949d7b3dca260)
+and model repo
+[`abdelstark/lensemble-phase2-so100-naive-fedavg`](https://huggingface.co/abdelstark/lensemble-phase2-so100-naive-fedavg)
+revision `8e90bbd09dea96d90c4ae70770e3d6614073971d`. Missing local-only,
+centralized/pooled, and Fork-A comparisons remain blocked until matched public
+runs exist. Do not describe those blocked rows as completed baselines in
+model-card text.
+
 Start every expensive run with the dataset smoke, `--dry-run`, and a pinned SHA.
 A representative GPU command is:
 
