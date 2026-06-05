@@ -111,6 +111,18 @@ def test_bf16_forward_matches_fp32_within_tolerance(tol: object) -> None:
         assert terms.total.dtype == torch.float32
 
 
+def test_encoder_accepts_bfloat16_input_with_fp32_master_weights() -> None:
+    encoder = build_encoder(_encoder_cfg()).eval()
+    clip = torch.randn(_STEPS + 1, 2, 3, 4, 4).to(torch.bfloat16)
+
+    with torch.no_grad():
+        encoded = encoder(clip)
+
+    assert tuple(encoded.tokens.shape) == (_STEPS + 1, _N, _D)
+    assert next(encoder.parameters()).dtype == torch.float32
+    assert encoded.tokens.dtype in {torch.float32, torch.bfloat16}
+
+
 def test_deterministic_flag_reproduces_loss_terms(tol: object) -> None:
     previous = torch.are_deterministic_algorithms_enabled()
     try:
