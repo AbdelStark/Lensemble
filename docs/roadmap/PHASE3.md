@@ -267,6 +267,25 @@ privacy controls:
 - fallback to visible individual updates is allowed only when reported as a
   blocker or limitation.
 
+The #226 runtime report lives in `lensemble.federation.phase3_privacy` and is
+attached to `Phase3CoordinatorService` after a successful round close. It
+records:
+
+- selected secure-aggregation backend and threshold;
+- whether an in-process secure sum was consumed;
+- explicit fallback reason when the selected backend cannot run in the local
+  smoke transport;
+- aggregate-only hashes/counts, not individual participant ids or update
+  values;
+- DP accountant backend, clip/noise policy, sample rate, and epsilon spent for
+  the successful round.
+
+The local Phase 3 smoke uses the simulated secure-sum backend to exercise the
+secure-aggregation output path. The masking backend remains the preferred
+production backend, but local/HF runtimes without pairwise key routing and
+dropout-recovery shares must report an explicit fallback rather than claiming a
+masked secure-sum reveal.
+
 No Phase 3 artifact should imply that aggregation correctness or participant
 computation is cryptographically proven.
 

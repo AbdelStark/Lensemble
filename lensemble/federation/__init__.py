@@ -26,6 +26,13 @@ from .messages import (
 from .network import LoopbackChannel, MessageChannel, NetworkedTransport
 from .outer import OuterOptimizer, assert_bitwise_reproducible
 from .participant import Participant, train_local
+from .phase3_privacy import (
+    PHASE3_AGGREGATION_PRIVACY_REPORT_SCHEMA_VERSION,
+    Phase3AggregationPrivacyReport,
+    Phase3DPAccountingReport,
+    Phase3SecureAggregationReport,
+    build_phase3_aggregation_privacy_report,
+)
 from .pseudogradient import PseudoGradient, build_pseudogradient
 from .quant import (
     dequantize_int8,
@@ -76,6 +83,11 @@ __all__ = [
     "CoordinatorParticipantReport",
     "COORDINATOR_SERVICE_TRACE_SCHEMA_VERSION",
     "COORDINATOR_SERVICE_REPORT_SCHEMA_VERSION",
+    "PHASE3_AGGREGATION_PRIVACY_REPORT_SCHEMA_VERSION",
+    "Phase3AggregationPrivacyReport",
+    "Phase3SecureAggregationReport",
+    "Phase3DPAccountingReport",
+    "build_phase3_aggregation_privacy_report",
     "SiloData",
     "RoundMetrics",
     "SimulationResult",
