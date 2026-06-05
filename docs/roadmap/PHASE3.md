@@ -86,6 +86,24 @@ participant agents. The manifest should capture:
 The manifest is a governance and admission contract. It is not a cryptographic
 identity proof and does not prove honest computation.
 
+The schema and shared validators live in `lensemble.config.consortium`. Generate
+the checked-in four-participant example with:
+
+```bash
+uv run --extra dev python scripts/phase3_consortium_manifest.py \
+  --output docs/evidence/phase3_consortium_manifest.example.json
+```
+
+Validate any candidate manifest with:
+
+```bash
+uv run --extra dev python scripts/phase3_consortium_manifest.py \
+  --validate docs/evidence/phase3_consortium_manifest.example.json
+```
+
+The example uses simulated trust-domain data refs so it is a contract fixture,
+not Phase 3 training evidence.
+
 ## Participant-Agent Contract
 
 Each participant agent must run outside the coordinator trust boundary. Before

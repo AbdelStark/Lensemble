@@ -27,6 +27,16 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:config` / `area:docs`: **Phase 3 consortium manifest and run agreement** (#222) —
+  `lensemble.config.Phase3ConsortiumManifest` and `scripts/phase3_consortium_manifest.py`
+  define the operational, non-cryptographic membership contract for Phase 3
+  consortium runs. The shared coordinator/participant validators reject
+  duplicate participant ids, WMCP/action/probe mismatches, missing data
+  declarations, and unsupported network, secure-aggregation, or DP capability
+  combinations. A generated four-participant example lives at
+  `docs/evidence/phase3_consortium_manifest.example.json`, with docs that
+  preserve the explicit non-scope: no provenance ledger and no cryptographic
+  honest-computation proof.
 - `area:data` / `area:deploy`: **Phase 2 participant-silo dataset smoke report** (#201, #204) —
   `lensemble.data.build_phase2_dataset_smoke_report` and `scripts/phase2_dataset_smoke.py` load each
   candidate silo through the public data adapter, count fixed-horizon windows, compute dataset Merkle
