@@ -45,6 +45,11 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
   `97336927606fea6fbfda308bb7cee6e7b48999fa`, the two participant HDF5 file refs, dataset roots, window
   counts, source/license provenance, adapter normalization, and the declared held-out episode policy for
   downstream evaluation.
+- `area:deploy` / `area:federation`: **Phase 2 HF Jobs stream large-window preflights** (#202) — the
+  federated HF launcher now counts validation windows by streaming instead of materializing every window,
+  and the default participant inner loop materializes only the bounded prefix it can consume for
+  `inner_horizon`. This keeps published SO-100 Phase 2 silos from copying thousands of large image windows
+  into memory during mount validation or short inner-loop runs.
 - `area:eval` / `area:docs`: **Phase 2 empirical evidence matrix and roadmap** (#200, #203, #204) —
   `lensemble.eval.Phase2MatrixRow`, `default_phase2_matrix`, and `render_phase2_matrix_markdown` define
   the reviewer-facing Phase 2 experiment matrix: dataset refs, GPU HF Jobs, downstream eval,

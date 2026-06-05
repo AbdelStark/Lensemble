@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import argparse
+import importlib.util
 import json
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 
 import numpy as np
 import pytest
@@ -18,6 +21,18 @@ from lensemble.data import (
 
 _H = _W = 8
 _ADIM = 3
+
+
+def _load_hfjobs_launcher() -> ModuleType:
+    spec = importlib.util.spec_from_file_location(
+        "train_federated_lewm_test", Path("deploy/hfjobs/train_federated_lewm.py")
+    )
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _write_lerobot_h5(
@@ -131,3 +146,20 @@ def test_phase2_dataset_smoke_script_outputs_json_and_file(tmp_path: Path) -> No
     assert stdout_report["silos"][0]["participant_id"] == "cli-silo"
     assert stdout_report["silos"][0]["window_count"] == 5
     assert stdout_report["silos"][0]["data_format"] == "lerobot-h5"
+
+
+def test_hfjobs_validate_sources_counts_windows_from_adapter(tmp_path: Path) -> None:
+    silo = tmp_path / "launcher.h5"
+    _write_lerobot_h5(silo)
+    source = f"lerobot-h5://{silo}"
+    launcher = _load_hfjobs_launcher()
+
+    counts = getattr(launcher, "_validate_sources")(
+        argparse.Namespace(
+            data_source=[source],
+            data_format="lerobot-h5",
+            window_steps=2,
+        )
+    )
+
+    assert counts == {source: 5}
