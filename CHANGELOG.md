@@ -27,6 +27,13 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:data` / `area:deploy`: **Phase 2 participant-silo dataset smoke report** (#201, #204) —
+  `lensemble.data.build_phase2_dataset_smoke_report` and `scripts/phase2_dataset_smoke.py` load each
+  candidate silo through the public data adapter, count fixed-horizon windows, compute dataset Merkle
+  roots, and emit a residency-safe JSON report with participant ids, action specs, and first-window tensor
+  shapes. The gate fails closed on duplicate participant ids, mismatched participant/source counts, or
+  underfilled silos so Phase 2 GPU HF Jobs start from validated dataset refs rather than private paths or
+  zero-window data.
 - `area:eval` / `area:docs`: **Phase 2 empirical evidence matrix and roadmap** (#200, #203, #204) —
   `lensemble.eval.Phase2MatrixRow`, `default_phase2_matrix`, and `render_phase2_matrix_markdown` define
   the reviewer-facing Phase 2 experiment matrix: dataset refs, GPU HF Jobs, downstream eval,

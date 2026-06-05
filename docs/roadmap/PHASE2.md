@@ -42,6 +42,22 @@ uv run --extra dev python scripts/phase2_matrix.py --format markdown
 uv run --extra dev python scripts/phase2_matrix.py --format json
 ```
 
+Dataset refs must pass the participant-silo smoke gate before a GPU run starts:
+
+```bash
+uv run --extra dev python scripts/phase2_dataset_smoke.py \
+  --data-source lerobot-h5:///data/a/<silo-a>.h5 \
+  --data-source lerobot-h5:///data/b/<silo-b>.h5 \
+  --participant-id phase2-a \
+  --participant-id phase2-b \
+  --window-steps 4 \
+  --output phase2_dataset_smoke.json
+```
+
+The JSON report records participant ids, adapter format, episode/window counts,
+dataset Merkle roots, action specs, and first-window tensor shapes. It does not
+serialize raw observations, raw actions, or private embeddings.
+
 ## Minimum Evidence Contract
 
 Before #200 closes, the final report must include:
