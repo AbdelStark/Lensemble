@@ -27,6 +27,15 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:eval` / `area:docs`: **Phase 3 eval and matched-control report**
+  (#228) — `lensemble.eval.Phase3EvalReport` binds completed Phase 3
+  consortium-runtime metrics to checkpoint, config, run-manifest, task/env,
+  seed, planner-budget, and source-report hashes, while representing public
+  SO-100 task-scale eval and missing local-only, naive-FedAvg, and Fork-A
+  controls as explicit blocked rows. `scripts/phase3_eval_report.py` generates
+  or validates `docs/evidence/phase3_eval_report.json`, and the report emits
+  conservative model-card text that separates runtime evidence from robotics
+  performance claims.
 - `area:federation` / `area:deploy`: **Phase 3 long-run consortium
   orchestration smoke** (#227) —
   `lensemble.federation.run_phase3_long_run_smoke` drives a deterministic
