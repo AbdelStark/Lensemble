@@ -54,6 +54,7 @@ nav:
       - Phase 3 Consortium Training: roadmap/PHASE3.md
   - Evidence:
       - Phase 2 Model Card: evidence/phase2_model_card.md
+      - Phase 3 Model Card: evidence/phase3_model_card.md
   - Specification:
       - Overview: spec/00-overview.md
       - Architecture: spec/01-architecture.md

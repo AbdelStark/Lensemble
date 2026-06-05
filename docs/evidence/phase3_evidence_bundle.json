@@ -1,0 +1,264 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-06-05T00:00:00Z",
+  "bundle": "phase3-consortium-leworldmodel-evidence",
+  "artifact_checks": [
+    {
+      "kind": "consortium-manifest",
+      "label": "Phase 3 long-run consortium manifest",
+      "location": "local",
+      "uri": "docs/evidence/phase3_long_run_manifest.json",
+      "checked_at": "2026-06-05T00:00:00Z",
+      "exists": true,
+      "sha256": "8f120d8415b0f3ed8b226c339207fee34f71d96efd8f1c24d34321c9bec7b28a",
+      "repo_type": null,
+      "repo_id": null,
+      "revision": null,
+      "path_in_repo": null,
+      "status_code": null,
+      "error": null
+    },
+    {
+      "kind": "dataset-probe-registry",
+      "label": "Phase 3 long-run dataset/probe registry",
+      "location": "local",
+      "uri": "docs/evidence/phase3_long_run_dataset_registry.json",
+      "checked_at": "2026-06-05T00:00:00Z",
+      "exists": true,
+      "sha256": "b776a78fde89b55558af913c64f78f641acc20bbdbf8bef710e0326e6c5a5d29",
+      "repo_type": null,
+      "repo_id": null,
+      "revision": null,
+      "path_in_repo": null,
+      "status_code": null,
+      "error": null
+    },
+    {
+      "kind": "training-report",
+      "label": "Phase 3 long-run training report",
+      "location": "local",
+      "uri": "docs/evidence/phase3_long_run_smoke_report.json",
+      "checked_at": "2026-06-05T00:00:00Z",
+      "exists": true,
+      "sha256": "3b658f3266a5e024d7a946a9599158667a0d602a295f8dcd3cc4301188ba59ad",
+      "repo_type": null,
+      "repo_id": null,
+      "revision": null,
+      "path_in_repo": null,
+      "status_code": null,
+      "error": null
+    },
+    {
+      "kind": "privacy-aggregation-report",
+      "label": "Phase 3 aggregation/privacy rows embedded in long-run report",
+      "location": "local",
+      "uri": "docs/evidence/phase3_long_run_smoke_report.json#rounds",
+      "checked_at": "2026-06-05T00:00:00Z",
+      "exists": true,
+      "sha256": "3b658f3266a5e024d7a946a9599158667a0d602a295f8dcd3cc4301188ba59ad",
+      "repo_type": null,
+      "repo_id": null,
+      "revision": null,
+      "path_in_repo": null,
+      "status_code": null,
+      "error": null
+    },
+    {
+      "kind": "observability-report",
+      "label": "Phase 3 observability/dropout report",
+      "location": "local",
+      "uri": "docs/evidence/phase3_observability_report.json",
+      "checked_at": "2026-06-05T00:00:00Z",
+      "exists": true,
+      "sha256": "81d499a9beca048eac2b1b870820bef377dd8af0e1268533da4c77b480a83c8b",
+      "repo_type": null,
+      "repo_id": null,
+      "revision": null,
+      "path_in_repo": null,
+      "status_code": null,
+      "error": null
+    },
+    {
+      "kind": "eval-control-report",
+      "label": "Phase 3 eval/control report",
+      "location": "local",
+      "uri": "docs/evidence/phase3_eval_report.json",
+      "checked_at": "2026-06-05T00:00:00Z",
+      "exists": true,
+      "sha256": "da413f988fbf1ada54a4b00b0f26b0cfa35613eca0f7cb3afec966b4836f0fa7",
+      "repo_type": null,
+      "repo_id": null,
+      "revision": null,
+      "path_in_repo": null,
+      "status_code": null,
+      "error": null
+    },
+    {
+      "kind": "run-manifest",
+      "label": "Phase 3 deterministic run manifest",
+      "location": "local",
+      "uri": "runs/phase3-long-run-smoke/phase3_run_manifest.json",
+      "checked_at": "2026-06-05T00:00:00Z",
+      "exists": true,
+      "sha256": "cfaf14dcbe7c3fe9e64f2257729c047df448bd35218b387412f6a5d479c3169a",
+      "repo_type": null,
+      "repo_id": null,
+      "revision": null,
+      "path_in_repo": null,
+      "status_code": null,
+      "error": null
+    },
+    {
+      "kind": "checkpoint-header",
+      "label": "Phase 3 final checkpoint header",
+      "location": "local",
+      "uri": "runs/phase3-long-run-smoke/coordinator-artifacts/round-00010/header.json",
+      "checked_at": "2026-06-05T00:00:00Z",
+      "exists": true,
+      "sha256": "00380f14da537080efa0969e212c93045be8768c443c59255420401635cec5b6",
+      "repo_type": null,
+      "repo_id": null,
+      "revision": null,
+      "path_in_repo": null,
+      "status_code": null,
+      "error": null
+    },
+    {
+      "kind": "checkpoint-weights",
+      "label": "Phase 3 final checkpoint weights",
+      "location": "local",
+      "uri": "runs/phase3-long-run-smoke/coordinator-artifacts/round-00010/weights.safetensors",
+      "checked_at": "2026-06-05T00:00:00Z",
+      "exists": true,
+      "sha256": "b669839b7c37b5f1185bc1326507a640d5d5991092135be1bbf2b4690b7754fd",
+      "repo_type": null,
+      "repo_id": null,
+      "revision": null,
+      "path_in_repo": null,
+      "status_code": null,
+      "error": null
+    }
+  ],
+  "manifest": {
+    "consortium_id": "lensemble-phase3-long-run-smoke",
+    "run_id": "phase3-long-run-smoke-v1",
+    "participant_count": 4,
+    "coordinator_id": "phase3-long-run-coordinator",
+    "protocol_version": "phase3-consortium-v1",
+    "secure_aggregation_backend": "simulated",
+    "dp_required": true,
+    "public_probe_hash": "ddc8349fccfec07a41847e880f19574969d2a00de85a9353dd8c87cdeb7dfea2",
+    "claim_boundary": "Tiny in-process Phase 3 orchestration smoke; demonstrates reproducible coordinator/participant lifecycle, not paper-scale robotics performance."
+  },
+  "dataset_registry": {
+    "registry_id": "lensemble-phase3-long-run-smoke:phase3-long-run-smoke-v1:dataset-probe-registry",
+    "run_mode": "public_example",
+    "participant_count": 4,
+    "participant_ids": [
+      "phase3-so100-a",
+      "phase3-so100-b",
+      "phase3-so100-c",
+      "phase3-so100-d"
+    ],
+    "public_probe_hash": "ddc8349fccfec07a41847e880f19574969d2a00de85a9353dd8c87cdeb7dfea2",
+    "published_participant_count": 0,
+    "placeholder_participant_count": 4,
+    "raw_data_crosses_boundary": false,
+    "heldout_policy": "last synthetic local episode held out"
+  },
+  "training": {
+    "run_id": "phase3-long-run-smoke-v1",
+    "participant_count": 4,
+    "target_rounds": 10,
+    "closed_rounds": 10,
+    "completed_target": true,
+    "config_hash": "a4f6bbabb919735c7679320c3f204cd0b1298e046e30cce8d11cbbbc8df07e57",
+    "final_global_model_hash": "ed3081ee514af142a226443f113a37c24d7d5872bfb707f11abe10893a0ad50d",
+    "run_manifest_hash": "cfaf14dcbe7c3fe9e64f2257729c047df448bd35218b387412f6a5d479c3169a",
+    "checkpoint_header_sha256": "00380f14da537080efa0969e212c93045be8768c443c59255420401635cec5b6",
+    "checkpoint_weights_sha256": "b669839b7c37b5f1185bc1326507a640d5d5991092135be1bbf2b4690b7754fd",
+    "model_latent_dim": 8,
+    "model_num_tokens": 4,
+    "claim_boundary": "Local deterministic Phase 3 long-run smoke: proves orchestration, artifact/report generation, secure-sum reporting, and DP accounting for a tiny model. It is not a published HF Jobs robotics result."
+  },
+  "privacy_aggregation": {
+    "secure_aggregation_backend": "simulated",
+    "secure_aggregation_threshold": 3,
+    "secure_sum_rounds": 10,
+    "dp_enabled": true,
+    "dp_accountant": "rdp",
+    "dp_epsilon": 8.0,
+    "dp_delta": 1e-05,
+    "dp_accounted_rounds": 10,
+    "max_round_epsilon_spent": 5.302585092994046
+  },
+  "eval_controls": {
+    "completed_controls": [
+      "anchored-federation"
+    ],
+    "blocked_controls": [
+      "local-only",
+      "naive-fedavg",
+      "fork-a-frozen-encoder"
+    ],
+    "metric_row_count": 4,
+    "blocked_task_env_ids": [
+      "so100-heldout://phase3-public-task-scale"
+    ],
+    "model_card_eval_text": "Phase 3 evaluation evidence is currently limited to the local deterministic consortium-runtime smoke: participant-agent updates, ten closed rounds, secure-sum reporting, and DP accounting. Public task-scale SO-100 downstream evaluation remains blocked until the Phase 3 checkpoint and held-out eval data are published. Blocked controls: local-only, naive-fedavg, fork-a-frozen-encoder. These rows must not be described as completed robotics performance comparisons.",
+    "claim_boundary": "This Phase 3 eval report supports consortium-runtime engineering evidence from a local tiny-model run and explicit blockers for public task-scale controls. It does not claim paper-scale LeWorldModel performance or SO-100 robotics task success."
+  },
+  "observability": {
+    "round_summary_count": 11,
+    "dropout_decision_count": 1,
+    "induced_dropout_outcomes": [
+      "induced-dropout-close-with-quorum:closed"
+    ],
+    "redaction_contract_id": "phase3-observability-redaction-v1",
+    "final_bundle_handoff": "Issue #230 must consume docs/evidence/phase3_observability_report.json in the final Phase 3 evidence bundle; this report includes an induced dropout event, so no no-failure exception is needed.",
+    "claim_boundary": "This Phase 3 observability report supports consortium-runtime, dropout, communication, artifact, and redaction evidence. It does not claim paper-scale LeWorldModel performance or SO-100 robotics task success."
+  },
+  "publication": {
+    "status": "local_smoke",
+    "model_repo_id": "abdelstark/lensemble-phase3-consortium-checkpoint",
+    "model_repo_revision": "local-smoke",
+    "dataset_repo_id": "abdelstark/lensemble-phase3-consortium-data",
+    "dataset_repo_revision": "local-smoke",
+    "expected_model_repo_files": [
+      "README.md",
+      "reports/phase3_evidence_bundle.json",
+      "reports/phase3_long_run_smoke_report.json",
+      "reports/phase3_eval_report.json",
+      "reports/phase3_observability_report.json",
+      "reports/phase3_long_run_manifest.json",
+      "reports/phase3_long_run_dataset_registry.json",
+      "artifacts/phase3_run_manifest.json",
+      "artifacts/final/header.json",
+      "artifacts/final/weights.safetensors"
+    ],
+    "blockers": [
+      "Model-card/evidence publication is represented as a local release-candidate target until an immutable Hub revision is recorded.",
+      "The Phase 3 dataset repo target is declared, but public task-scale SO-100 eval data remains blocked."
+    ]
+  },
+  "claim_boundaries": [
+    "Consortium-runtime evidence: four simulated sovereign participant agents completed a governed local Phase 3 run with ten closed federated rounds.",
+    "Training/eval scale: this is a deterministic tiny-model local smoke, not a public HF Jobs robotics-scale training result.",
+    "Controls: anchored-federation runtime metrics are completed; local-only, naive-FedAvg, and Fork-A/frozen-encoder Phase 3 controls remain blocked rows.",
+    "Privacy controls: secure_sum aggregation status and DP accounting are exercised as operational controls, not cryptographic computation proofs."
+  ],
+  "non_claims": [
+    "Phase 3 does not include a provenance ledger implementation.",
+    "Phase 3 does not cryptographically prove honest participant computation.",
+    "Phase 3 does not claim paper-scale LeWorldModel performance.",
+    "Phase 3 does not claim public SO-100 robotics task success."
+  ],
+  "known_limitations": [
+    "local-only: No matched local-only Phase 3 run is published for the same participant data refs, seed, model size, and eval budget.",
+    "naive-fedavg: No matched lambda_anc=0 / unanchored Phase 3 consortium control is published for the same run shape and eval budget.",
+    "fork-a-frozen-encoder: The RFC-0002 Fork A frozen-encoder safe-degrade baseline has not been run for the Phase 3 consortium manifest.",
+    "Public task-scale SO-100 downstream evaluation is blocked until a public Phase 3 task checkpoint and held-out eval dataset are published."
+  ],
+  "raw_data_in_report": false,
+  "model_card_markdown": "---\nlicense: apache-2.0\nlibrary_name: lensemble\ntags:\n- federated-learning\n- world-model\n- jepa\n- robotics\n- phase3\n---\n\n# Lensemble Phase 3 Consortium JEPA World Model\n\nThis model repository records the Phase 3 consortium-training release-candidate\nevidence for a federated JEPA / LeWorldModel-flavour world model.\n\n## Consortium Runtime Evidence\n\n- Consortium id: `lensemble-phase3-long-run-smoke`\n- Run id: `phase3-long-run-smoke-v1`\n- Participant agents: 4\n- Coordinator: `phase3-long-run-coordinator`\n- Protocol: `phase3-consortium-v1`\n- Public probe hash: `ddc8349fccfec07a41847e880f19574969d2a00de85a9353dd8c87cdeb7dfea2`\n- Secure aggregation backend: `simulated`\n- DP accountant: `rdp`\n\n## Training And Evaluation Scale\n\n- Closed rounds: 10/10\n- Tiny model shape: `latent_dim=8`,\n  `num_tokens=4`\n- Config hash: `a4f6bbabb919735c7679320c3f204cd0b1298e046e30cce8d11cbbbc8df07e57`\n- Final checkpoint hash: `ed3081ee514af142a226443f113a37c24d7d5872bfb707f11abe10893a0ad50d`\n- Run-manifest hash: `cfaf14dcbe7c3fe9e64f2257729c047df448bd35218b387412f6a5d479c3169a`\n- Training evidence is a deterministic local consortium smoke, not a public\n  HF Jobs robotics-scale result.\n\n## Completed And Blocked Controls\n\n- Completed controls: `anchored-federation`\n- Blocked controls: `local-only`, `naive-fedavg`, `fork-a-frozen-encoder`\n- Eval/control metric rows: 4\n\nPhase 3 evaluation evidence is currently limited to the local deterministic consortium-runtime smoke: participant-agent updates, ten closed rounds, secure-sum reporting, and DP accounting. Public task-scale SO-100 downstream evaluation remains blocked until the Phase 3 checkpoint and held-out eval data are published. Blocked controls: local-only, naive-fedavg, fork-a-frozen-encoder. These rows must not be described as completed robotics performance comparisons.\n\n## Privacy And Observability Controls\n\n- Secure-sum rounds: 10\n- DP-accounted rounds: 10\n- Max per-round epsilon spent: 5.302585092994046\n- Observability round summaries: 11\n- Induced dropout outcomes: induced-dropout-close-with-quorum:closed\n- Redaction contract: `phase3-observability-redaction-v1`\n\n## Dataset And Publication Status\n\n- Dataset registry: `lensemble-phase3-long-run-smoke:phase3-long-run-smoke-v1:dataset-probe-registry`\n- Dataset run mode: `public_example`\n- Participant data declarations: 4\n- Raw data crosses participant boundary: `False`\n- Model repo target: `hf://models/abdelstark/lensemble-phase3-consortium-checkpoint@local-smoke`\n- Dataset repo target: `hf://datasets/abdelstark/lensemble-phase3-consortium-data@local-smoke`\n- Publication status: `local_smoke`\n\n## Claim Boundaries\n\n- Consortium-runtime evidence: four simulated sovereign participant agents completed a governed local Phase 3 run with ten closed federated rounds.\n- Training/eval scale: this is a deterministic tiny-model local smoke, not a public HF Jobs robotics-scale training result.\n- Controls: anchored-federation runtime metrics are completed; local-only, naive-FedAvg, and Fork-A/frozen-encoder Phase 3 controls remain blocked rows.\n- Privacy controls: secure_sum aggregation status and DP accounting are exercised as operational controls, not cryptographic computation proofs.\n\n## Non-Claims\n\n- Phase 3 does not include a provenance ledger implementation.\n- Phase 3 does not cryptographically prove honest participant computation.\n- Phase 3 does not claim paper-scale LeWorldModel performance.\n- Phase 3 does not claim public SO-100 robotics task success.\n\n## Known Limitations\n\n- local-only: No matched local-only Phase 3 run is published for the same participant data refs, seed, model size, and eval budget.\n- naive-fedavg: No matched lambda_anc=0 / unanchored Phase 3 consortium control is published for the same run shape and eval budget.\n- fork-a-frozen-encoder: The RFC-0002 Fork A frozen-encoder safe-degrade baseline has not been run for the Phase 3 consortium manifest.\n- Public task-scale SO-100 downstream evaluation is blocked until a public Phase 3 task checkpoint and held-out eval dataset are published.\n\n## Reports In This Release Candidate\n\n- `reports/phase3_evidence_bundle.json`\n- `reports/phase3_long_run_smoke_report.json`\n- `reports/phase3_eval_report.json`\n- `reports/phase3_observability_report.json`\n- `reports/phase3_long_run_manifest.json`\n- `reports/phase3_long_run_dataset_registry.json`\n- `artifacts/final/header.json`\n- `artifacts/final/weights.safetensors`\n"
+}

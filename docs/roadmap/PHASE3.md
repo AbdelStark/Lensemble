@@ -442,6 +442,45 @@ The final generated bundle should aggregate:
 Bundle generation must verify referenced artifacts exist before emitting a
 success bundle. The checked-in and published bundle must be residency-safe.
 
+The #230 final bundle generator materializes the run-specific consortium
+manifest and dataset/probe registry from the #227 long-run evidence, then
+aggregates all Phase 3 reports and the local final checkpoint header/weights:
+
+```bash
+uv run --extra dev python scripts/phase3_bundle.py \
+  --output docs/evidence/phase3_evidence_bundle.json \
+  --model-card-output docs/evidence/phase3_model_card.md \
+  --manifest-output docs/evidence/phase3_long_run_manifest.json \
+  --registry-output docs/evidence/phase3_long_run_dataset_registry.json
+```
+
+Validate the checked-in bundle/model-card pair with:
+
+```bash
+uv run --extra dev python scripts/phase3_bundle.py \
+  --validate docs/evidence/phase3_evidence_bundle.json \
+  --model-card docs/evidence/phase3_model_card.md
+```
+
+The generated bundle verifies the local manifest, dataset/probe registry,
+long-run report, eval/control report, observability/dropout report,
+privacy/aggregation rows embedded in the training report, run manifest, and
+final checkpoint header/weights before writing a success bundle. The generated
+model card distinguishes consortium-runtime evidence, tiny local
+training/eval scale, completed and blocked controls, privacy controls, and
+non-claims.
+
+The checked-in Phase 3 bundle is a local-smoke release candidate. It declares
+the target Hub model and dataset repositories, but does not claim paper-scale
+SO-100 task performance or cryptographic honest-computation proof.
+
+The generated model card, evidence bundle, Phase 3 reports, run manifest, and
+final tiny checkpoint header/weights were also uploaded to the target model
+repository at immutable revision
+`f48176620987a763d2d38dfe09b70a71d88f6db0`. This publication is an artifact
+mirror for the local-smoke release candidate; it does not change the
+model-card claim boundary or unblock the public SO-100 task-scale eval rows.
+
 ## Acceptance Matrix
 
 | Gate | Minimum passing evidence |
