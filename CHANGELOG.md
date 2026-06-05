@@ -84,6 +84,18 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
   centralized/pooled, and Fork-A comparisons are explicitly marked blocked so
   model-card text cannot overstate baseline coverage. The checked-in artifact
   lives at `docs/evidence/phase2_baselines_curves_report.json`.
+- `area:eval` / `area:docs`: **Phase 2 evidence bundle and model card** (#204) —
+  `lensemble.eval.phase2_bundle.Phase2EvidenceBundle` and `scripts/phase2_bundle.py`
+  aggregate the Phase 2 dataset smoke/manifest, training claim report,
+  downstream eval report, and baseline/curve report into one generated,
+  residency-safe bundle with Hub existence checks for every referenced data,
+  report, and checkpoint artifact. The generated model card preserves the
+  engineering-evidence claim boundary and blocked-comparison language. The
+  checked-in outputs are `docs/evidence/phase2_evidence_bundle.json` and
+  `docs/evidence/phase2_model_card.md`; the checkpoint repo now publishes
+  `README.md`, `reports/phase2_evidence_bundle.json`, and
+  `reports/phase2_model_card.md` at revision
+  `eaf13136b42cde324758a191c98e377636ded7f8`.
 - `area:eval` / `area:docs`: **Phase 2 empirical evidence matrix and roadmap** (#200, #203, #204) —
   `lensemble.eval.Phase2MatrixRow`, `default_phase2_matrix`, and `render_phase2_matrix_markdown` define
   the reviewer-facing Phase 2 experiment matrix: dataset refs, GPU HF Jobs, downstream eval,
