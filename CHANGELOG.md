@@ -27,6 +27,15 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:aggregation` / `area:privacy`: **Phase 3 aggregation/privacy runtime
+  report** (#226) — `lensemble.federation.Phase3AggregationPrivacyReport`
+  records secure-aggregation backend status, threshold, aggregate-only hashes,
+  explicit fallback reasons, DP accountant backend, clip/noise policy, sample
+  rate, and epsilon spent for successful coordinator-service rounds. The
+  service consumes the in-process secure-sum path when the selected backend is
+  runnable locally, records masking-backend fallback explicitly when recovery
+  shares are unavailable, and keeps participant ids/update values out of the
+  report.
 - `area:data` / `area:federation`: **Phase 3 dataset/public-probe registry** (#225) —
   `lensemble.data.Phase3DatasetProbeRegistry` records four-participant dataset
   declarations, held-out policy, adapter format, windowing, action/observation

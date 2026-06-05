@@ -27,6 +27,10 @@ from lensemble.data.phase3 import (
 )
 from lensemble.errors import ConfigError, LensembleErrorCode, RoundError
 from lensemble.federation.coordinator import Coordinator
+from lensemble.federation.phase3_privacy import (
+    Phase3AggregationPrivacyReport,
+    build_phase3_aggregation_privacy_report,
+)
 from lensemble.federation.round import RoundState
 from lensemble.federation.transport import InProcessTransport
 
@@ -153,6 +157,7 @@ class CoordinatorServiceReport(BaseModel):
     dropout_policy: Phase3DropoutPolicy
     participants: tuple[CoordinatorParticipantReport, ...]
     trace_path: str = Field(min_length=1)
+    aggregation_privacy_report: Phase3AggregationPrivacyReport | None = None
 
 
 @dataclass
@@ -211,6 +216,9 @@ class Phase3CoordinatorService:
         self._admission_open = True
         self._aborted_rounds: set[int] = set()
         self._retry_counts: dict[int, int] = {}
+        self._last_aggregation_privacy_report: Phase3AggregationPrivacyReport | None = (
+            None
+        )
         trainer_ids = [
             p.participant_id for p in self.manifest.participants if p.role == "trainer"
         ]
@@ -255,10 +263,16 @@ class Phase3CoordinatorService:
                 self._participants[pid].report() for pid in sorted(self._participants)
             ),
             trace_path=str(self.trace_path),
+            aggregation_privacy_report=self._last_aggregation_privacy_report,
         )
 
     def trace(self) -> tuple[CoordinatorServiceEvent, ...]:
         return tuple(self._events)
+
+    def aggregation_privacy_report(self) -> Phase3AggregationPrivacyReport | None:
+        """The latest successful round's Phase 3 aggregation/privacy report."""
+
+        return self._last_aggregation_privacy_report
 
     def round_state(self) -> RoundState:
         current = self.coordinator.global_state().round_index
@@ -426,8 +440,17 @@ class Phase3CoordinatorService:
         if round_index in self._aborted_rounds:
             return RoundState.ABORTED
         self._record_missing_assigned_as_timeouts(round_index)
+        updates = dict(self.transport.collect_updates(round_index))
         state = self.coordinator.try_round()
         if state is RoundState.CLOSED:
+            self._last_aggregation_privacy_report = (
+                build_phase3_aggregation_privacy_report(
+                    self.config,
+                    self.manifest,
+                    updates,
+                    round_index=round_index,
+                )
+            )
             record = self.coordinator.ledger_records()[-1]
             self._record(
                 "round.closed",
