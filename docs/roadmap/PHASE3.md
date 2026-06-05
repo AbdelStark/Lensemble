@@ -306,6 +306,38 @@ Scaling model size should follow the dry-run evidence. A smaller model that
 finishes with strong evidence is preferable to a larger run that cannot publish
 complete artifacts.
 
+The #227 reproducible local release-candidate smoke runs the coordinator service
+and four `Phase3ParticipantAgent` simulated trust domains in one deterministic
+no-GPU command:
+
+```bash
+uv run --extra dev python scripts/phase3_consortium_smoke.py \
+  --rounds 10 \
+  --run-dir runs/phase3-long-run-smoke \
+  --output docs/evidence/phase3_long_run_smoke_report.json
+```
+
+Validate the checked-in report with:
+
+```bash
+uv run --extra dev python scripts/phase3_consortium_smoke.py \
+  --validate docs/evidence/phase3_long_run_smoke_report.json
+```
+
+The report records the declared run shape before launch: four participants,
+ten target rounds, inner horizon, tiny model size, root seed, DP policy,
+secure-aggregation backend and threshold, eval budget reservation, and artifact
+repo targets. Its dry-run section validates the manifest, dataset/probe
+registry agreement, pinned public-probe hash, participant-agent preflight,
+participant update release, local mount boundary, secure-aggregation threshold,
+DP policy, and report publication path before the run closes rounds.
+
+The checked-in smoke evidence is intentionally local and synthetic. It proves
+the Phase 3 orchestration path, checkpoint/ledger/trace/report publication, and
+aggregation/privacy accounting for a tiny LeWorldModel-flavour run. It is not a
+published HF Jobs robotics result; #228 and #230 own downstream evaluation and
+release-bundle publication.
+
 ## Evaluation And Controls
 
 Phase 3 must not stop at training scalars. The eval plan should declare:

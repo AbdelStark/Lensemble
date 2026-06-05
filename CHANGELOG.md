@@ -27,6 +27,17 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:federation` / `area:deploy`: **Phase 3 long-run consortium
+  orchestration smoke** (#227) —
+  `lensemble.federation.run_phase3_long_run_smoke` drives a deterministic
+  four-participant-agent coordinator-service run for the declared Phase 3
+  minimum of ten closed federated rounds, with registry/manifest dry-run
+  checks, a real pinned public-probe hash, secure-aggregation and DP report
+  consumption, per-round hashes, participant lifecycle counts,
+  checkpoint/ledger/trace paths, and conservative local-smoke claim
+  boundaries. `scripts/phase3_consortium_smoke.py` generates or validates
+  `docs/evidence/phase3_long_run_smoke_report.json`, while CI covers a smaller
+  no-GPU version.
 - `area:aggregation` / `area:privacy`: **Phase 3 aggregation/privacy runtime
   report** (#226) — `lensemble.federation.Phase3AggregationPrivacyReport`
   records secure-aggregation backend status, threshold, aggregate-only hashes,

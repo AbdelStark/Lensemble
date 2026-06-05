@@ -26,6 +26,21 @@ from .messages import (
 from .network import LoopbackChannel, MessageChannel, NetworkedTransport
 from .outer import OuterOptimizer, assert_bitwise_reproducible
 from .participant import Participant, train_local
+from .phase3_orchestration import (
+    PHASE3_LONG_RUN_REPORT_SCHEMA_VERSION,
+    Phase3ArtifactTargets,
+    Phase3LongRunReport,
+    Phase3ParticipantRunSummary,
+    Phase3RoundRunSummary,
+    Phase3RunShape,
+    load_phase3_long_run_report,
+    parse_phase3_long_run_report,
+    phase3_long_run_smoke_config,
+    phase3_long_run_smoke_manifest,
+    run_phase3_long_run_smoke,
+    to_phase3_long_run_report_json,
+    write_phase3_long_run_report,
+)
 from .phase3_privacy import (
     PHASE3_AGGREGATION_PRIVACY_REPORT_SCHEMA_VERSION,
     Phase3AggregationPrivacyReport,
@@ -88,6 +103,19 @@ __all__ = [
     "Phase3SecureAggregationReport",
     "Phase3DPAccountingReport",
     "build_phase3_aggregation_privacy_report",
+    "PHASE3_LONG_RUN_REPORT_SCHEMA_VERSION",
+    "Phase3ArtifactTargets",
+    "Phase3RunShape",
+    "Phase3RoundRunSummary",
+    "Phase3ParticipantRunSummary",
+    "Phase3LongRunReport",
+    "phase3_long_run_smoke_config",
+    "phase3_long_run_smoke_manifest",
+    "run_phase3_long_run_smoke",
+    "write_phase3_long_run_report",
+    "parse_phase3_long_run_report",
+    "load_phase3_long_run_report",
+    "to_phase3_long_run_report_json",
     "SiloData",
     "RoundMetrics",
     "SimulationResult",
