@@ -28,8 +28,9 @@ LeWM `ARPredictor` shape), and a per-embodiment action head $h_\psi^{(c)}$ (cont
 loss that manufactures the missing latent frame ([RFC-0002 §4](RFC-0002-gauge-and-aggregation.md#4-layer-2--frame-anchoring-on-a-public-probe-the-gauge-fix)).
 
 This RFC fixes: the warm-start loading path and the round-0 snapshot $f_{\text{ref}}$ that closes the
-gauge (`INV-WARMSTART-T0`); the stop-gradient on the prediction target $\text{sg}[f_\theta(x_{t+1})]$;
-the SIGReg algorithm (random-projection sketch $A$, the Epps–Pulley characteristic-function statistic,
+gauge (`INV-WARMSTART-T0`); the configured prediction target branch for $f_\theta(x_{t+1})$ (default
+stop-gradient path, claim-grade LeWorldModel base mode with `objective.target_stop_gradient=false`); the
+SIGReg algorithm (random-projection sketch $A$, the Epps–Pulley characteristic-function statistic,
 Cramér–Wold reduction, reference defaults) and the **reduce-within-trust-domain** rule for projection
 statistics (`INV-RESIDENCY`); and the numerical contract (bf16 forward, fp32 accumulation,
 deterministic-mode flag, CUDA-primary with CPU fallback). Every encoder output conforms to the WMCP
@@ -72,8 +73,9 @@ silently compute different objectives and the gauge analysis will not hold.
   (Fork B), emitting a WMCP `LatentState` of shape $(N, d)$. Fix the warm-start loading path and the
   $f_{\text{ref}}$ snapshot taken at round 0 (`INV-WARMSTART-T0`, `INV-WMCP`).
 - Specify the predictor $g_\phi$: a compact action-conditioned transformer predicting future latents
-  autoregressively (the LeWM `ARPredictor` shape), with the stop-gradient on the target
-  $\text{sg}[f_\theta(x_{t+1})]$ stated as a contract.
+  autoregressively (the LeWM `ARPredictor` shape), with the prediction target-gradient mode stated as a
+  contract: the default uses the stop-gradient helper, while claim-grade LeWorldModel base mode keeps
+  $f_\theta(x_{t+1})$ live.
 - Specify the `Objective` class: the three weighted terms ([conventions §2](../spec/conventions.md#2-mathematical-notation)), returning per-term scalars for
   logging ([RFC-0015](RFC-0015-observability-diagnostics.md)).
 - Specify SIGReg in implementation detail: the shared sketch $A$
@@ -216,16 +218,19 @@ in the shared space so that $g_\phi$ is one federated model across embodiments
 (`INV-ACTIONHEAD-LOCAL`).
 
 The prediction loss compares the predicted next latent to the encoder's embedding of the actual next
-observation, **stop-gradient on the target** ([conventions §2](../spec/conventions.md#2-mathematical-notation)):
+observation. The default proof-ready JEPA-family path uses **stop-gradient on the target**
+([conventions §2](../spec/conventions.md#2-mathematical-notation)):
 
 $$\mathcal{L}_{\text{pred}} = \mathbb{E}\,\lVert g_\phi(f_\theta(x_t),a_t) - \text{sg}[f_\theta(x_{t+1})]\rVert^2 .$$
 
-The stop-gradient is a contract: gradients flow into $g_\phi$ and into $f_\theta$ *through the input
-branch* $f_\theta(x_t)$, but not through the target branch $f_\theta(x_{t+1})$. With SIGReg preventing
-collapse, no EMA/teacher target is needed (the property that makes the objective federation-friendly;
-see §6 and Alternatives Considered). The implementation applies `Tensor.detach()` to the target
-embedding before the residual; a gradient finite-difference test asserts the target branch carries zero
-gradient (Testing Strategy).
+That stop-gradient helper is a contract when `objective.target_stop_gradient=true`: gradients flow into
+$g_\phi$ and into $f_\theta$ through the input branch $f_\theta(x_t)$, but not through the target branch
+$f_\theta(x_{t+1})$. Claim-grade LeWorldModel base mode sets `objective.target_stop_gradient=false` and
+uses the same MSE target without detaching $f_\theta(x_{t+1})$, matching the no-EMA/no-teacher/no-target
+stop-gradient base recipe. With SIGReg preventing collapse, no EMA/teacher target is needed (the property
+that makes the objective federation-friendly; see §6 and Alternatives Considered). Tests assert both
+branches: the residual helper detaches, and `Objective` with `target_stop_gradient=false` keeps the target
+branch live.
 
 ### 4. Action head `h_\psi^{(c)}`
 
@@ -311,7 +316,8 @@ class Objective:
 
         Post: every LossTerms field is an fp32 0-dim tensor; `total` requires grad and is the
               value .backward() is called on. SIGReg uses the sketch A derived from sketch_seed
-              (INV-SKETCH-CONSISTENCY). The target embedding f(x_{t+1}) is stop-gradiented.
+              (INV-SKETCH-CONSISTENCY). `target_stop_gradient` controls whether f(x_{t+1}) is detached;
+              claim-grade LeWorldModel base mode sets it False.
         Raises: ContractViolation if encoder output is non-conformant (INV-WMCP);
                 GaugeError('FrameDriftExceeded') if the landmark anchor is under-determined
                 (k < d), surfaced from the injected anchor (RFC-0002 §4).
@@ -482,9 +488,9 @@ to the EMA encoder too), and reconciling them re-introduces exactly the frame pr
 weights. SIGReg removes the EMA target, the stop-gradient teacher, and the teacher–student machinery,
 leaving only the stateless encoder/predictor pair plus a regularizer
 ([RFC-0002 §1](RFC-0002-gauge-and-aggregation.md#1-background-the-objective-verbatim-from-rfc-0008));
-that statelessness is the property that makes the objective federation-friendly. (The stop-gradient on
-the *target embedding* in §3 is retained; what is removed is the *separate momentum-encoder* that
-produces it.)
+that statelessness is the property that makes the objective federation-friendly. The default path may
+still detach the *current* target embedding as a local objective choice; claim-grade LeWorldModel base
+mode disables that detach, and neither mode introduces a separate momentum encoder.
 
 **Frozen encoder = Fork A.** *What:* freeze the warm-started encoder, co-train only the predictor; the
 frozen shared encoder is a shared frame, so the gauge dissolves and the anchor term is unnecessary
@@ -495,8 +501,8 @@ by v1.0 ([conventions §12](../spec/conventions.md#12-milestones-and-stages)); u
 mode (no encoder gradient), which is why the `Objective` signature admits `lambda_anc = 0.0` and a
 `None` anchor.
 
-**Per-step encoder target vs averaged/EMA target embedding.** *What:* whether the stop-gradient target
-$\text{sg}[f_\theta(x_{t+1})]$ uses the current per-step encoder or a time-averaged encoder. *Why
+**Per-step encoder target vs averaged/EMA target embedding.** *What:* whether the prediction target
+$f_\theta(x_{t+1})$ uses the current per-step encoder (optionally detached by config) or a time-averaged encoder. *Why
 considered:* an averaged target can stabilize the prediction loss. *Why deferred:* an averaged target
 re-introduces a second set of encoder state to reconcile across the boundary (the EMA objection above),
 so the default is the per-step current encoder; whether an averaged target helps at video scale without
@@ -557,8 +563,9 @@ on the CPU fallback with tiny synthetic fixtures (no large downloads, [conventio
   the unit owned here; it is referenced by [RFC-0002 Testing Strategy](RFC-0002-gauge-and-aggregation.md#testing-strategy)
   because Layer 1 depends on it.
 - **Gradient finite-difference check.** Verify the analytic gradient of each loss term against a
-  finite-difference estimate on a tiny model, within fp32 tolerance. Includes the stop-gradient
-  assertion: gradient through the target branch $f_\theta(x_{t+1})$ is zero (the `detach` contract, §3).
+  finite-difference estimate on a tiny model, within fp32 tolerance. Includes both target-gradient modes:
+  the residual helper has zero target-branch gradient, while claim-grade `Objective(target_stop_gradient=False)`
+  keeps the $f_\theta(x_{t+1})$ branch live.
 - **AC-predictor output shape.** Assert `Predictor.forward` emits a `LatentState` of shape $(B,N,d)$
   given a $(B,N,d)$ latent and a $(B,d_{\text{cond}})$ (code field: `cond_dim`) conditioning embedding, and that an
   autoregressive rollout preserves the shape over the horizon.
@@ -599,12 +606,11 @@ image-scale defaults (sketch 64, ~17 knots) may under-control variance when $N$ 
 is large. Owner @AbdelStark. Resolution: the Stage-A/B hyperparameter sweep against collapse
 (`gauge/effective_dim`, [RFC-0005 §4](RFC-0005-evaluation.md)) and MPC success, milestone v0.1 → v0.2.
 
-OPEN QUESTION: Whether the stop-gradient target $\text{sg}[f_\theta(x_{t+1})]$ should use the current
-per-step encoder or a time-averaged encoder. The per-step encoder is the default to avoid re-introducing
-reconcilable state across the federation boundary; an averaged target may stabilize the prediction loss
-at video scale. Owner @AbdelStark. Resolution: Stage A ablation, conditional on not re-opening a
-state-reconciliation problem under federation (the EMA objection, Alternatives Considered), milestone
-v0.1 → v0.2.
+OPEN QUESTION: Whether the per-step target $f_\theta(x_{t+1})$ should use only the current encoder or a
+time-averaged encoder. The per-step encoder is the default to avoid re-introducing reconcilable state
+across the federation boundary; an averaged target may stabilize the prediction loss at video scale.
+Owner @AbdelStark. Resolution: Stage A ablation, conditional on not re-opening a state-reconciliation
+problem under federation (the EMA objection, Alternatives Considered), milestone v0.1 → v0.2.
 
 RISK: SIGReg co-training a video-WM encoder at ViT-L and toward 1.2B is unproven (demonstrated only to
 ViT-H on images). Resolution plan: Stage A (v0.1) de-risks the objective + MPC eval centrally before any

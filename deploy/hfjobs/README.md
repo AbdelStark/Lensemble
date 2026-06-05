@@ -1,12 +1,43 @@
-# HF Jobs — end-to-end LeWorldModel training
+# HF Jobs — LeWorldModel training
 
-[`train_lewm.py`](train_lewm.py) trains the in-tree LeWorldModel (video-ViT `f_θ` + action-conditioned
+[`train_federated_lewm.py`](train_federated_lewm.py) is the claim-MVP launcher: it runs the real
+Lensemble federated runtime (`Coordinator` + default `Participant` hooks) over mounted `lerobot-h5://`
+participant data sources, writes committed checkpoints plus `claim_mvp_report.json`, and can push the
+dataset/checkpoint artifacts to the Hub when `HF_TOKEN` is available.
+
+[`train_lewm.py`](train_lewm.py) is the older single-site trainer. It trains the in-tree LeWorldModel (video-ViT `f_θ` + action-conditioned
 `g_φ` + the SIGReg-JEPA objective) **from scratch (no warm start)** on a real robot dataset, on a
 Hugging Face Jobs GPU. The dataset is loaded through the official `lerobot-h5://` data source
 (`lensemble.data.adapters`) — the same `EpisodeDataset` → `Window` contract the federated `Participant`
 consumes — so this is the real pipeline, not a bespoke loader.
 
-## Run
+## Federated Claim-MVP Run
+
+Each mounted HDF5 file is one participant silo:
+
+```bash
+hf jobs uv run --flavor h200 --secrets HF_TOKEN \
+  -v hf://datasets/<org>/silo-a:/data/a \
+  -v hf://datasets/<org>/silo-b:/data/b \
+  https://raw.githubusercontent.com/AbdelStark/Lensemble/main/deploy/hfjobs/train_federated_lewm.py -- \
+  --data-source lerobot-h5:///data/a/silo0.h5 \
+  --data-source lerobot-h5:///data/b/silo1.h5 \
+  --num-rounds 1 --inner-horizon 1 \
+  --lambda-sig 0.1 --lambda-anc 0.01 \
+  --out-repo <org>/lewm-federated-claim-mvp \
+  --push
+```
+
+Use `--dry-run` first to validate the mounts, generate the probe, and emit a dry-run
+`claim_mvp_report.json` without training or publishing. Omit `--push` to keep artifacts only in the job
+filesystem. Add repeated `--dataset-repo <org>/<dataset>` values, one per `--data-source`, when the job
+should publish the mounted HDF5 sources too.
+
+By default the federated launcher runs claim-grade LeWorldModel target mode
+(`objective.target_stop_gradient=false`). Pass `--target-stop-gradient` only for the legacy detached
+target helper.
+
+## Single-Site Run
 
 The dataset is mounted read-only at `/data`; the script is a PEP-723 uv script with inline deps:
 

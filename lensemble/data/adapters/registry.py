@@ -2,16 +2,16 @@
 
 This is the single extension point named in
 [02 — Public API §5.2](../../../docs/spec/02-public-api.md#52-registering-a-new-data-adapter): a
-module-level registry keyed by ``fmt`` (``"lance" | "hdf5" | "lerobot"`` and any user key). The three
-built-in adapters self-register at import; a new adapter plugs in through :func:`register_adapter` and is
-selected the same way the built-ins are — by ``EpisodeDataset.fmt`` or, for the read-only LeRobot view,
-the ``lerobot://`` URI scheme.
+module-level registry keyed by ``fmt`` (``"lance" | "hdf5" | "lerobot" | "lerobot-h5"`` and any user key).
+The built-in adapters self-register at import; a new adapter plugs in through :func:`register_adapter` and
+is selected the same way the built-ins are — by ``EpisodeDataset.fmt`` or, for the read-only LeRobot
+views, the ``lerobot://`` / ``lerobot-h5://`` URI schemes.
 
 Residency (``INV-RESIDENCY``, 02 §5.2): every adapter materializes RAW, local episodes *inside* the
 trust boundary. The on-disk ``lance``/``hdf5`` files are local participant artifacts; no adapter exposes
 an egress / serialize-outbound path (a boundary-crossing payload is inspected only by
-``lensemble.data.residency.guard_egress``). The read-only ``lerobot://`` view never participates in
-commitment or egress by construction (RFC-0004 §1).
+``lensemble.data.residency.guard_egress``). The read-only ``lerobot://`` and ``lerobot-h5://`` views never
+participate in save-time egress by construction (RFC-0004 §1).
 """
 
 from __future__ import annotations
@@ -85,22 +85,22 @@ def _require(fmt: str) -> _Adapter:
 def save_episodes(dataset: "EpisodeDataset", path: Path, *, fmt: "Format") -> None:
     """Write ``dataset``'s in-memory episodes to ``path`` via the backend keyed by ``fmt`` (RFC-0004 §1).
 
-    Raises :class:`ValueError` on an unknown ``fmt`` or on a read-only adapter (``lerobot`` has no saver —
-    the ``lerobot://`` view is read-only by construction). The written file is a local participant
+    Raises :class:`ValueError` on an unknown ``fmt`` or on a read-only adapter (``lerobot`` /
+    ``lerobot-h5`` have no saver — the LeRobot views are read-only by construction). The written file is a local participant
     artifact (``INV-RESIDENCY``); it is never an egress payload.
     """
     adapter = _require(fmt)
     if adapter.saver is None:
         raise ValueError(
             f"adapter {fmt!r} is read-only and cannot save; "
-            "the lerobot:// view is read-only by construction (RFC-0004 §1) — "
+            "the LeRobot views are read-only by construction (RFC-0004 §1) — "
             "write through the lance or hdf5 backend instead"
         )
     adapter.saver(dataset, Path(path))
 
 
 def _resolve_fmt(source: "str | Path", fmt: "Format | None") -> str:
-    """Resolve the backend key from an explicit ``fmt``, the ``lerobot://`` scheme, or the path suffix."""
+    """Resolve the backend key from an explicit ``fmt``, a LeRobot URI scheme, or the path suffix."""
     if fmt is not None:
         return fmt
     text = str(source)
@@ -123,8 +123,9 @@ def load_episodes(
 ) -> "EpisodeDataset":
     """Resolve ``source`` to a read-back :class:`~lensemble.data.dataset.EpisodeDataset` (RFC-0004 §1).
 
-    Backend selection: an explicit ``fmt``; OR a ``lerobot://<repo_id>`` URI → the read-only lerobot
-    adapter; OR inference from the path suffix (``.lance`` → ``lance``; ``.h5``/``.hdf5`` → ``hdf5``).
+    Backend selection: an explicit ``fmt``; OR a ``lerobot://<repo_id>`` / ``lerobot-h5://<path>`` URI →
+    the matching read-only LeRobot adapter; OR inference from the path suffix (``.lance`` → ``lance``;
+    ``.h5``/``.hdf5`` → ``hdf5``).
     The returned dataset carries the same ``fmt``. Raises :class:`ValueError` on an unresolvable source
     or unknown ``fmt``. The materialized episodes are RAW and local (``INV-RESIDENCY``).
     """

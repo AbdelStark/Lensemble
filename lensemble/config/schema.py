@@ -59,6 +59,10 @@ class ObjectiveConfig:
     lambda_pred: float = 1.0
     lambda_sig: float = 0.1
     lambda_anc: float = 1.0  # the central gauge knob (RFC-0002 7)
+    # Claim-grade LeWorldModel base mode sets this False: no EMA/teacher/target stop-gradient; prediction
+    # loss compares g_phi(f_theta(o_t), a_t) directly to f_theta(o_{t+1}). The default preserves the
+    # existing proof-ready JEPA-family path until the claim-mode architecture is fully rolled out (#191).
+    target_stop_gradient: bool = True
     sigreg_sketch_dim: int = 64
     sigreg_knots: int = 17
     anchor_variant: Literal["landmark", "rotational"] = "landmark"
@@ -111,7 +115,7 @@ class PrivacyConfig:
 
 @dataclass(frozen=True)
 class DataConfig:
-    format: Literal["lance", "hdf5", "lerobot"] = "lance"
+    format: Literal["lance", "hdf5", "lerobot", "lerobot-h5"] = "lance"
     residency_enforced: bool = (
         True  # INV-RESIDENCY (fail-closed; never disabled in Stage C)
     )

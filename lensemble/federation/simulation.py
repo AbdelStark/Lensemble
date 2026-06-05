@@ -189,6 +189,7 @@ class _SimParticipant(Participant):
             sketch_dim=int(o.sigreg_sketch_dim),
             ep_knots=int(o.sigreg_knots),
             anchor=anchor,
+            target_stop_gradient=bool(o.target_stop_gradient),
         )
 
     def probe_embeddings(self, global_state: "GlobalState", round_seed: int) -> Tensor:

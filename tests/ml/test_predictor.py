@@ -1,8 +1,9 @@
-"""Action-conditioned predictor g_phi: shape, AR rollout, stop-gradient contract (RFC-0008 3). #11.
+"""Action-conditioned predictor g_phi: shape, AR rollout, and stop-gradient helper (RFC-0008 3). #11.
 
-CPU fp32, tiny dims. The stop-gradient (detach on the target f_theta(x_{t+1})) is a contract, not an
-optimization detail — a missing detach silently changes the objective (07 §2.1); it is asserted here at
-the residual level. The objective-level gradient finite-difference check is owned by #13.
+CPU fp32, tiny dims. ``prediction_residual`` is the default helper that detaches
+f_theta(x_{t+1}); claim-grade LeWorldModel base mode bypasses it through ``Objective`` with
+``target_stop_gradient=False``. The helper's detach is asserted here at the residual level. The
+objective-level gradient finite-difference check is owned by #13/#191.
 """
 
 from __future__ import annotations

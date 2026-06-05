@@ -145,3 +145,45 @@ def test_target_branch_is_stop_gradiented() -> None:
     assert not torch.allclose(
         g_objective, g_nodetach, atol=1e-6
     )  # and it removes the target branch
+
+
+def test_lewm_base_mode_keeps_target_branch_live() -> None:
+    """Claim-mode LeWorldModel base recipe: no stop-gradient on f(x_{t+1}) (#191)."""
+    encoder, predictor, window, action_embedding = _setup()
+    objective = Objective(
+        lambda_pred=1.0,
+        lambda_sig=0.0,
+        lambda_anc=0.0,
+        sketch_seed=7,
+        target_stop_gradient=False,
+    )
+
+    def encode_split() -> tuple[LatentState, LatentState]:
+        tokens = encoder(window.obs).tokens
+        inp = LatentState(tokens[:-1], _N, _D, WMCP_VERSION)
+        tgt = LatentState(tokens[1:], _N, _D, WMCP_VERSION)
+        return inp, tgt
+
+    def encoder_grad() -> Tensor:
+        grad = encoder.lin.weight.grad
+        assert grad is not None
+        return grad.clone()
+
+    encoder.zero_grad(set_to_none=True)
+    objective(encoder, predictor, window, action_embedding).total.backward()
+    g_objective = encoder_grad()
+
+    encoder.zero_grad(set_to_none=True)
+    inp, tgt = encode_split()
+    res_live = predictor.forward(inp, action_embedding).tokens - tgt.tokens
+    res_live.pow(2).mean().backward()
+    g_live = encoder_grad()
+
+    encoder.zero_grad(set_to_none=True)
+    inp, tgt = encode_split()
+    res_detached = predictor.forward(inp, action_embedding).tokens - tgt.tokens.detach()
+    res_detached.pow(2).mean().backward()
+    g_detached = encoder_grad()
+
+    assert torch.allclose(g_objective, g_live, atol=1e-6)
+    assert not torch.allclose(g_objective, g_detached, atol=1e-6)

@@ -19,6 +19,7 @@ def test_default_loads_and_resolves() -> None:
     assert cfg.federation.participant_count == 4
     assert cfg.run_mode == "train_local"
     assert cfg.objective.anchor_variant == "landmark"
+    assert cfg.objective.target_stop_gradient is True
 
 
 def test_frozen_instance_rejects_mutation() -> None:
@@ -31,9 +32,14 @@ def test_frozen_instance_rejects_mutation() -> None:
 
 def test_overrides_apply_with_precedence() -> None:
     cfg = load_config(
-        overrides=["objective.lambda_anc=0.5", "federation.participant_count=8"]
+        overrides=[
+            "objective.lambda_anc=0.5",
+            "objective.target_stop_gradient=false",
+            "federation.participant_count=8",
+        ]
     )
     assert cfg.objective.lambda_anc == 0.5
+    assert cfg.objective.target_stop_gradient is False
     assert cfg.federation.participant_count == 8
 
 

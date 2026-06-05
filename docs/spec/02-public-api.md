@@ -177,7 +177,10 @@ in [RFC-0007](../rfcs/RFC-0007-wmcp-latent-contract.md).
 - `Objective`: computes the three-term loss `λ_pred · L_pred + λ_sig · SIGReg_A + λ_anc · L_anchor`
   ([conventions §2](conventions.md#2-mathematical-notation) notation; [RFC-0002 §3](../rfcs/RFC-0002-gauge-and-aggregation.md#3-layer-1--shared-sketch-matrix-objective-consistency-not-the-gauge-fix)) and returns the total plus each per-term
   scalar for logging. The SIGReg target uses the shared sketch matrix `A` (`INV-SKETCH-CONSISTENCY`); the
-  anchor targets derive only from `f_ref` (`INV-PROBE-PIN`).
+  anchor targets derive only from `f_ref` (`INV-PROBE-PIN`). The default prediction target remains the
+  existing stop-gradiented JEPA-family path. Claim-grade LeWorldModel base runs set
+  `objective.target_stop_gradient=false`, so `L_pred` compares against the live `f_theta(o_{t+1})` target
+  branch without EMA/teacher/target stop-gradient (#191).
 - Determinism: bf16 forward, fp32 accumulation for loss/statistics; deterministic mode via the config
   flag.
 
@@ -433,7 +436,8 @@ head = lensemble.model.build_action_head(cfg, spec)   # validates spec (INV-WMCP
 
 ### 5.2 Registering a new data adapter
 
-The data layer supports `lance` (default), `hdf5` (portable), and the `lerobot://<repo_id>` adapter
+The data layer supports `lance` (default), `hdf5` (portable), the `lerobot://<repo_id>` Hub adapter, and
+the local `lerobot-h5://<path>` LeRobot-layout HDF5 adapter
 ([RFC-0004 §1](../rfcs/RFC-0004-data-provenance.md#1-per-participant-data-layer)). A new adapter implements the dataset/loader protocol from
 [RFC-0004](../rfcs/RFC-0004-data-provenance.md) (yields fixed `Window`s of `num_steps` over `Episode`s of
 `(o_t, a_t, o_{t+1})` `Transition`s) and is registered with the data layer.
@@ -446,8 +450,8 @@ The data layer supports `lance` (default), `hdf5` (portable), and the `lerobot:/
 - Each adapter declares minimal data-quality metadata (modality, embodiment, `ActionSpec`, episode
   count); the federation MAY gate on declared quality ([RFC-0004 §6](../rfcs/RFC-0004-data-provenance.md#6-data-quality-metadata-and-the-wmcp-precondition)).
 
-The three built-in adapters resolve through one module-level registry in `lensemble.data.adapters`
-keyed by `fmt` (or, for the read-only LeRobot view, the `lerobot://` URI scheme). `save_episodes` /
+The built-in adapters resolve through one module-level registry in `lensemble.data.adapters`
+keyed by `fmt` (or, for read-only LeRobot views, the `lerobot://` / `lerobot-h5://` URI schemes). `save_episodes` /
 `load_episodes` are the dispatch entry points; `register_adapter` is the extension point:
 
 ```python
@@ -456,12 +460,15 @@ from lensemble.data import save_episodes, load_episodes, register_adapter
 save_episodes(dataset, "silo_c0.lance", fmt="lance")    # default reference store
 ds = load_episodes("silo_c0.lance")                       # fmt inferred from the .lance suffix
 ds = load_episodes("lerobot://lerobot/pusht")             # read-only, conformance-checked on load
+ds = load_episodes("lerobot-h5:///data/silo0.h5")         # local LeRobot-layout HDF5, read-only
 
 register_adapter("myfmt", loader=my_load, saver=my_save)  # a new backend plugs in here
 ```
 
 - `save_episodes(..., fmt="lerobot")` raises: the `lerobot://` view is read-only by construction
   (it registers no saver), so it never participates in commitment or egress.
+- `save_episodes(..., fmt="lerobot-h5")` raises for the same reason: the adapter directly reads a local
+  LeRobot-layout HDF5 export as resident raw data and registers no saver.
 - A `loader` returns a read-back `EpisodeDataset` carrying the same `fmt`; an omitted `saver` makes the
   adapter read-only. Both run inside the trust boundary on local files only.
 
