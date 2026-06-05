@@ -120,6 +120,19 @@ larger sweeps. Its `claim_mvp_report.json` uses schema v2 and contains three
 `round_metrics` rows with post-round global hashes, participant ids, dataset
 roots, and update L2 norms.
 
+The first published downstream eval job
+[`6a22c9e3ece949d7b3dca25a`](https://huggingface.co/jobs/abdelstark/6a22c9e3ece949d7b3dca25a)
+ran `scripts/phase2_eval_checkpoint.py` from
+`b57aed3da3b6250dce540da25b0bd65c391e68f4`, downloaded checkpoint revision
+`da52ef380ac87317c89e87f048d65bae65c16b9e`, and uploaded
+`reports/phase2_downstream_eval_report.json` to the model repo at revision
+`021a461eb789700209fcb49e99bb9bcc5d84bfe5`. The report is also checked in at
+[`docs/evidence/phase2_downstream_eval_report.json`](../../docs/evidence/phase2_downstream_eval_report.json).
+It records `synthetic://toy`, `success_rate=0.5`,
+`effective_dim=1.0000066342911489`, `planning_samples=1`, horizon 1, one
+planner iteration, and no action clipping beyond recording the continuous
+`[-1, 1]` bounds.
+
 Start every expensive run with the dataset smoke, `--dry-run`, and a pinned SHA.
 A representative GPU command is:
 

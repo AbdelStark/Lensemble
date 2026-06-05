@@ -30,7 +30,7 @@ Phase 2 starts from that working substrate and raises the evidence bar.
 |---|---|---|
 | [#201](https://github.com/AbdelStark/Lensemble/issues/201) | Participant-silo dataset contract and refs | Publish or mount at least two non-toy silo refs, or record the exact blocker. |
 | [#202](https://github.com/AbdelStark/Lensemble/issues/202) | GPU-backed multi-round HF Jobs | Completed by job [`6a22ba68e6aa50b87b9ebef7`](https://huggingface.co/jobs/abdelstark/6a22ba68e6aa50b87b9ebef7), which published checkpoint/report artifacts. |
-| [#206](https://github.com/AbdelStark/Lensemble/issues/206) | Downstream planning/eval report | Generate an EvalReport-style artifact from a Phase 2 checkpoint. |
+| [#206](https://github.com/AbdelStark/Lensemble/issues/206) | Downstream planning/eval report | Completed by job [`6a22c9e3ece949d7b3dca25a`](https://huggingface.co/jobs/abdelstark/6a22c9e3ece949d7b3dca25a), which published a schema-valid downstream eval report. |
 | [#205](https://github.com/AbdelStark/Lensemble/issues/205) | Baselines, ablations, and curves | Produce generated curve/table artifacts tied to run/config/checkpoint hashes. |
 | [#204](https://github.com/AbdelStark/Lensemble/issues/204) | Evidence bundle and model card | Publish one model-card/report bundle with artifact refs and claim boundaries. |
 | [#203](https://github.com/AbdelStark/Lensemble/issues/203) | README and roadmap docs | Keep public docs aligned with the tracker and known limitations. |
@@ -150,6 +150,50 @@ update norms:
 This satisfies the #202 engineering gate, but it is intentionally compact. It
 does not replace downstream evaluation (#206), baseline/ablation evidence
 (#205), or the final model-card/evidence bundle (#204).
+
+## Published Phase 2 Downstream Eval
+
+The first Phase 2 downstream eval report was generated on Hugging Face Jobs:
+
+- HF Job:
+  [`6a22c9e3ece949d7b3dca25a`](https://huggingface.co/jobs/abdelstark/6a22c9e3ece949d7b3dca25a);
+- eval-runner code SHA:
+  `b57aed3da3b6250dce540da25b0bd65c391e68f4`;
+- evaluated checkpoint revision:
+  `da52ef380ac87317c89e87f048d65bae65c16b9e`, artifact
+  `artifacts/round-00003`;
+- evaluated checkpoint hash:
+  `8f1494fd9e57b7496daf96e379a3de1457a435080b81b9e0ea1d20a52f4827c4`;
+- published report URI:
+  `hf://models/abdelstark/lensemble-phase2-so100-checkpoint/reports/phase2_downstream_eval_report.json`;
+- model repo revision after report upload:
+  `021a461eb789700209fcb49e99bb9bcc5d84bfe5`;
+- checked-in report copy:
+  [`docs/evidence/phase2_downstream_eval_report.json`](../evidence/phase2_downstream_eval_report.json).
+
+The embedded `EvalReport` records:
+
+| Metric | Value |
+|---|---:|
+| `env_id` | `synthetic://toy` |
+| `success_rate` | 0.5 |
+| `effective_dim` | 1.0000066342911489 |
+| `planning_samples` | 1 |
+| `time_per_action_ms` | 91.15450602257624 |
+| `run_manifest_hash` | `7092bdda71bb1c01510ce8486e2e99cd3065dfed7834faa3235e6d7a2c7c17fb` |
+
+Planner budget and task boundary:
+
+- planner: `icem`;
+- horizon: 1;
+- planner iterations: 1;
+- held-out policy: two seed-pinned `synthetic://toy` episodes derived from
+  `root_seed=0`, not drawn from the SO-100 training silos;
+- action clipping: none in the current planner path; the report records
+  continuous action bounds `[-1, 1]` for audit;
+- claim boundary: checkpoint load, latent MPC execution, planner-cost
+  reporting, and residency-safe `EvalReport` emission are evidenced. SO-100
+  task success and paper-scale LeWorldModel performance are not claimed.
 
 ## Minimum Evidence Contract
 
