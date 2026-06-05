@@ -3,6 +3,14 @@
 from __future__ import annotations
 
 from .ablation import run_ablation_ladder
+from .agent import (
+    PARTICIPANT_AGENT_PREFLIGHT_SCHEMA_VERSION,
+    PARTICIPANT_AGENT_ROUND_STATE_SCHEMA_VERSION,
+    ParticipantAgentPreflight,
+    ParticipantAgentRoundResult,
+    ParticipantAgentRoundState,
+    Phase3ParticipantAgent,
+)
 from .coordinator import Coordinator
 from .messages import (
     CONTROL_MESSAGE_SCHEMA_VERSION,
@@ -43,6 +51,12 @@ from .transport import InProcessTransport, Transport
 __all__ = [
     "Coordinator",
     "Participant",
+    "Phase3ParticipantAgent",
+    "ParticipantAgentPreflight",
+    "ParticipantAgentRoundState",
+    "ParticipantAgentRoundResult",
+    "PARTICIPANT_AGENT_PREFLIGHT_SCHEMA_VERSION",
+    "PARTICIPANT_AGENT_ROUND_STATE_SCHEMA_VERSION",
     "RoundState",
     "RoundPhase",
     "RoundDriver",

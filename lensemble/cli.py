@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 import sys
 from contextlib import contextmanager
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import TYPE_CHECKING
@@ -263,6 +263,75 @@ def federate_participant(
             f"federate participant {member.participant_id!r}: ready against {coordinator!r}; a full round "
             "needs a coordinator-broadcast GlobalState over the networked transport (#45).",
             err=True,  # human-readable -> stderr
+        )
+
+
+@federate_app.command("participant-agent")
+def federate_participant_agent(
+    coordinator: str = typer.Option(
+        ...,
+        "--coordinator",
+        help="coordinator endpoint accepted by the Phase 3 consortium manifest",
+    ),
+    manifest: Path = typer.Option(
+        ...,
+        "--manifest",
+        help="Phase 3 consortium manifest JSON",
+    ),
+    participant_id: str = typer.Option(
+        ...,
+        "--participant-id",
+        help="this participant's stable id in the consortium manifest",
+    ),
+    data_source: str | None = typer.Option(
+        None,
+        "--data-source",
+        help="participant-local data ref; overrides cfg.data.data_source for preflight",
+    ),
+    state_dir: Path = typer.Option(
+        Path("runs/phase3-participant-agent"),
+        "--state-dir",
+        help="participant-local resume state directory",
+    ),
+    config: Path | None = _CONFIG_OPT,
+    run_dir: Path = _RUNDIR_OPT,
+    overrides: list[str] | None = _OVERRIDES_ARG,
+) -> None:
+    """Run the Phase 3 participant-agent preflight before any coordinator message (#223).
+
+    The command validates the same participant-local contracts the runtime agent
+    enforces: consortium membership, local data adapter/window count,
+    action/observation contracts, public-probe hash/version, model/runtime/DP
+    agreement, and residency boundary flags. It is intentionally a preflight
+    command until the #224 network coordinator service provides a live
+    ``GlobalState`` to execute assigned rounds from the CLI.
+    """
+    from lensemble.config import load_consortium_manifest
+    from lensemble.federation import InProcessTransport, Phase3ParticipantAgent
+
+    with _supervise():
+        cfg = _compose(config, list(overrides or []) + ["run_mode=participant"])
+        if data_source is not None:
+            cfg = replace(cfg, data=replace(cfg.data, data_source=data_source))
+        manifest_obj = load_consortium_manifest(manifest)
+        manifest_path = _emit_manifest(
+            cfg, command="federate participant-agent", run_dir=run_dir
+        )
+        agent = Phase3ParticipantAgent(
+            cfg,
+            manifest=manifest_obj,
+            participant_id=participant_id,
+            transport=InProcessTransport(),
+            state_dir=state_dir,
+            coordinator_endpoint=coordinator,
+        )
+        preflight = agent.preflight()
+        typer.echo(str(manifest_path))  # machine-readable: local RunManifest path
+        typer.echo(preflight.model_dump_json())  # machine-readable: preflight report
+        typer.echo(
+            f"federate participant-agent {participant_id!r}: preflight passed for "
+            f"{coordinator!r}; assigned-round execution is driven by the #224 coordinator service.",
+            err=True,
         )
 
 

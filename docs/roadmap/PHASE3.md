@@ -121,6 +121,40 @@ During training the agent executes assigned local rounds, emits residency-safe
 metrics, applies configured privacy controls, and releases only allowed update
 artifacts.
 
+The #223 participant-agent runtime lives in `lensemble.federation.agent` and is
+exported as `lensemble.federation.Phase3ParticipantAgent`. It wraps the existing
+claim-mode `Participant.local_round` implementation rather than changing model
+internals. The agent writes local resume state under the participant's private
+state directory:
+
+- `delta.safetensors`: the released pseudo-gradient delta only;
+- `round_state.json`: hashes, counts, DP/release flags, and round metadata only;
+- `lensemble.log.jsonl` and `metrics.jsonl`: residency-safe observability.
+
+The CLI preflight surface is:
+
+```bash
+uv run lensemble federate participant-agent \
+  --manifest path/to/phase3_consortium_manifest.json \
+  --participant-id phase3-so100-a \
+  --coordinator https://coordinator.example.invalid \
+  --data-source lerobot-h5://path/to/private-silo.h5 \
+  --state-dir runs/phase3/phase3-so100-a \
+  data.format=lerobot-h5 \
+  data.probe_path=path/to/public-probe.safetensors \
+  objective.target_stop_gradient=false \
+  objective.lambda_anc=0.01 \
+  federation.transport=network \
+  federation.aggregation_backend=masking
+```
+
+This command validates the local participant boundary before any coordinator
+message. Assigned-round execution from the CLI is intentionally left to the
+network coordinator service in #224; integration tests exercise the runtime over
+the in-process test transport. The checked-in example manifest remains a
+contract fixture; runtime preflight requires a manifest whose model agreement
+matches the participant `LensembleConfig`.
+
 ## Coordinator Contract
 
 The coordinator service owns round orchestration, not participant data. It must:

@@ -149,3 +149,9 @@ def test_federate_subcommands_emit_manifests(tmp_path: Path) -> None:
             )
         else:
             assert lines[1] == "participant-0"
+
+
+def test_federate_help_lists_phase3_participant_agent() -> None:
+    result = runner.invoke(app, ["federate", "--help"])
+    assert result.exit_code == 0
+    assert "participant-agent" in result.stdout
