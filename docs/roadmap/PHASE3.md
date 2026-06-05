@@ -136,6 +136,7 @@ The CLI preflight surface is:
 ```bash
 uv run lensemble federate participant-agent \
   --manifest path/to/phase3_consortium_manifest.json \
+  --registry path/to/phase3_dataset_registry.json \
   --participant-id phase3-so100-a \
   --coordinator https://coordinator.example.invalid \
   --data-source lerobot-h5://path/to/private-silo.h5 \
@@ -188,6 +189,7 @@ The CLI startup surface is:
 ```bash
 uv run lensemble federate coordinator-service \
   --manifest path/to/phase3_consortium_manifest.json \
+  --registry path/to/phase3_dataset_registry.json \
   --listen https://coordinator.example.invalid \
   --run-dir runs/phase3/coordinator \
   objective.target_stop_gradient=false \
@@ -213,10 +215,43 @@ Phase 3 replaces ad hoc CLI data refs with a registry that declares:
 - dataset smoke report URI/hash;
 - public-probe version and hash.
 
-The registry must support at least four participant declarations. Public HF refs
-are preferred. Private or unpublished participants are acceptable only if the
-registry records the publication blocker and the final model card states the
-evidence boundary.
+The #225 registry schema lives in `lensemble.data.phase3`. It validates the
+same participant ids, accepted action/observation contracts, public-probe hash,
+data refs, adapter formats, windowing, held-out policies, smoke-report hashes,
+and license metadata as the consortium manifest. The participant agent and
+coordinator service both accept the same optional registry artifact and fail
+preflight if it disagrees with the manifest.
+
+Generate the checked-in four-participant example with:
+
+```bash
+uv run --extra dev python scripts/phase3_dataset_registry.py \
+  --output docs/evidence/phase3_dataset_registry.example.json
+```
+
+Validate a candidate registry, including the manifest agreement, with:
+
+```bash
+uv run --extra dev python scripts/phase3_dataset_registry.py \
+  --validate docs/evidence/phase3_dataset_registry.example.json \
+  --against-manifest docs/evidence/phase3_consortium_manifest.example.json
+```
+
+The registry must support at least four participant declarations for the public
+Phase 3 example. Public HF refs are preferred. Private or unpublished
+participants are acceptable only if the registry records the exact publication
+blocker and the final model card states the evidence boundary. Public-example
+mode rejects raw/private dataset paths unless they are explicit placeholders
+with blockers; private-consortium mode requires an explicit raw-path allowance.
+
+Public-probe governance rules:
+
+- the probe hash is immutable for one `run_id`;
+- any probe change requires a new version and content hash;
+- registry, manifest, participant preflight, and coordinator preflight must all
+  be regenerated/validated together;
+- model cards must cite the exact probe hash and state whether participant data
+  refs are public, private, or blocked placeholders.
 
 This registry is not a provenance ledger.
 

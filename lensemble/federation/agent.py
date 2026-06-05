@@ -28,6 +28,10 @@ from lensemble.config.consortium import (
     validate_participant_join,
 )
 from lensemble.config.seed import derive
+from lensemble.data.phase3 import (
+    Phase3DatasetProbeRegistry,
+    validate_participant_registry_preflight,
+)
 from lensemble.data.residency import guard_egress
 from lensemble.errors import (
     CheckpointIntegrityError,
@@ -209,6 +213,7 @@ class Phase3ParticipantAgent:
         transport: "Transport",
         state_dir: Path,
         coordinator_endpoint: str,
+        registry: Phase3DatasetProbeRegistry | None = None,
         participant_factory: ParticipantFactory | None = None,
         emit_observability: bool = True,
     ) -> None:
@@ -218,6 +223,7 @@ class Phase3ParticipantAgent:
         self.transport = transport
         self.state_dir = Path(state_dir)
         self.coordinator_endpoint = coordinator_endpoint
+        self.registry = registry
         self.participant_factory = participant_factory or _default_participant_factory
         self.emit_observability = emit_observability
         self._run_segment = _safe_path_segment("run_id", manifest.run_id)
@@ -233,6 +239,15 @@ class Phase3ParticipantAgent:
 
         declaration = validate_participant_join(
             self.manifest, participant_id=self.participant_id
+        )
+        registry_entry = (
+            validate_participant_registry_preflight(
+                self.registry,
+                self.manifest,
+                participant_id=self.participant_id,
+            )
+            if self.registry is not None
+            else None
         )
         data = declaration.data
         if (
@@ -310,8 +325,27 @@ class Phase3ParticipantAgent:
         self._validate_action_spec(action_spec, declaration)
 
         windows = self._load_windows(participant)
+        if registry_entry is not None and len(windows) < registry_entry.min_windows:
+            raise _fail(
+                "dataset_registry.min_windows",
+                len(windows),
+                f">= registry min_windows ({registry_entry.min_windows})",
+                "use the local participant store covered by the shared Phase 3 dataset registry",
+            )
         first = windows[0]
         self._validate_first_window(first, declaration)
+        checks = (
+            "manifest_join",
+            "data_ref",
+            "data_adapter_windows",
+            "action_contract",
+            "observation_contract",
+            "public_probe_pin",
+            "model_runtime_policy",
+            "residency_boundary",
+        )
+        if registry_entry is not None:
+            checks = (*checks, "dataset_probe_registry")
 
         return ParticipantAgentPreflight(
             participant_id=self.participant_id,
@@ -330,16 +364,7 @@ class Phase3ParticipantAgent:
             transport=self.manifest.runtime.transport,
             secure_aggregation_backend=self.manifest.runtime.secure_aggregation_backend,
             dp_accountant=self.manifest.dp_policy.accountant,
-            checks=(
-                "manifest_join",
-                "data_ref",
-                "data_adapter_windows",
-                "action_contract",
-                "observation_contract",
-                "public_probe_pin",
-                "model_runtime_policy",
-                "residency_boundary",
-            ),
+            checks=checks,
         )
 
     def run_assigned_round(

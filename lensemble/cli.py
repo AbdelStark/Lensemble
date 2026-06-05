@@ -227,6 +227,11 @@ def federate_coordinator_service(
         "--manifest",
         help="Phase 3 consortium manifest JSON",
     ),
+    registry: Path | None = typer.Option(
+        None,
+        "--registry",
+        help="optional Phase 3 dataset/public-probe registry JSON",
+    ),
     listen: str = typer.Option(
         "in-process",
         "--listen",
@@ -250,11 +255,15 @@ def federate_coordinator_service(
     startup contract honest and testable.
     """
     from lensemble.config import load_consortium_manifest
+    from lensemble.data import load_phase3_dataset_registry
     from lensemble.federation import InProcessTransport, Phase3CoordinatorService
 
     with _supervise():
         cfg = _compose(config, list(overrides or []) + ["run_mode=coordinator"])
         manifest_obj = load_consortium_manifest(manifest)
+        registry_obj = (
+            load_phase3_dataset_registry(registry) if registry is not None else None
+        )
         manifest_path = _emit_manifest(
             cfg, command="federate coordinator-service", run_dir=run_dir
         )
@@ -262,6 +271,7 @@ def federate_coordinator_service(
         service = Phase3CoordinatorService(
             cfg,
             manifest=manifest_obj,
+            registry=registry_obj,
             transport=InProcessTransport(),
             artifacts_dir=run_dir / "phase3-coordinator-artifacts",
             trace_path=resolved_trace,
@@ -334,6 +344,11 @@ def federate_participant_agent(
         "--manifest",
         help="Phase 3 consortium manifest JSON",
     ),
+    registry: Path | None = typer.Option(
+        None,
+        "--registry",
+        help="optional Phase 3 dataset/public-probe registry JSON",
+    ),
     participant_id: str = typer.Option(
         ...,
         "--participant-id",
@@ -363,6 +378,7 @@ def federate_participant_agent(
     ``GlobalState`` to execute assigned rounds from the CLI.
     """
     from lensemble.config import load_consortium_manifest
+    from lensemble.data import load_phase3_dataset_registry
     from lensemble.federation import InProcessTransport, Phase3ParticipantAgent
 
     with _supervise():
@@ -370,6 +386,9 @@ def federate_participant_agent(
         if data_source is not None:
             cfg = replace(cfg, data=replace(cfg.data, data_source=data_source))
         manifest_obj = load_consortium_manifest(manifest)
+        registry_obj = (
+            load_phase3_dataset_registry(registry) if registry is not None else None
+        )
         manifest_path = _emit_manifest(
             cfg, command="federate participant-agent", run_dir=run_dir
         )
@@ -380,6 +399,7 @@ def federate_participant_agent(
             transport=InProcessTransport(),
             state_dir=state_dir,
             coordinator_endpoint=coordinator,
+            registry=registry_obj,
         )
         preflight = agent.preflight()
         typer.echo(str(manifest_path))  # machine-readable: local RunManifest path

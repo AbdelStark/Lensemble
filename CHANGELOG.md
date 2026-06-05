@@ -27,6 +27,15 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:data` / `area:federation`: **Phase 3 dataset/public-probe registry** (#225) —
+  `lensemble.data.Phase3DatasetProbeRegistry` records four-participant dataset
+  declarations, held-out policy, adapter format, windowing, action/observation
+  contracts, dataset smoke report URI/hash, public-probe hash, and publication
+  blockers without moving raw data. `scripts/phase3_dataset_registry.py`
+  generates and validates the checked-in example registry and can cross-check
+  it against the consortium manifest. `Phase3ParticipantAgent` and
+  `Phase3CoordinatorService` now accept the same optional registry preflight
+  artifact, and the public CLI exposes matching `--registry` options.
 - `area:federation` / `area:runtime`: **Phase 3 coordinator-service control
   plane** (#224) — `lensemble.federation.Phase3CoordinatorService` starts from
   the consortium manifest and coordinator config, validates the model/runtime/DP

@@ -28,6 +28,10 @@ from lensemble.config import (
     Phase3RuntimePolicy,
 )
 from lensemble.contracts import WMCP_VERSION, ActionKind, ActionSpec
+from lensemble.data import (
+    Phase3DatasetProbeRegistry,
+    phase3_registry_from_consortium_manifest,
+)
 from lensemble.data.episode import Window
 from lensemble.data.probe import PublicProbe, probe_content_hash
 from lensemble.errors import ConfigError
@@ -353,6 +357,7 @@ def _agent(
     manifest: Phase3ConsortiumManifest,
     probe: PublicProbe,
     state_dir: Path,
+    registry: Phase3DatasetProbeRegistry | None = None,
 ) -> Phase3ParticipantAgent:
     return Phase3ParticipantAgent(
         _cfg(participant_id),
@@ -361,6 +366,7 @@ def _agent(
         transport=transport,
         state_dir=state_dir,
         coordinator_endpoint="in-process://coordinator",
+        registry=registry,
         participant_factory=_factory(
             probe=probe,
             windows_by_participant={
@@ -388,6 +394,30 @@ def test_preflight_refuses_probe_mismatch_before_registering(tmp_path: Path) -> 
 
     assert exc.value.code == "config_invalid"
     assert getattr(transport, "_registered") == {}
+
+
+def test_preflight_consumes_shared_dataset_probe_registry(tmp_path: Path) -> None:
+    probe = _build_probe()
+    manifest = _manifest(probe)
+    registry = phase3_registry_from_consortium_manifest(
+        manifest,
+        min_participant_count=2,
+        window_counts={"agent-a": 2, "agent-b": 2},
+        episode_counts={"agent-a": 1, "agent-b": 1},
+    )
+    transport, _ = _seed_transport(_cfg("agent-a"), probe)
+    agent = _agent(
+        participant_id="agent-a",
+        transport=transport,
+        manifest=manifest,
+        probe=probe,
+        state_dir=tmp_path,
+        registry=registry,
+    )
+
+    preflight = agent.preflight()
+
+    assert "dataset_probe_registry" in preflight.checks
 
 
 def test_two_participant_agents_complete_round_and_emit_safe_state(

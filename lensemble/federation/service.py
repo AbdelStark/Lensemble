@@ -21,6 +21,10 @@ from lensemble.config.consortium import (
     Phase3ConsortiumManifest,
     validate_coordinator_run_agreement,
 )
+from lensemble.data.phase3 import (
+    Phase3DatasetProbeRegistry,
+    validate_coordinator_registry_preflight,
+)
 from lensemble.errors import ConfigError, LensembleErrorCode, RoundError
 from lensemble.federation.coordinator import Coordinator
 from lensemble.federation.round import RoundState
@@ -184,12 +188,18 @@ class Phase3CoordinatorService:
         config: "LensembleConfig",
         *,
         manifest: Phase3ConsortiumManifest,
+        registry: Phase3DatasetProbeRegistry | None = None,
         transport: "Transport | None" = None,
         artifacts_dir: Path | None = None,
         trace_path: Path | None = None,
     ) -> None:
         self.config = config
         self.manifest = validate_coordinator_run_agreement(manifest)
+        self.registry = (
+            validate_coordinator_registry_preflight(registry, self.manifest)
+            if registry is not None
+            else None
+        )
         self._validate_config_agreement()
         self.transport: Transport = transport or InProcessTransport()
         self.coordinator = Coordinator(
