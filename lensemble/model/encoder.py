@@ -33,7 +33,12 @@ from lensemble.errors import (
     ConfigError,
     LensembleErrorCode,
 )
-from lensemble.model.numerics import apply_numerics, autocast_forward, resolve_device
+from lensemble.model.numerics import (
+    apply_numerics,
+    autocast_forward,
+    module_input_tensor,
+    resolve_device,
+)
 
 if (
     TYPE_CHECKING
@@ -111,6 +116,7 @@ class Encoder(nn.Module):
             raise ValueError(
                 f"clip must be (B, T, C, Hpx, Wpx) rank-5, got rank {clip.ndim} shape {tuple(clip.shape)}"
             )
+        clip = module_input_tensor(self, clip)
         # bf16 forward on CUDA / fp32 on the CPU fallback (RFC-0008 7); a no-op for fp32 so the CPU path
         # is unchanged. Master weights stay fp32; loss/statistic accumulation downstream is fp32.
         with autocast_forward(

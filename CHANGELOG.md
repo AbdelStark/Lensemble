@@ -471,10 +471,11 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Fixed
 
-- `area:model` / `area:federation`: **Phase 2 HF Jobs bf16 probe input fix** (#202) — public probe tensors
-  are now cast to the target encoder parameter dtype/device only for reference and anchor forwards, while
-  the pinned probe tensor and content hash remain unchanged. This prevents GPU jobs from feeding stored
-  bf16 probe points into fp32-master Conv3D weights during LeWorldModel anchor construction.
+- `area:model` / `area:federation`: **Phase 2 HF Jobs bf16 encoder input fix** (#202) — public probe
+  tensors are now cast to the target encoder parameter dtype/device only for reference and anchor forwards,
+  while the pinned probe tensor and content hash remain unchanged. `Encoder.forward` also normalizes
+  floating observation inputs to fp32-master weights before autocast, preventing GPU jobs from feeding
+  stored bf16 probes or metric windows into fp32 Conv3D biases.
 - `lensemble.federation.Coordinator`: stopped leaking its `tempfile.mkdtemp` artifacts dir (#178). The
   coordinator now accepts an explicit `artifacts_dir` (a persistent, caller-owned run-dir where the
   committed checkpoints live); when omitted it creates a throwaway temp dir it OWNS and cleans up — a
