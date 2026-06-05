@@ -28,6 +28,10 @@ from lensemble.config import (
     Phase3RuntimePolicy,
 )
 from lensemble.contracts import WMCP_VERSION
+from lensemble.data import (
+    Phase3DatasetProbeRegistry,
+    phase3_registry_from_consortium_manifest,
+)
 from lensemble.errors import RoundError
 from lensemble.federation import (
     InProcessTransport,
@@ -193,9 +197,24 @@ def _manifest(*, retry_budget: int = 1) -> Phase3ConsortiumManifest:
 
 
 def _service(tmp_path: Path, *, retry_budget: int = 1) -> Phase3CoordinatorService:
+    manifest = _manifest(retry_budget=retry_budget)
     return Phase3CoordinatorService(
         _cfg(),
-        manifest=_manifest(retry_budget=retry_budget),
+        manifest=manifest,
+        transport=InProcessTransport(),
+        artifacts_dir=tmp_path / "artifacts",
+        trace_path=tmp_path / "coordinator_trace.jsonl",
+    )
+
+
+def _service_with_registry(
+    tmp_path: Path, registry: Phase3DatasetProbeRegistry
+) -> Phase3CoordinatorService:
+    manifest = _manifest()
+    return Phase3CoordinatorService(
+        _cfg(),
+        manifest=manifest,
+        registry=registry,
         transport=InProcessTransport(),
         artifacts_dir=tmp_path / "artifacts",
         trace_path=tmp_path / "coordinator_trace.jsonl",
@@ -288,6 +307,18 @@ def test_service_completes_three_participant_smoke_with_one_dropout(
         "participant.dropped",
         "round.closed",
     }
+
+
+def test_service_consumes_shared_dataset_probe_registry(tmp_path: Path) -> None:
+    manifest = _manifest()
+    registry = phase3_registry_from_consortium_manifest(
+        manifest, min_participant_count=3
+    )
+
+    service = _service_with_registry(tmp_path, registry)
+
+    assert service.registry == registry
+    assert service.report().participants[0].participant_id == "agent-a"
 
 
 def test_late_join_is_rejected_after_assignment(tmp_path: Path) -> None:

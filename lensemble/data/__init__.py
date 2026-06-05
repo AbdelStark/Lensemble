@@ -18,6 +18,21 @@ from lensemble.data.phase2 import (
     Phase2SiloSmokeEvidence,
     build_phase2_dataset_smoke_report,
 )
+from lensemble.data.phase3 import (
+    PHASE3_DATASET_REGISTRY_SCHEMA_VERSION,
+    Phase3DatasetParticipantDeclaration,
+    Phase3DatasetProbeRegistry,
+    Phase3ProbeGovernance,
+    load_phase3_dataset_registry,
+    parse_phase3_dataset_registry,
+    phase3_registry_from_consortium_manifest,
+    to_phase3_dataset_registry_json,
+    validate_coordinator_registry_preflight,
+    validate_participant_registry_preflight,
+    validate_phase3_dataset_registry,
+    validate_phase3_registry_against_manifest,
+    write_phase3_dataset_registry,
+)
 from lensemble.data.quality import DataQualityMetadata, validate_join_precondition
 from lensemble.data.residency import EgressRole, guard_egress
 
@@ -38,4 +53,17 @@ __all__ = [
     "Phase2SiloSmokeEvidence",
     "Phase2DatasetSmokeReport",
     "build_phase2_dataset_smoke_report",
+    "PHASE3_DATASET_REGISTRY_SCHEMA_VERSION",
+    "Phase3ProbeGovernance",
+    "Phase3DatasetParticipantDeclaration",
+    "Phase3DatasetProbeRegistry",
+    "phase3_registry_from_consortium_manifest",
+    "parse_phase3_dataset_registry",
+    "load_phase3_dataset_registry",
+    "write_phase3_dataset_registry",
+    "to_phase3_dataset_registry_json",
+    "validate_phase3_dataset_registry",
+    "validate_phase3_registry_against_manifest",
+    "validate_participant_registry_preflight",
+    "validate_coordinator_registry_preflight",
 ]
