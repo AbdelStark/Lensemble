@@ -34,6 +34,15 @@ from .quant import (
     wire_roundtrip,
 )
 from .round import RoundDriver, RoundPhase, RoundState
+from .service import (
+    COORDINATOR_SERVICE_REPORT_SCHEMA_VERSION,
+    COORDINATOR_SERVICE_TRACE_SCHEMA_VERSION,
+    CoordinatorParticipantReport,
+    CoordinatorServiceEvent,
+    CoordinatorServiceReport,
+    Phase3CoordinatorService,
+    Phase3DropoutPolicy,
+)
 from .simulation import (
     RoundMetrics,
     SiloData,
@@ -60,6 +69,13 @@ __all__ = [
     "RoundState",
     "RoundPhase",
     "RoundDriver",
+    "Phase3CoordinatorService",
+    "Phase3DropoutPolicy",
+    "CoordinatorServiceEvent",
+    "CoordinatorServiceReport",
+    "CoordinatorParticipantReport",
+    "COORDINATOR_SERVICE_TRACE_SCHEMA_VERSION",
+    "COORDINATOR_SERVICE_REPORT_SCHEMA_VERSION",
     "SiloData",
     "RoundMetrics",
     "SimulationResult",

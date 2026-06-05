@@ -220,6 +220,62 @@ def federate_coordinator(
         )
 
 
+@federate_app.command("coordinator-service")
+def federate_coordinator_service(
+    manifest: Path = typer.Option(
+        ...,
+        "--manifest",
+        help="Phase 3 consortium manifest JSON",
+    ),
+    listen: str = typer.Option(
+        "in-process",
+        "--listen",
+        help="coordinator service endpoint to advertise",
+    ),
+    trace_path: Path | None = typer.Option(
+        None,
+        "--trace-path",
+        help="residency-safe coordinator service trace JSONL path",
+    ),
+    config: Path | None = _CONFIG_OPT,
+    run_dir: Path = _RUNDIR_OPT,
+    overrides: list[str] | None = _OVERRIDES_ARG,
+) -> None:
+    """Start the Phase 3 coordinator-service control plane from a manifest (#224).
+
+    The command validates the consortium manifest against the coordinator
+    config, instantiates the service control plane, records the startup trace,
+    and emits a machine-readable service report. Long-running socket serving is
+    provided by the transport implementation; this command keeps the public
+    startup contract honest and testable.
+    """
+    from lensemble.config import load_consortium_manifest
+    from lensemble.federation import InProcessTransport, Phase3CoordinatorService
+
+    with _supervise():
+        cfg = _compose(config, list(overrides or []) + ["run_mode=coordinator"])
+        manifest_obj = load_consortium_manifest(manifest)
+        manifest_path = _emit_manifest(
+            cfg, command="federate coordinator-service", run_dir=run_dir
+        )
+        resolved_trace = trace_path or (run_dir / "phase3_coordinator_trace.jsonl")
+        service = Phase3CoordinatorService(
+            cfg,
+            manifest=manifest_obj,
+            transport=InProcessTransport(),
+            artifacts_dir=run_dir / "phase3-coordinator-artifacts",
+            trace_path=resolved_trace,
+        )
+        report = service.report()
+        typer.echo(str(manifest_path))  # machine-readable: local RunManifest path
+        typer.echo(report.model_dump_json())  # machine-readable: service report
+        typer.echo(
+            f"federate coordinator-service: started on {listen!r} for run "
+            f"{manifest_obj.run_id!r}; trace={report.trace_path}.",
+            err=True,
+        )
+
+
 @federate_app.command("participant")
 def federate_participant(
     coordinator: str = typer.Option(

@@ -27,6 +27,17 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:federation` / `area:runtime`: **Phase 3 coordinator-service control
+  plane** (#224) — `lensemble.federation.Phase3CoordinatorService` starts from
+  the consortium manifest and coordinator config, validates the model/runtime/DP
+  run agreement, exposes join, heartbeat, round assignment, update submission,
+  abort, and close-round flows, rejects late joins and duplicate updates, and
+  records a residency-safe participant/round trace. The service wraps the
+  existing deterministic `Coordinator.try_round()` engine, so round close keeps
+  the proven outer-step semantics while adding explicit dropout policy
+  (`min_participants`, secure-aggregation threshold, collect timeout, retry
+  budget). The new `lensemble federate coordinator-service` command emits a
+  startup report and trace path for Phase 3 runs.
 - `area:federation` / `area:runtime`: **Phase 3 sovereign participant agent** (#223) —
   `lensemble.federation.Phase3ParticipantAgent` validates the consortium
   manifest, participant-local data ref/window count, action and observation

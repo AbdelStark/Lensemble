@@ -170,6 +170,37 @@ The coordinator service owns round orchestration, not participant data. It must:
 The coordinator must not require access to raw participant trajectories or
 participant-local action heads.
 
+The #224 coordinator-service runtime lives in
+`lensemble.federation.service` and is exported as
+`lensemble.federation.Phase3CoordinatorService`. It wraps the existing
+deterministic `Coordinator.try_round()` engine with the Phase 3 control plane:
+
+- governed admission against the consortium manifest;
+- heartbeat, assignment, update submission, explicit abort, and close-round
+  flows;
+- late-join and duplicate-update rejection;
+- explicit dropout policy derived from manifest/config quorum, collect timeout,
+  and retry budget;
+- residency-safe JSONL trace events for participants and rounds.
+
+The CLI startup surface is:
+
+```bash
+uv run lensemble federate coordinator-service \
+  --manifest path/to/phase3_consortium_manifest.json \
+  --listen https://coordinator.example.invalid \
+  --run-dir runs/phase3/coordinator \
+  objective.target_stop_gradient=false \
+  federation.transport=network \
+  federation.aggregation_backend=masking
+```
+
+The command validates and starts the service control plane, writes the startup
+trace, and emits a machine-readable service report. The transport layer owns
+long-running socket serving; integration tests exercise the service lifecycle
+over the in-process transport, including a three-participant smoke with one
+induced dropout.
+
 ## Data And Public-Probe Registry
 
 Phase 3 replaces ad hoc CLI data refs with a registry that declares:
