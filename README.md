@@ -107,8 +107,19 @@ participant dataset roots, `val_pred=1.513671025633812`,
 `val_sigreg=0.15686095133423805`, `effective_rank=1.5215493440628052`,
 `frame_drift_deg=10.538757949205232`, and `publication.blocker=None`. This is
 still compact engineering evidence (`latent_dim=96`, `depth=4`,
-`inner_horizon=1`); downstream eval, baselines/curves, and the final
-model-card evidence bundle remain tracked in Phase 2.
+`inner_horizon=1`).
+
+The first Phase 2 downstream eval report is also published:
+[`6a22c9e3ece949d7b3dca25a`](https://huggingface.co/jobs/abdelstark/6a22c9e3ece949d7b3dca25a)
+ran `scripts/phase2_eval_checkpoint.py` from commit
+`b57aed3da3b6250dce540da25b0bd65c391e68f4` against that checkpoint and pushed
+`reports/phase2_downstream_eval_report.json` to the model repo revision
+`021a461eb789700209fcb49e99bb9bcc5d84bfe5`. A checked-in copy lives at
+[`docs/evidence/phase2_downstream_eval_report.json`](docs/evidence/phase2_downstream_eval_report.json).
+It records `success_rate=0.5`, `effective_dim=1.0000066342911489`,
+`planning_samples=1`, `planner_iterations=1`, and a `synthetic://toy` task
+boundary. Baselines/curves and the final model-card evidence bundle remain
+tracked in Phase 2.
 
 ## Working assumptions
 

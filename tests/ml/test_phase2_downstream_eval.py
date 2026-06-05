@@ -256,3 +256,11 @@ def test_phase2_eval_checkpoint_script_outputs_report_json(tmp_path: Path) -> No
     file_report = parse_phase2_downstream_eval_report(json.loads(output.read_text()))
     assert stdout_report == file_report
     assert file_report.eval_report.checkpoint_hash == checkpoint_hash
+
+
+def test_checked_in_phase2_downstream_report_is_schema_valid() -> None:
+    path = Path("docs/evidence/phase2_downstream_eval_report.json")
+    report = parse_phase2_downstream_eval_report(json.loads(path.read_text()))
+    assert report.eval_report.env_id == "synthetic://toy"
+    assert report.eval_report.success_rate == 0.5
+    assert report.task.raw_data_in_report is False
