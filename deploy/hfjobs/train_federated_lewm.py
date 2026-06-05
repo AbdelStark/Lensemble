@@ -236,12 +236,12 @@ def _validate_sources(args: argparse.Namespace) -> dict[str, int]:
     counts: dict[str, int] = {}
     for source in args.data_source:
         dataset = load_episodes(source, fmt=args.data_format)
-        windows = list(dataset.windows(args.window_steps))
-        if not windows:
+        count = sum(1 for _ in dataset.windows(args.window_steps))
+        if count <= 0:
             raise ValueError(
                 f"{source!r} produced zero windows for window_steps={args.window_steps}"
             )
-        counts[source] = len(windows)
+        counts[source] = count
     return counts
 
 

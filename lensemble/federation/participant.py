@@ -163,6 +163,29 @@ class Participant:
         dataset = self._local_dataset()
         return list(dataset.windows(int(self.config.data.window_steps)))
 
+    def _local_windows_for_horizon(self, horizon: int) -> Sequence["Window"]:
+        """Resolve only the local windows the inner loop can consume.
+
+        ``_inner_loop`` indexes ``windows[step % len(windows)]`` for exactly
+        ``horizon`` steps, so materializing more than ``horizon`` windows cannot
+        affect training. For configured data sources, stream just that bounded
+        prefix to keep large Phase 2 HDF5 silos from copying thousands of image
+        windows into memory during a participant round. Override-only tests and
+        custom participants with no configured source keep the legacy
+        ``_local_windows`` path.
+        """
+        source = getattr(self.config.data, "data_source", None)
+        if source is None:
+            return self._local_windows()
+        limit = max(1, int(horizon))
+        dataset = self._local_dataset()
+        windows: list[Window] = []
+        for window in dataset.windows(int(self.config.data.window_steps)):
+            windows.append(window)
+            if len(windows) >= limit:
+                break
+        return windows
+
     def _dataset_root(self) -> bytes:
         """The participant's local dataset Merkle root ``R_c`` (32 bytes, ``INV-COMMIT-BINDING``).
 
@@ -455,9 +478,9 @@ class Participant:
         are kept tiny in tests. Optimizes the encoder, predictor, AND the local action head (the head is
         trained locally; only θ/φ are later released).
         """
-        windows = self._local_windows()
         lr = float(getattr(cfg.federation, "inner_lr", _INNER_LR))
         horizon = int(cfg.federation.inner_horizon)
+        windows = self._local_windows_for_horizon(horizon)
         return _inner_loop(
             encoder, predictor, action_head, objective, windows, horizon=horizon, lr=lr
         )
@@ -563,7 +586,8 @@ def train_local(
 
     site = Participant(cfg, participant_id="local", transport=InProcessTransport())
     action_head = build_action_head(cfg, site._action_spec())
-    windows = site._local_windows()
+    horizon = int(cfg.federation.inner_horizon)
+    windows = site._local_windows_for_horizon(horizon)
 
     # Single-site == round 0: the broadcast sketch seed s_0 (INV-SKETCH-CONSISTENCY).
     sketch_seed = round_sketch_seed(cfg.determinism.root_seed, 0)
@@ -595,7 +619,6 @@ def train_local(
     )
 
     lr = float(getattr(cfg.federation, "inner_lr", _INNER_LR))
-    horizon = int(cfg.federation.inner_horizon)
     final_loss = _inner_loop(
         encoder, predictor, action_head, objective, windows, horizon=horizon, lr=lr
     )

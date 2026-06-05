@@ -16,6 +16,7 @@ runtime object, so tests/ml is the right home (mirrors tests/ml/test_harness.py)
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Iterator
 from dataclasses import dataclass
 
 import pytest
@@ -24,7 +25,7 @@ from torch import Tensor
 
 from lensemble.config import LensembleConfig
 from lensemble.contracts import WMCP_VERSION, ActionKind, ActionSpec
-from lensemble.data import guard_egress
+from lensemble.data import EpisodeDataset, guard_egress
 from lensemble.data.episode import Window
 from lensemble.data.probe import PublicProbe, probe_content_hash
 from lensemble.errors import (
@@ -185,6 +186,34 @@ class _TestParticipant(Participant):
         return self._warmstart
 
 
+class _CountingDataset(EpisodeDataset):
+    def __init__(self, windows: list[Window]) -> None:
+        super().__init__([], fmt="lance")
+        self._windows = windows
+        self.yielded = 0
+
+    def windows(self, num_steps: int) -> Iterator[Window]:
+        for window in self._windows:
+            assert window.num_steps == num_steps
+            self.yielded += 1
+            yield window
+
+
+class _StreamingParticipant(Participant):
+    def __init__(
+        self,
+        config: LensembleConfig,
+        *,
+        transport: InProcessTransport,
+        dataset: _CountingDataset,
+    ) -> None:
+        super().__init__(config, participant_id="streaming", transport=transport)
+        self._dataset = dataset
+
+    def _local_dataset(self) -> EpisodeDataset:
+        return self._dataset
+
+
 def _seed_transport(
     cfg: LensembleConfig,
     probe: PublicProbe,
@@ -209,6 +238,27 @@ def _seed_transport(
     transport = InProcessTransport()
     transport.commit(gs, theta_weights=theta, phi_weights=phi)
     return transport, gs, theta, phi
+
+
+def test_configured_participant_streams_only_inner_horizon_windows() -> None:
+    cfg = _cfg()
+    cfg = dataclasses.replace(
+        cfg,
+        data=dataclasses.replace(
+            cfg.data,
+            data_source="counting://phase2-silo",
+            window_steps=_NUM_STEPS,
+        ),
+    )
+    dataset = _CountingDataset(_build_windows(count=10))
+    participant = _StreamingParticipant(
+        cfg, transport=InProcessTransport(), dataset=dataset
+    )
+
+    windows = participant._local_windows_for_horizon(3)
+
+    assert list(windows) == dataset._windows[:3]
+    assert dataset.yielded == 3
 
 
 # --- INV-PROBE-PIN: a mismatched probe hash is refused (ProbeError) ---
