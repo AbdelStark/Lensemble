@@ -34,6 +34,17 @@ from .phase2 import (
     default_phase2_matrix,
     render_phase2_matrix_markdown,
 )
+from .phase2_curves import (
+    PHASE2_CURVES_REPORT_SCHEMA_VERSION,
+    Phase2BaselinesCurvesReport,
+    Phase2BlockedComparison,
+    Phase2ClaimCurveInput,
+    Phase2CurvePoint,
+    Phase2SourceReportRef,
+    build_phase2_baselines_curves_report,
+    parse_phase2_baselines_curves_report,
+    phase2_source_report_ref_from_path,
+)
 from .phase2_downstream import (
     PHASE2_DOWNSTREAM_REPORT_SCHEMA_VERSION,
     Phase2CheckpointRef,
@@ -66,6 +77,15 @@ __all__ = [
     "build_phase2_downstream_eval_report",
     "parse_phase2_downstream_eval_report",
     "phase2_eval_config_from_checkpoint",
+    "Phase2BaselinesCurvesReport",
+    "Phase2BlockedComparison",
+    "Phase2ClaimCurveInput",
+    "Phase2CurvePoint",
+    "Phase2SourceReportRef",
+    "PHASE2_CURVES_REPORT_SCHEMA_VERSION",
+    "build_phase2_baselines_curves_report",
+    "parse_phase2_baselines_curves_report",
+    "phase2_source_report_ref_from_path",
     "EvalReport",
     "EVAL_REPORT_SCHEMA_VERSION",
     "parse_eval_report",
