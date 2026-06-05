@@ -27,8 +27,10 @@ from lensemble.config import config_hash, load
 # participant's default `_local_windows` resolves via `load_episodes`) and `window_steps: int = 1` (the
 # training-window horizon `num_steps`), an intentional, reviewed schema addition that shifts the default
 # config's canonical encoding.
+# Re-pinned for #191: ObjectiveConfig gained `target_stop_gradient: bool = True`, preserving the existing
+# default path while enabling claim-grade LeWorldModel base mode with `False`.
 _GOLDEN_DEFAULT_CONFIG_HASH = (
-    "0c3cf3dc5c882ce304a5e2436fd6902d97afee2ba2ada468c8ce8a9248e0088e"
+    "5924364fec268d09bc5843d719ac8bae622deca614cd2c44c4ee362d08bd9c97"
 )
 
 

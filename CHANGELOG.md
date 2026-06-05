@@ -27,6 +27,22 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:model`: **claim-mode LeWorldModel base prediction target switch** (RFC-0008; #191) —
+  `ObjectiveConfig.target_stop_gradient` is now a semantic config field. The default remains `true` to
+  preserve the existing proof-ready JEPA-family path, but claim-grade LeWorldModel base runs set
+  `objective.target_stop_gradient=false`, causing `Objective` to compare `g_phi(f_theta(o_t), a_t)`
+  against the live `f_theta(o_{t+1})` target branch with no EMA/teacher/target stop-gradient. The switch is
+  plumbed through `Participant.local_round`, `train_local`, and the federated simulation harness; focused
+  tests assert the default detached target branch still behaves as before and that claim mode matches the
+  live-target gradient. The default `config_hash` golden is re-pinned because the resolved config gained a
+  semantic field.
+- `area:federation` / `area:data`: **real-data two-silo LeRobot-H5 federated claim smoke** (RFC-0004,
+  RFC-0013; #193) — `DataConfig.format` now accepts `lerobot-h5`, the local LeRobot-layout HDF5 adapter is
+  documented as the `lerobot-h5://<path>` / `fmt="lerobot-h5"` read-only source, and the default
+  `Participant` data hooks now resolve both training windows and dataset Merkle roots from
+  `cfg.data.data_source`. A new e2e smoke writes two deterministic LeRobot-H5 silos, runs the un-subclassed
+  `Participant` + `Coordinator` in claim mode (`objective.target_stop_gradient=false`), commits the round,
+  and asserts both participants' distinct dataset roots enter the contribution ledger.
 - `area:eval`: **Non-IID severity, C/H, and scale sweeps — Claim 4 (robustness)** (RFC-0005 §7; #56) — the
   three §7 robustness sweeps run **over** the §6 ladder rungs, reusing #55's runner (`run_ablation_ladder`)
   and harness (`run_federated_simulation`). Split across the RFC-0001 §3 band (eval may not import

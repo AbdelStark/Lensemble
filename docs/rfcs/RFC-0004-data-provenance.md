@@ -136,30 +136,36 @@ class EpisodeDataset:
     """Participant-local store over `stable-worldmodel`'s data layer. Iterates Windows.
     Carries the residency flag; never exposes a method that serializes raw tensors across egress."""
     path: Path
-    fmt: str             # "lance" | "hdf5" | "lerobot"
+    fmt: str             # "lance" | "hdf5" | "lerobot" | "lerobot-h5"
     exportable: bool     # MUST be False for sovereign data; the residency guard reads this
     def windows(self, num_steps: int) -> "Iterator[Window]": ...
     def commit(self) -> "DatasetCommitment": ...   # builds R_c (RFC-0014); raw episodes never emitted
 ```
 
-**Formats.** Three storage backends are supported, selected per participant:
+**Formats.** Four storage backends are supported, selected per participant:
 
 | Format | Backend ([conventions §11](../spec/conventions.md#11-external-dependencies)) | Use | Trade-off |
 |---|---|---|---|
 | `lance` (default) | `lance >= 0.10` | The reference store for new datasets | Append-friendly, fast indexed random reads of windows; columnar |
 | `hdf5` (portable) | `h5py >= 3.10` | Single-file portability, archival, transfer between a participant's own machines | One self-contained file; slower random access than `lance` |
 | `lerobot` (adapter) | `lerobot://<repo_id>` | Train directly on LeRobot-Hub robot datasets without re-ingest | Adapter over an external schema; read-only; conformance-checked on load |
+| `lerobot-h5` (adapter) | `lerobot-h5://<path>` or `fmt="lerobot-h5"` | Train directly on local LeRobot-layout HDF5 exports, including HF-mounted datasets | Reads the de-facto `episode_index` / `observation/pixels_*` / `action` layout; read-only; conformance-checked on load |
 
 The `lerobot://` adapter resolves a LeRobot-Hub `repo_id` to an `EpisodeDataset` view; it is read-only
 and its records are validated against the `Episode` schema and the WMCP `ActionSpec`
 ([RFC-0007](RFC-0007-wmcp-latent-contract.md)) on load, raising `ContractViolation` on a mismatched
 action space or latent-incompatible modality. New data adapters register through the same interface (the
 extension point is documented in [02-public-api.md §5](../spec/02-public-api.md#5-extension-points)).
+The `lerobot-h5://` adapter resolves a local LeRobot-layout HDF5 export to the same `EpisodeDataset`
+contract, materializing resident pixel/action tensors inside the participant boundary; it is read-only
+and intended for real-data claim smokes and HF Jobs mounts without a bespoke loader.
 
 **Window loader.** The loader yields `Window`s of a fixed `num_steps` for next-embedding prediction. The
-objective consumes $f_\theta(x_t)$ and the stop-gradient target $\mathrm{sg}[f_\theta(x_{t+1})]$ within
-the window ([RFC-0008](RFC-0008-model-objective-numerics.md)); the loader does not compute embeddings,
-it only materializes raw windows for the local trainer, which is inside the trust boundary.
+objective consumes $f_\theta(x_t)$ and the configured target branch for $f_\theta(x_{t+1})$ within the
+window ([RFC-0008](RFC-0008-model-objective-numerics.md)); claim-grade LeWorldModel mode keeps that
+target branch live, while the default proof-ready JEPA-family path may stop-gradient it. The loader does
+not compute embeddings, it only materializes raw windows for the local trainer, which is inside the
+trust boundary.
 
 ### 2. Residency: the sovereignty guarantee (`INV-RESIDENCY`)
 
@@ -376,7 +382,7 @@ Failure modes this RFC's design detects and handles (errors from [conventions §
 | Action-head parameter group reaches a released delta | param-group check at `PseudoGradient` construction ([RFC-0003 §3](RFC-0003-federated-protocol.md#3-the-pseudogradient-contract)) | `ResidencyViolation` | Reject; action heads stay local (`INV-ACTIONHEAD-LOCAL`) |
 | `RoundOpen` probe hash ≠ pinned probe hash | `probe.verify_probe_pin` at participant ingress | `ProbeError` | Reject `RoundOpen`; re-anchoring required (`INV-PROBE-PIN`) |
 | Probe landmark count $k < d$ (under-coverage) | probe build/verify check | `ProbeError` | Reject probe; anchor under-determined |
-| `lerobot://` record or local episode violates the latent/action contract | adapter/loader conformance check | `ContractViolation` | Reject dataset/record (`INV-WMCP`, [RFC-0007](RFC-0007-wmcp-latent-contract.md)) |
+| `lerobot://`, `lerobot-h5://`, or local episode violates the latent/action contract | adapter/loader conformance check | `ContractViolation` | Reject dataset/record (`INV-WMCP`, [RFC-0007](RFC-0007-wmcp-latent-contract.md)) |
 | Released $\Delta_c$ not bound to a valid $R_c$ | commitment-binding check at coordinator ingress | `CommitmentMismatch` | Reject the update; never swallowed (`INV-COMMIT-BINDING`) |
 | A committed $R_c$ fails Merkle verification | Merkle check ([RFC-0014](RFC-0014-provenance-commitments.md)) | `MerkleVerificationError` | Reject the commitment |
 | Unknown/too-new `DatasetCommitment.schema_version` | pydantic load validation ([conventions §10](../spec/conventions.md#10-versioning-and-schema-policy)) | `SchemaVersionMismatch` | Refuse load; explicit migration required |
@@ -387,15 +393,17 @@ binding decision) are security-critical and are never caught-and-ignored ([conve
 
 ## Alternatives Considered
 
-- **Episode storage formats — `lance` (default) vs `hdf5` (portable) vs `lerobot://` (adapter).**
-  *What they are:* a columnar append-friendly store, a single-file portable store, and a read-only
-  adapter over LeRobot-Hub datasets. *Why considered:* different participants have different needs —
-  high-throughput local training (`lance`), archival/transfer on one participant's own machines
-  (`hdf5`), and training directly on existing public robot datasets without re-ingest (`lerobot://`).
-  *Why all three are kept:* they serve disjoint needs; `lance` is the default for new datasets because of
-  fast indexed random window reads, `hdf5` is the portable fallback, and the `lerobot://` adapter avoids a
-  costly re-ingest of an entire hub dataset. None is rejected; the choice is per-participant config and
-  the formats round-trip-test identically ([RFC-0009](RFC-0009-configuration-reproducibility.md)).
+- **Episode storage formats — `lance` (default) vs `hdf5` (portable) vs LeRobot adapters.**
+  *What they are:* a columnar append-friendly store, a single-file portable store, a read-only adapter
+  over LeRobot-Hub datasets, and a read-only local LeRobot-layout HDF5 adapter. *Why considered:*
+  different participants have different needs — high-throughput local training (`lance`),
+  archival/transfer on one participant's own machines (`hdf5`), training directly on existing public robot
+  datasets without re-ingest (`lerobot://`), and training from HF-mounted local exports
+  (`lerobot-h5://`). *Why all four are kept:* they serve disjoint needs; `lance` is the default for new
+  datasets because of fast indexed random window reads, `hdf5` is the portable fallback, `lerobot://`
+  avoids a costly re-ingest of an entire hub dataset, and `lerobot-h5` is the file-mount bridge for
+  real-data claim smokes. None is rejected; the choice is per-participant config and the formats
+  round-trip-test identically ([RFC-0009](RFC-0009-configuration-reproducibility.md)).
 - **Probe sizing — small vs large $\mathcal{P}$.** *What it is:* the number of probe points and
   landmarks. *Why considered:* the probe trades anchor strength against per-round cost. *Why neither
   extreme is chosen:* under-coverage weakens the anchor (the pinned directions fail to constrain the
@@ -486,10 +494,10 @@ CPU-runnable tests on tiny synthetic fixtures (no large downloads; cf. [07-testi
   Assert `commit_dataset` over a known toy dataset yields a deterministic $R_c$; assert a $\Delta_c$
   released with a missing or wrong `dataset_root` is rejected with `CommitmentMismatch`
   (`INV-COMMIT-BINDING`); assert a tampered episode changes $R_c$.
-- **Format round-trip (lance / hdf5 / lerobot).** Write a toy dataset in each format, read it back as
+- **Format round-trip (lance / hdf5 / LeRobot adapters).** Write a toy dataset in each format, read it back as
   `Window`s, and assert byte/tensor equality of the materialized windows across formats; assert the
-  `lerobot://` adapter validates `ActionSpec` and raises `ContractViolation` on a mismatched action
-  space.
+  `lerobot://` and `lerobot-h5://` adapters validate `ActionSpec` and raise `ContractViolation` on a
+  mismatched action space.
 - **Probe-pin verification (`INV-PROBE-PIN`).** Assert `verify_probe_pin` accepts the pinned hash and
   raises `ProbeError` on a mismatched broadcast hash; assert a probe with $k < d$ landmarks raises
   `ProbeError`; assert landmark targets are derived only from $f_{\text{ref}}$ (changing a later-round

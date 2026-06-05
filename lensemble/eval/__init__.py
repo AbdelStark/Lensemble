@@ -9,6 +9,14 @@ from .ablation import (
     lambda_anc_sweep,
 )
 from .baselines import BASELINES, gap_recovery_fraction, load_baseline
+from .claim_mvp import (
+    CLAIM_MVP_REPORT_SCHEMA_VERSION,
+    ClaimMVPReport,
+    ClaimParticipantEvidence,
+    ClaimPublicationEvidence,
+    build_claim_mvp_report,
+    parse_claim_mvp_report,
+)
 from .harness import evaluate
 from .metrics import (
     comm_bytes,
@@ -33,6 +41,12 @@ __all__ = [
     "EvalReport",
     "EVAL_REPORT_SCHEMA_VERSION",
     "parse_eval_report",
+    "ClaimMVPReport",
+    "ClaimParticipantEvidence",
+    "ClaimPublicationEvidence",
+    "CLAIM_MVP_REPORT_SCHEMA_VERSION",
+    "build_claim_mvp_report",
+    "parse_claim_mvp_report",
     "EvalWorld",
     "register_env",
     "resolve_env",

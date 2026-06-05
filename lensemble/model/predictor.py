@@ -6,12 +6,11 @@ The conditioning embedding lives in the shared latent-conditioning space, so ``g
 model across embodiments; the per-embodiment head that produces it is local (``INV-ACTIONHEAD-LOCAL``,
 RFC-0008 4).
 
-Stop-gradient contract (RFC-0008 3). The prediction loss is
-``E || g_phi(f_theta(x_t), a_t) - sg[f_theta(x_{t+1})] ||^2``. :meth:`Predictor.prediction_residual`
-applies ``Tensor.detach()`` to the target ``f_theta(x_{t+1})`` *before* the residual, so gradients flow
-into ``g_phi`` and into ``f_theta`` through the input branch ``f_theta(x_t)`` only. The detach is a
-contract, not an optimization detail — a missing detach silently changes the objective. With SIGReg
-preventing collapse, no EMA/teacher target is used.
+Target-gradient helper. :meth:`Predictor.prediction_residual` implements the historical
+``E || g_phi(f_theta(x_t), a_t) - sg[f_theta(x_{t+1})] ||^2`` residual by applying ``Tensor.detach()`` to
+the target before subtraction. The configurable :class:`lensemble.model.objective.Objective` decides
+whether to use that helper (the default proof-ready JEPA-family path) or the claim-grade LeWorldModel
+base path with a live ``f_theta(x_{t+1})`` target branch (``target_stop_gradient=False``).
 """
 
 from __future__ import annotations

@@ -24,11 +24,10 @@ noising), ``clipped is True``, the flat delta covers ONLY the ``(θ, φ)`` group
 ``dataset_root`` binds it. No raw observation/action/embedding crosses — only ``delta`` does, gated by the
 ``EgressRole.PSEUDO_GRADIENT`` carrier (``INV-RESIDENCY``).
 
-#22 DATA-LAYER BOUNDARY. RFC-0013's ``Participant`` signature carries no data parameter and the data layer
-(#22) is not built. The participant's pinned probe, local windows, and dataset root are resolved through
-the protected hooks :meth:`_pinned_probe` / :meth:`_local_windows` / :meth:`_dataset_root`; the default
-implementations read ``cfg.data`` (and fail closed citing #22 where no source exists). Tests override the
-hooks to inject tiny fixtures. When #22 lands these hooks resolve from the real loader/commitment.
+#22 DATA-LAYER BOUNDARY. RFC-0013's ``Participant`` signature carries no data parameter. The participant's
+pinned probe, local windows, and dataset root are resolved through protected hooks backed by ``cfg.data``:
+``_local_dataset`` loads the configured source, ``_local_windows`` yields windows, and ``_dataset_root``
+commits the loaded episodes to ``R_c``. Tests may still override the hooks to inject tiny fixtures.
 """
 
 from __future__ import annotations
@@ -67,6 +66,7 @@ from lensemble.privacy.dp import DPConfig, privatize
 if TYPE_CHECKING:
     from lensemble.config.schema import LensembleConfig
     from lensemble.contracts import ActionSpec
+    from lensemble.data.dataset import EpisodeDataset
     from lensemble.data.episode import Window
     from lensemble.federation.transport import Transport
 
@@ -136,6 +136,21 @@ class Participant:
             )
         return load_probe(probe_path)
 
+    def _local_dataset(self) -> "EpisodeDataset":
+        """Resolve the participant-local dataset from ``cfg.data`` through the #22 adapter registry."""
+        from lensemble.data.adapters import load_episodes
+
+        source = getattr(self.config.data, "data_source", None)
+        if source is None:
+            raise RoundError(
+                "no local data source configured (cfg.data.data_source is None); the #22 data layer yields "
+                "the participant's windows/commitment/spec — set cfg.data.data_source or override the "
+                "participant data hooks",
+                code=LensembleErrorCode.ROUND_FAILED,
+                remediation="set cfg.data.data_source to a local episode store, or override participant data hooks",
+            )
+        return load_episodes(source, fmt=self.config.data.format)
+
     def _local_windows(self) -> Sequence["Window"]:
         """The participant's local training windows (the #22 data-layer boundary).
 
@@ -145,32 +160,20 @@ class Participant:
         #22 (the participant-override path tests exercise). The windows are RAW, residency-bound, and never
         cross a boundary — only the released ``delta`` does (``INV-RESIDENCY``).
         """
-        from lensemble.data.adapters import load_episodes
-
-        source = getattr(self.config.data, "data_source", None)
-        if source is None:
-            raise RoundError(
-                "no local data source configured (cfg.data.data_source is None); the #22 data layer yields "
-                "the participant's windows — set cfg.data.data_source or override _local_windows to inject them",
-                code=LensembleErrorCode.ROUND_FAILED,
-                remediation="set cfg.data.data_source to a local episode store, or override _local_windows",
-            )
-        dataset = load_episodes(source, fmt=self.config.data.format)
+        dataset = self._local_dataset()
         return list(dataset.windows(int(self.config.data.window_steps)))
 
     def _dataset_root(self) -> bytes:
         """The participant's local dataset Merkle root ``R_c`` (32 bytes, ``INV-COMMIT-BINDING``).
 
-        Default: resolved from the dataset commitment by the #22 provenance layer, which is not built; this
-        fails closed citing #22. Tests override it to supply a fixed 32-byte root. Exactly one ``R_c``
-        binds the released delta (``INV-COMMIT-BINDING``).
+        Default: commit the same local dataset resolved from ``cfg.data.data_source`` via
+        :func:`lensemble.provenance.commit_dataset`; exactly one ``R_c`` binds the released delta
+        (``INV-COMMIT-BINDING``). With no configured source this fails closed through ``_local_dataset``.
         """
-        raise RoundError(
-            "no dataset commitment configured; the #22 provenance layer yields R_c — override "
-            "_dataset_root to supply the 32-byte Merkle root",
-            code=LensembleErrorCode.ROUND_FAILED,
-            remediation="wire the #22 dataset commitment or override _dataset_root with the 32-byte root",
-        )
+        from lensemble.provenance import commit_dataset
+
+        commitment = commit_dataset(self._local_dataset())
+        return bytes.fromhex(commitment.merkle_root)
 
     def _action_spec(self) -> "ActionSpec":
         """The per-embodiment ``ActionSpec`` the local action head is built from (RFC-0007/0008; #22).
@@ -181,17 +184,8 @@ class Participant:
         closed citing #22. Tests override it (or override ``_local_windows`` to also carry a spec). The
         action head is per-embodiment LOCAL state and is NEVER federated (``INV-ACTIONHEAD-LOCAL``).
         """
-        from lensemble.data.adapters import load_episodes
-
         source = getattr(self.config.data, "data_source", None)
-        if source is None:
-            raise RoundError(
-                "no ActionSpec configured (cfg.data.data_source is None); the #22 data layer declares the "
-                "embodiment's ActionSpec — set cfg.data.data_source or override _action_spec to supply it",
-                code=LensembleErrorCode.ROUND_FAILED,
-                remediation="set cfg.data.data_source to a local episode store, or override _action_spec",
-            )
-        episodes = load_episodes(source, fmt=self.config.data.format).episodes
+        episodes = self._local_dataset().episodes
         if not episodes:
             raise RoundError(
                 f"data source {source!r} declares no episodes, so no embodiment ActionSpec can be resolved",
@@ -441,6 +435,7 @@ class Participant:
             sketch_dim=int(o.sigreg_sketch_dim),
             ep_knots=int(o.sigreg_knots),
             anchor=anchor,
+            target_stop_gradient=bool(o.target_stop_gradient),
         )
 
     def _run_inner_loop(
@@ -596,6 +591,7 @@ def train_local(
         sketch_dim=int(o.sigreg_sketch_dim),
         ep_knots=int(o.sigreg_knots),
         anchor=anchor,
+        target_stop_gradient=bool(o.target_stop_gradient),
     )
 
     lr = float(getattr(cfg.federation, "inner_lr", _INNER_LR))

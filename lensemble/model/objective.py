@@ -1,7 +1,9 @@
 """lensemble.model.objective — the composite SIGReg-JEPA + frame-anchor loss (RFC-0008 5).
 
 The objective is the three weighted terms
-``L = lambda_pred * E||g_phi(f(x_t),a_t) - sg[f(x_{t+1})]||^2 + lambda_sig * SIGReg_A(f(x)) + lambda_anc * L_anchor``.
+``L = lambda_pred * E||g_phi(f(x_t),a_t) - target[f(x_{t+1})]||^2 + lambda_sig * SIGReg_A(f(x)) + lambda_anc * L_anchor``.
+The default target is the existing stop-gradiented JEPA-family path. Claim-grade LeWorldModel base mode
+sets ``target_stop_gradient=False`` so gradients flow through ``f_theta(x_{t+1})`` as well (#191).
 :meth:`Objective.__call__` returns a frozen :class:`LossTerms` carrying each per-term scalar (so the
 metric stream can emit ``loss/pred``, ``loss/sigreg``, ``loss/anchor``) plus the weighted ``total`` that
 ``.backward()`` is called on. The per-term scalars are aggregate metrics, not raw embeddings, so emitting
@@ -42,10 +44,14 @@ class _EncoderLike(Protocol):
 
 
 class _PredictorLike(Protocol):
-    """Anything exposing the stop-gradiented prediction residual (the predictor ``g_phi``).
+    """Anything exposing the prediction path (the predictor ``g_phi``).
 
     Structural so the gauge test can pass the conjugated predictor ``QgQ^T``.
     """
+
+    def __call__(
+        self, latent: LatentState, action_embedding: Tensor
+    ) -> LatentState: ...
 
     def prediction_residual(
         self,
@@ -97,6 +103,7 @@ class Objective:
         ep_knots: int = 17,
         anchor: AnchorTerm | None = None,
         sketch: Tensor | None = None,
+        target_stop_gradient: bool = True,
     ) -> None:
         """Construct the per-round objective.
 
@@ -104,6 +111,8 @@ class Objective:
         once ``d`` is known from the encoder. An explicit ``sketch`` overrides the seed-built one; it is
         used by the gauge-invariance test, which co-rotates the SIGReg frame (``A -> QA``) under the
         ``O(d)`` gauge transform. ``ep_knots`` is the Epps-Pulley integration grid (RFC-0008 6).
+        ``target_stop_gradient=False`` is the claim-grade LeWorldModel base recipe: no EMA/teacher/target
+        stop-gradient in the prediction term (#191).
         """
         self.lambda_pred = float(lambda_pred)
         self.lambda_sig = float(lambda_sig)
@@ -113,6 +122,7 @@ class Objective:
         self.ep_knots = int(ep_knots)
         self.anchor = anchor
         self._sketch = sketch
+        self.target_stop_gradient = bool(target_stop_gradient)
 
     def __call__(
         self,
@@ -125,8 +135,9 @@ class Objective:
 
         ``window.obs`` is the ``(num_steps + 1, *modality)`` frame stack (03 5); it is encoded as a
         batch so that frames ``[:-1]`` are the inputs ``f(x_t)`` and ``[1:]`` the targets ``f(x_{t+1})``.
-        ``action_embedding`` is ``(num_steps, cond_dim)``. The target ``f(x_{t+1})`` is stop-gradiented
-        inside :meth:`Predictor.prediction_residual`.
+        ``action_embedding`` is ``(num_steps, cond_dim)``. When ``target_stop_gradient`` is true the
+        existing helper stop-gradients ``f(x_{t+1})``; when false, claim-grade LeWM base mode compares to
+        the live target branch.
 
         Raises ``ContractViolation`` (``INV-WMCP``) if the encoder output is non-conformant, and
         surfaces ``GaugeError`` from the injected anchor when the landmark anchor is under-determined.
@@ -159,10 +170,16 @@ class Objective:
             wmcp_version=encoded.wmcp_version,
         )
 
-        # Prediction term: residual carries the stop-gradient on f(x_{t+1}) (Predictor.prediction_residual).
-        residual = predictor.prediction_residual(
-            input_latent, action_embedding, target_latent
-        )
+        # Prediction term. The default preserves the existing stop-gradient path; claim-grade LeWM base
+        # mode routes through predictor.forward so f(x_{t+1}) remains in the graph (#191).
+        if self.target_stop_gradient:
+            residual = predictor.prediction_residual(
+                input_latent, action_embedding, target_latent
+            )
+        else:
+            residual = (
+                predictor(input_latent, action_embedding).tokens - target_latent.tokens
+            )
         pred = residual.pow(2).mean().to(torch.float32)
 
         # SIGReg over all embeddings flattened to (M, d); the shared sketch A is fixed for the round.

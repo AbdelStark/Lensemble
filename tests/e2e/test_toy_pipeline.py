@@ -30,6 +30,7 @@ import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import torch
 from typer.testing import CliRunner
 
@@ -39,7 +40,12 @@ from lensemble.contracts import WMCP_VERSION, ActionKind, ActionSpec
 from lensemble.data import Episode, EpisodeDataset, Transition, save_episodes
 from lensemble.data.episode import Window
 from lensemble.data.probe import PublicProbe
-from lensemble.eval import EvalReport, evaluate
+from lensemble.eval import (
+    EvalReport,
+    build_claim_mvp_report,
+    evaluate,
+    parse_claim_mvp_report,
+)
 from lensemble.federation import (
     Coordinator,
     InProcessTransport,
@@ -350,6 +356,167 @@ def test_federated_round_commits_and_advances_the_global_hash(tmp_path: Path) ->
     # exactly the two contributing participants are recorded in the round's ContributionRecord
     records = coordinator.ledger_records()
     assert records, "a committed round appends a ContributionRecord"
+
+
+# --- claim-MVP real-data smoke: LeRobot-H5 sources -> default Participant hooks -> committed round ---
+
+
+@dataclass(frozen=True)
+class _RobotModelConfig:
+    encoder: str = "vjepa2-vit-l"
+    warm_start_release: str = "vjepa2-2.0"
+    latent_dim: int = _D
+    num_tokens: int = 4  # (1//1) * (8//4)**2
+    predictor_depth: int = 1
+    predictor_width: int = _D
+    wmcp_version: str = WMCP_VERSION
+    encoder_frozen: bool = False
+    d: int = _D
+    in_channels: int = _C
+    num_frames: int = 1
+    image_size: int = 8
+    patch_size: int = 4
+    tubelet: int = 1
+    depth: int = 1
+    num_heads: int = 2
+    cond_dim: int = _D
+
+
+def _write_lerobot_h5(path: Path, *, seed: int) -> None:
+    import h5py
+
+    ep_lens = (4, 4)
+    n = sum(ep_lens)
+    ep_index = np.concatenate(
+        [np.full(length, i, dtype=np.int32) for i, length in enumerate(ep_lens)]
+    )
+    rng = np.random.default_rng(seed)
+    pixels = rng.integers(0, 256, size=(n, 8, 8, 3), dtype=np.uint8)
+    actions = rng.standard_normal((n, _ACTION_DIM)).astype(np.float32)
+    # Guarantee non-degenerate per-dim low/high bounds for ActionSpec validation.
+    actions[0] = np.array([-1.0, -0.5], dtype=np.float32)
+    actions[-1] = np.array([1.0, 0.5], dtype=np.float32)
+    with h5py.File(path, "w") as f:
+        f.create_dataset("episode_index", data=ep_index)
+        f.create_dataset("observation/pixels_top", data=pixels)
+        f.create_dataset("action", data=actions)
+
+
+def _write_robot_probe(tmp_path: Path, cfg: LensembleConfig) -> Path:
+    from lensemble.data.probe import build_probe, save_probe
+    from lensemble.model.encoder import build_encoder, snapshot_reference
+
+    gen = torch.Generator().manual_seed(33)
+    points = torch.randn(_D, 1, _C, 8, 8, generator=gen)
+    f_ref = snapshot_reference(build_encoder(cfg))
+    probe = build_probe(points, torch.arange(_D), f_ref, probe_version=1)
+    path = tmp_path / "robot-probe.safetensors"
+    save_probe(probe, path)
+    return path
+
+
+def _robot_cfg(
+    *, data_source: Path | None, probe_path: Path, run_mode: str
+) -> LensembleConfig:
+    base = LensembleConfig()
+    model = _RobotModelConfig()
+    federation = dataclasses.replace(
+        base.federation,
+        inner_horizon=1,
+        participant_count=2,
+        fault_tolerance_min_participants=2,
+        secure_agg_threshold=2,
+    )
+    data = dataclasses.replace(
+        base.data,
+        data_source=str(data_source) if data_source is not None else None,
+        format="lerobot-h5",
+        probe_path=str(probe_path),
+        window_steps=1,
+    )
+    objective = dataclasses.replace(
+        base.objective,
+        lambda_sig=0.1,
+        lambda_anc=0.01,
+        target_stop_gradient=False,
+    )
+    privacy = dataclasses.replace(base.privacy, enabled=False)
+    return dataclasses.replace(
+        base,
+        model=model,  # type: ignore[arg-type]
+        federation=federation,
+        data=data,
+        objective=objective,
+        privacy=privacy,
+        run_mode=run_mode,  # type: ignore[arg-type]
+    )
+
+
+def test_lerobot_h5_two_silo_federated_round_uses_default_data_hooks(
+    tmp_path: Path,
+) -> None:
+    silo0 = tmp_path / "silo0.h5"
+    silo1 = tmp_path / "silo1.h5"
+    _write_lerobot_h5(silo0, seed=10)
+    _write_lerobot_h5(silo1, seed=20)
+
+    probe_cfg = _robot_cfg(
+        data_source=silo0, probe_path=tmp_path / "unused", run_mode="participant"
+    )
+    probe_path = _write_robot_probe(tmp_path, probe_cfg)
+    coord_cfg = _robot_cfg(
+        data_source=None, probe_path=probe_path, run_mode="coordinator"
+    )
+    p0_cfg = _robot_cfg(
+        data_source=silo0, probe_path=probe_path, run_mode="participant"
+    )
+    p1_cfg = _robot_cfg(
+        data_source=silo1, probe_path=probe_path, run_mode="participant"
+    )
+
+    transport = InProcessTransport()
+    coordinator = Coordinator(coord_cfg, transport=transport)
+    global_state = coordinator.global_state()
+    hash_before = coordinator.global_state_hash()
+    updates = {}
+    sources = {"silo-0": str(silo0), "silo-1": str(silo1)}
+
+    for pid, cfg in (("silo-0", p0_cfg), ("silo-1", p1_cfg)):
+        participant = Participant(cfg, participant_id=pid, transport=transport)
+        pseudo_gradient = participant.local_round(
+            global_state, global_state.sketch_seed
+        )
+        updates[pid] = pseudo_gradient
+        transport.submit_update(
+            participant_id=pid,
+            round_index=global_state.round_index,
+            update=pseudo_gradient,
+        )
+        assert len(pseudo_gradient.dataset_root) == 32
+
+    state = coordinator.try_round()
+    assert state is RoundState.CLOSED
+    assert coordinator.global_state_hash() != hash_before
+
+    records = coordinator.ledger_records()
+    assert records
+    assert set(records[-1].dataset_roots) == {"silo-0", "silo-1"}
+    report = build_claim_mvp_report(
+        cfg=coord_cfg,
+        coordinator=coordinator,
+        participant_updates=updates,
+        participant_sources=sources,
+        round_state=state,
+    )
+    assert report.round_state == "closed"
+    assert report.objective_target_stop_gradient is False
+    assert report.committed_rounds == 1
+    assert {p.participant_id for p in report.participants} == {"silo-0", "silo-1"}
+    assert {p.participant_id: p.dataset_root for p in report.participants} == records[
+        -1
+    ].dataset_roots
+    restored = parse_claim_mvp_report(report.model_dump(mode="json"))
+    assert restored == report
 
 
 # --- the CLI smoke: the wired train / eval commands run end-to-end ---
