@@ -17,6 +17,13 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ## [Unreleased]
 
+### Changed
+
+- `area:federation`: Require Phase 3 evidence-bundle validation to bind the
+  run-manifest, final checkpoint header, and final checkpoint weights artifact
+  checks to the same SHA-256 hashes recorded in the training summary, while
+  redacting absolute local artifact paths to residency-safe artifact URIs.
+
 ### Security
 
 - Dependencies: replaced the `lance>=0.10` runtime dependency with **`pylance>=0.10`** (the real Lance

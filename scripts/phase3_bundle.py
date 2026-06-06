@@ -19,9 +19,47 @@ from lensemble.federation import (
     materialize_phase3_run_contracts,
     write_phase3_bundle_outputs,
 )
+from lensemble.federation.phase3_bundle import (
+    Phase3ArtifactCheck,
+    Phase3ArtifactKind,
+    local_artifact_uri,
+)
 
 _MODEL_REPO_ID = "abdelstark/lensemble-phase3-consortium-checkpoint"
 _DATASET_REPO_ID = "abdelstark/lensemble-phase3-consortium-data"
+_REMOTE_MODEL_ARTIFACTS: tuple[tuple[Phase3ArtifactKind, str, str], ...] = (
+    ("model-card", "Phase 3 model card", "README.md"),
+    (
+        "evidence-bundle",
+        "Phase 3 evidence bundle",
+        "reports/phase3_evidence_bundle.json",
+    ),
+    (
+        "training-report",
+        "Phase 3 published long-run report",
+        "reports/phase3_long_run_smoke_report.json",
+    ),
+    (
+        "observability-report",
+        "Phase 3 published observability report",
+        "reports/phase3_observability_report.json",
+    ),
+    (
+        "eval-control-report",
+        "Phase 3 published eval report",
+        "reports/phase3_eval_report.json",
+    ),
+    (
+        "checkpoint-header",
+        "Phase 3 published checkpoint header",
+        "artifacts/final/header.json",
+    ),
+    (
+        "checkpoint-weights",
+        "Phase 3 published checkpoint weights",
+        "artifacts/final/weights.safetensors",
+    ),
+)
 
 
 def _args() -> argparse.Namespace:
@@ -160,8 +198,8 @@ def main() -> None:
     )
 
 
-def _artifact_checks(args: argparse.Namespace):
-    checks = [
+def _artifact_checks(args: argparse.Namespace) -> tuple[Phase3ArtifactCheck, ...]:
+    checks: list[Phase3ArtifactCheck] = [
         local_artifact_check(
             kind="consortium-manifest",
             label="Phase 3 long-run consortium manifest",
@@ -181,7 +219,7 @@ def _artifact_checks(args: argparse.Namespace):
             kind="privacy-aggregation-report",
             label="Phase 3 aggregation/privacy rows embedded in long-run report",
             path=args.long_run_report,
-            uri=f"{args.long_run_report}#rounds",
+            uri=f"{local_artifact_uri(args.long_run_report)}#rounds",
         ),
         local_artifact_check(
             kind="observability-report",
@@ -210,42 +248,10 @@ def _artifact_checks(args: argparse.Namespace):
         ),
     ]
     if args.remote_check:
-        for kind, label, path_in_repo in (
-            ("model-card", "Phase 3 model card", "README.md"),
-            (
-                "evidence-bundle",
-                "Phase 3 evidence bundle",
-                "reports/phase3_evidence_bundle.json",
-            ),
-            (
-                "training-report",
-                "Phase 3 published long-run report",
-                "reports/phase3_long_run_smoke_report.json",
-            ),
-            (
-                "observability-report",
-                "Phase 3 published observability report",
-                "reports/phase3_observability_report.json",
-            ),
-            (
-                "eval-control-report",
-                "Phase 3 published eval report",
-                "reports/phase3_eval_report.json",
-            ),
-            (
-                "checkpoint-header",
-                "Phase 3 published checkpoint header",
-                "artifacts/final/header.json",
-            ),
-            (
-                "checkpoint-weights",
-                "Phase 3 published checkpoint weights",
-                "artifacts/final/weights.safetensors",
-            ),
-        ):
+        for kind, label, path_in_repo in _REMOTE_MODEL_ARTIFACTS:
             checks.append(
                 check_hf_artifact_exists(
-                    kind=kind,  # type: ignore[arg-type]
+                    kind=kind,
                     label=label,
                     repo_type="model",
                     repo_id=_MODEL_REPO_ID,
