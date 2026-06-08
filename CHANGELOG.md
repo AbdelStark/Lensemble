@@ -34,6 +34,18 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:docs`: **Phase 3 completion roadmap + acceptance-matrix closeout** (#248, RFC-0009) — closes
+  epic #249. `docs/roadmap/PHASE3.md` (Training Run Shape, Evaluation And Controls, Observability And
+  Dropout, Evidence Bundle, Acceptance Matrix, Final Claim Boundary) and the README Implementation Status
+  now record Phase 3 as completed on **real HF Jobs `h200` compute**: the 10-round anchored-federation
+  run (job `6a26885b…`, checkpoint `abdelstark/lensemble-phase3-consortium-checkpoint` @ `828e210c`,
+  `publication.status: hf_jobs_release`), the published SO-100 silos @ `15f71911`, the four completed
+  matched controls (0 blocked) with the round-0 anchored-vs-naive frame-drift contrast (48.97° vs 180°),
+  the real induced dropout, and the published evidence bundle/model card — with the honest residual
+  limitations stated (DP–utility frontier, federated collapse at the default outer-step + unvendored
+  V-JEPA-2 warm-start, and the closed-loop downstream task-success blocker on stable-worldmodel #96). The
+  evidence is consortium-engineering + real federated-training evidence, **not** a cryptographic proof of
+  honest participant computation (RFC-0006 out of scope).
 - `area:artifacts`: **Phase 3 final evidence bundle + model card regenerated from the REAL #242 consortium
   run** (#247) — `scripts/phase3_bundle.py` gains `--consortium-manifest`/`--dataset-registry` input options
   that load the checked-in real `docs/evidence/phase3_consortium_manifest.json` +
