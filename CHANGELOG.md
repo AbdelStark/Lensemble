@@ -34,6 +34,19 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:federation` / `area:deploy`: **Phase 3 headline GPU consortium run published**
+  (#243, RFC-0002/RFC-0003) — the anchored-federation run completed on HF Jobs `h200` (job
+  `6a26885bece949d7b3dcb715`, pinned commit `056f7407`): **10 closed federated rounds** at non-toy size
+  (`latent_dim=256`), all four participants 0-dropped, with per-round secure-aggregation (`secure_sum`)
+  and DP `(ε≈5.30, δ=1e-5)` accounting and the four real learning metrics. Checkpoint + manifests +
+  ledger + report + pinned probe pushed to
+  `abdelstark/lensemble-phase3-consortium-checkpoint` at immutable revision
+  `828e210cba4870b2be4ab573a5f0dd4ee30bae29` (`publication.status: hf_jobs_release`); per-round report
+  checked in at `docs/evidence/phase3_consortium_run_report.json`. `effective_rank` stays high
+  (≈36–47/256 — the frame anchor holds rank under DP federation); the honest DP–utility limitation at 4
+  participants × ~8.4M params (gradient-noise-dominated `val_pred`/`frame_drift`) is documented, with the
+  gauge contrast moved to a relaxed-DP probe (#244/#246). Also fixes two real GPU bugs surfaced by the
+  run: per-silo action-bound disagreement (`union_action_specs`) and DP Gaussian noise device placement.
 - `area:data`: **Phase 3 training-scale SO-100 silos + held-out eval split**
   (#242, RFC-0004/RFC-0007) — published four sovereign participant silos
   (`phase3-so100-a..d`, 1259–1339 windows each at `window_steps=4`) plus one
