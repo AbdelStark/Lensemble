@@ -53,6 +53,13 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
   (no raw observation/action arrays), and the claim boundary distinguishes real held-out latent evidence
   from a cryptographic proof and from paper-scale performance
   (`tests/ml/test_phase3_downstream_eval.py`).
+- `area:observability` / `area:gauge`: **Phase 3 observability/dropout report regenerated from the real
+  run** (#246, RFC-0002/RFC-0015) — `docs/evidence/phase3_observability_report.json` is now bound to the
+  real headline run (`phase3-consortium-v1`, checkpoint `bb31c092…`): 11 round summaries (the 10 real
+  rounds + one induced-dropout round), a real induced dropout with a **quorum-preserving close**
+  (`effective_quorum=3` of 4), and 10 eval links carrying the anchored-vs-naive latent frame-drift
+  contrast. The `phase3-observability-redaction-v1` contract is enforced — no raw trajectories or secrets
+  in the emitted report (`tests/integration/test_phase3_observability_real_run.py`).
 - `area:eval`: **Phase 3 matched controls flipped from blocked to completed**
   (#244, RFC-0002) — `build_phase3_eval_report(..., completed_controls=...)` now binds the three
   previously-blocked controls (`local-only`, `naive-fedavg`, `fork-a-frozen-encoder`) to four real
