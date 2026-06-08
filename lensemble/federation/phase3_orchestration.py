@@ -13,7 +13,7 @@ import shutil
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, Sequence
 
 import torch
 from pydantic import BaseModel, ConfigDict, Field
@@ -41,12 +41,17 @@ from lensemble.data.phase3 import (
     validate_phase3_registry_against_manifest,
 )
 from lensemble.data.probe import PublicProbe, probe_content_hash, save_probe
+from lensemble.eval.jepa_metrics import (
+    evaluate_jepa_windows,
+    frame_drift_deg_from_updates,
+    load_round_models,
+)
 from lensemble.federation.agent import ParticipantFactory, Phase3ParticipantAgent
 from lensemble.federation.participant import Participant
 from lensemble.federation.round import RoundState
 from lensemble.federation.service import Phase3CoordinatorService
 from lensemble.federation.transport import InProcessTransport, Transport
-from lensemble.model import build_encoder
+from lensemble.model import build_action_head, build_encoder
 
 PHASE3_LONG_RUN_REPORT_SCHEMA_VERSION = 1
 
@@ -115,7 +120,12 @@ class Phase3RunShape(BaseModel):
 
 
 class Phase3RoundRunSummary(BaseModel):
-    """Residency-safe summary for one closed Phase 3 round."""
+    """Residency-safe summary for one closed Phase 3 round.
+
+    The four learning metrics are optional: the local CI smoke leaves them unset, while a real HF Jobs
+    consortium run (``run_phase3_consortium`` with ``compute_metrics=True``) fills them in from the
+    committed global checkpoint and the public probe (RFC-0005 §4, RFC-0002). They carry no raw data.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -125,6 +135,10 @@ class Phase3RoundRunSummary(BaseModel):
     global_model_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     aggregation_backend_status: str = Field(min_length=1)
     dp_epsilon_spent: float | None = Field(default=None, ge=0.0)
+    val_pred: float | None = Field(default=None)
+    val_sigreg: float | None = Field(default=None)
+    effective_rank: float | None = Field(default=None, ge=0.0)
+    frame_drift_deg: float | None = Field(default=None, ge=0.0)
 
 
 class Phase3ParticipantRunSummary(BaseModel):
@@ -462,60 +476,156 @@ def _build_agents(
     }
 
 
-def run_phase3_long_run_smoke(
-    *,
-    run_dir: Path,
-    rounds: int = 10,
-    generated_at: datetime = _GENERATED_AT,
-) -> Phase3LongRunReport:
-    """Run a deterministic four-participant, multi-round Phase 3 smoke."""
+def phase3_long_run_smoke_inputs(
+    *, run_dir: Path, rounds: int = 10
+) -> Phase3ConsortiumInputs:
+    """Build the deterministic tiny ``Phase3ConsortiumInputs`` used by the CI smoke + metrics test."""
 
     run_dir = Path(run_dir)
-    _prepare_run_dir(run_dir)
-    probe_seed_cfg = phase3_long_run_smoke_config(rounds=rounds)
-    probe = _build_public_probe(probe_seed_cfg)
+    probe = _build_public_probe(phase3_long_run_smoke_config(rounds=rounds))
     probe_path = run_dir / "phase3_public_probe.safetensors"
-    save_probe(probe, probe_path)
     cfg = phase3_long_run_smoke_config(rounds=rounds, probe_path=probe_path)
     manifest = phase3_long_run_smoke_manifest(
         cfg, public_probe_hash=probe.content_hash.hex()
     )
     registry = phase3_registry_from_consortium_manifest(manifest)
-    validate_phase3_registry_against_manifest(registry, manifest)
-    transport = InProcessTransport()
-    service = Phase3CoordinatorService(
-        cfg,
+    windows_by_participant = {
+        participant_id: _windows(2000 + idx)
+        for idx, participant_id in enumerate(_PARTICIPANTS)
+    }
+    factory = _agent_factory(probe=probe, windows_by_participant=windows_by_participant)
+    return Phase3ConsortiumInputs(
+        cfg=cfg,
+        participant_configs={
+            participant_id: _participant_config(cfg, participant_id=participant_id)
+            for participant_id in _PARTICIPANTS
+        },
         manifest=manifest,
         registry=registry,
-        transport=transport,
-        artifacts_dir=run_dir / "coordinator-artifacts",
-        trace_path=run_dir / "phase3_coordinator_trace.jsonl",
-    )
-    agents = _build_agents(
-        cfg,
-        manifest=manifest,
-        registry=registry,
-        transport=transport,
         probe=probe,
-        run_dir=run_dir,
+        probe_path=probe_path,
+        participant_ids=_PARTICIPANTS,
+        eval_windows=tuple(_windows(9_999)),
+        eval_action_spec=_action_spec(),
+        participant_factory=factory,
     )
-    for participant_id in _PARTICIPANTS:
-        service.join(
-            participant_id=participant_id,
-            endpoint=f"in-process://{participant_id}",
-        )
-    for agent in agents.values():
-        agent.preflight()
+
+
+def run_phase3_long_run_smoke(
+    *,
+    run_dir: Path,
+    rounds: int = 10,
+    generated_at: datetime = _GENERATED_AT,
+    compute_metrics: bool = False,
+) -> Phase3LongRunReport:
+    """Run a deterministic four-participant, multi-round Phase 3 smoke.
+
+    With ``compute_metrics=True`` the report's round rows carry real (tiny-model) per-round
+    ``val_pred``/``val_sigreg``/``effective_rank``/``frame_drift_deg`` measured off the committed global
+    checkpoints — the same path the HF Jobs consortium launcher exercises at non-toy scale.
+    """
+
+    inputs = phase3_long_run_smoke_inputs(run_dir=run_dir, rounds=rounds)
+    return run_phase3_consortium(
+        inputs,
+        run_dir=run_dir,
+        rounds=rounds,
+        generated_at=generated_at,
+        metric_windows=2,
+        compute_metrics=compute_metrics,
+        claim_boundary=(
+            "Local deterministic Phase 3 long-run smoke: proves orchestration, "
+            "artifact/report generation, secure-sum reporting, and DP accounting "
+            "for a tiny model. It is not a published HF Jobs robotics result."
+        ),
+    )
+
+
+@dataclass(frozen=True)
+class _RoundMetrics:
+    """Per-round learning metrics, all optional so an unmeasured round records absence, not zero."""
+
+    val_pred: float | None = None
+    val_sigreg: float | None = None
+    effective_rank: float | None = None
+    frame_drift_deg: float | None = None
+
+
+_NO_METRICS = _RoundMetrics()
+
+
+def _round_learning_metrics(
+    cfg: LensembleConfig,
+    *,
+    run_dir: Path,
+    round_index: int,
+    probe: PublicProbe,
+    transport: InProcessTransport,
+    eval_windows: Sequence[Window],
+    eval_action_spec: ActionSpec,
+    metric_windows: int,
+) -> _RoundMetrics:
+    """Evaluate the just-committed global model: val_pred/val_sigreg/effective_rank + frame_drift_deg."""
+
+    artifacts_dir = run_dir / "coordinator-artifacts"
+    final_ckpt = artifacts_dir / f"round-{round_index + 1:05d}"
+    prior_ckpt = artifacts_dir / f"round-{round_index:05d}"
+    if not (final_ckpt / "weights.safetensors").exists():
+        return _NO_METRICS
+    encoder, predictor = load_round_models(cfg, final_ckpt)
+    action_head = build_action_head(cfg, eval_action_spec).eval()
+    window_metrics = evaluate_jepa_windows(
+        cfg,
+        encoder=encoder,
+        predictor=predictor,
+        action_head=action_head,
+        windows=eval_windows,
+        max_windows=metric_windows,
+    )
+    frame_drift_deg = frame_drift_deg_from_updates(
+        cfg,
+        prior_checkpoint_dir=prior_ckpt,
+        final_encoder=encoder,
+        probe=probe,
+        updates=transport.collect_updates(round_index),
+        prior_round=round_index,
+    )
+    if window_metrics is None:
+        return _RoundMetrics(frame_drift_deg=frame_drift_deg)
+    return _RoundMetrics(
+        val_pred=window_metrics.val_pred,
+        val_sigreg=window_metrics.val_sigreg,
+        effective_rank=window_metrics.effective_rank,
+        frame_drift_deg=frame_drift_deg,
+    )
+
+
+def _run_consortium_rounds(
+    cfg: LensembleConfig,
+    *,
+    service: Phase3CoordinatorService,
+    transport: InProcessTransport,
+    agents: dict[str, Phase3ParticipantAgent],
+    participant_ids: tuple[str, ...],
+    rounds: int,
+    run_dir: Path,
+    probe: PublicProbe,
+    eval_windows: Sequence[Window],
+    eval_action_spec: ActionSpec,
+    compute_metrics: bool,
+    metric_windows: int,
+) -> tuple[list[Phase3RoundRunSummary], list[str], dict[str, int], dict[str, int]]:
+    """Drive ``rounds`` closed federated rounds, optionally measuring per-round learning metrics."""
 
     round_summaries: list[Phase3RoundRunSummary] = []
     blockers: list[str] = []
-    submitted_counts = {participant_id: 0 for participant_id in _PARTICIPANTS}
-    assigned_counts = {participant_id: 0 for participant_id in _PARTICIPANTS}
+    submitted_counts = {participant_id: 0 for participant_id in participant_ids}
+    assigned_counts = {participant_id: 0 for participant_id in participant_ids}
     for round_index in range(rounds):
-        for participant_id in _PARTICIPANTS:
+        for participant_id in participant_ids:
             service.assign_round(participant_id=participant_id)
             assigned_counts[participant_id] += 1
-        for participant_id in _PARTICIPANTS:
+        for participant_id in participant_ids:
             agents[participant_id].run_assigned_round()
             update = transport.collect_updates(round_index)[participant_id]
             service.submit_update(participant_id=participant_id, update=update)
@@ -528,6 +638,20 @@ def run_phase3_long_run_smoke(
             break
         privacy_report = service.aggregation_privacy_report()
         record = service.coordinator.ledger_records()[-1]
+        metrics = (
+            _round_learning_metrics(
+                cfg,
+                run_dir=run_dir,
+                round_index=round_index,
+                probe=probe,
+                transport=transport,
+                eval_windows=eval_windows,
+                eval_action_spec=eval_action_spec,
+                metric_windows=metric_windows,
+            )
+            if compute_metrics
+            else _NO_METRICS
+        )
         round_summaries.append(
             Phase3RoundRunSummary(
                 round_index=round_index,
@@ -544,17 +668,40 @@ def run_phase3_long_run_smoke(
                     if privacy_report is not None
                     else None
                 ),
+                val_pred=metrics.val_pred,
+                val_sigreg=metrics.val_sigreg,
+                effective_rank=metrics.effective_rank,
+                frame_drift_deg=metrics.frame_drift_deg,
             )
         )
+    return round_summaries, blockers, assigned_counts, submitted_counts
 
-    run_manifest_path = _write_run_manifest(
-        cfg, manifest, run_dir=run_dir, generated_at=generated_at
-    )
+
+def _assemble_long_run_report(
+    cfg: LensembleConfig,
+    *,
+    manifest: Phase3ConsortiumManifest,
+    service: Phase3CoordinatorService,
+    run_dir: Path,
+    generated_at: datetime,
+    target_rounds: int,
+    round_summaries: list[Phase3RoundRunSummary],
+    blockers: list[str],
+    assigned_counts: dict[str, int],
+    submitted_counts: dict[str, int],
+    participant_ids: tuple[str, ...],
+    run_manifest_path: Path,
+    claim_boundary: str,
+    artifact_targets: Phase3ArtifactTargets | None = None,
+    eval_budget: str | None = None,
+) -> Phase3LongRunReport:
     return Phase3LongRunReport(
         consortium_id=manifest.consortium_id,
         run_id=manifest.run_id,
         generated_at=generated_at,
-        run_shape=_run_shape(cfg),
+        run_shape=_run_shape(
+            cfg, artifact_targets=artifact_targets, eval_budget=eval_budget
+        ),
         dry_run_checks=(
             "manifest_validated",
             "dataset_registry_validated_against_manifest",
@@ -568,8 +715,8 @@ def run_phase3_long_run_smoke(
             "report_publication_path_writable",
         ),
         closed_rounds=len(round_summaries),
-        target_rounds=rounds,
-        completed_target=len(round_summaries) >= rounds,
+        target_rounds=target_rounds,
+        completed_target=len(round_summaries) >= target_rounds,
         final_global_model_hash=service.coordinator.global_state_hash(),
         config_hash=config_hash(asdict(cfg)),
         run_manifest_path=str(run_manifest_path),
@@ -585,14 +732,134 @@ def run_phase3_long_run_smoke(
                 submitted_rounds=submitted_counts[participant_id],
                 dropped_rounds=0,
             )
-            for participant_id in _PARTICIPANTS
+            for participant_id in participant_ids
         ),
         blockers=tuple(blockers),
-        claim_boundary=(
-            "Local deterministic Phase 3 long-run smoke: proves orchestration, "
-            "artifact/report generation, secure-sum reporting, and DP accounting "
-            "for a tiny model. It is not a published HF Jobs robotics result."
-        ),
+        claim_boundary=claim_boundary,
+    )
+
+
+@dataclass(frozen=True)
+class Phase3ConsortiumInputs:
+    """Everything ``run_phase3_consortium`` needs to drive a real (non-smoke) Phase 3 run.
+
+    The HF Jobs entry point builds these from mounted participant-local data refs: a coordinator config,
+    a per-participant config (each pinned to its own private data ref), the agreed manifest + registry,
+    the pinned public probe, and a held-out eval split (disjoint from every participant silo) used only
+    for the residency-safe per-round learning metrics. ``participant_factory`` is left ``None`` for real
+    runs so each agent's default ``Participant`` streams windows from its own ``data_source``; tests pass
+    a factory that injects in-memory windows for determinism.
+    """
+
+    cfg: LensembleConfig
+    participant_configs: dict[str, LensembleConfig]
+    manifest: Phase3ConsortiumManifest
+    registry: Phase3DatasetProbeRegistry
+    probe: PublicProbe
+    probe_path: Path
+    participant_ids: tuple[str, ...]
+    eval_windows: tuple[Window, ...]
+    eval_action_spec: ActionSpec
+    participant_factory: ParticipantFactory | None = None
+
+
+def run_phase3_consortium(
+    inputs: Phase3ConsortiumInputs,
+    *,
+    run_dir: Path,
+    rounds: int,
+    generated_at: datetime,
+    metric_windows: int = 8,
+    compute_metrics: bool = True,
+    artifact_targets: Phase3ArtifactTargets | None = None,
+    eval_budget: str | None = None,
+    claim_boundary: str,
+) -> Phase3LongRunReport:
+    """Drive the full Phase 3 consortium runtime and emit a long-run report with per-round metrics.
+
+    This is the library entry point the HF Jobs launcher calls: it runs the networked
+    coordinator-service + sovereign participant-agent runtime (not the claim-MVP path) over the supplied
+    participant configs, and — when ``compute_metrics`` is set — measures ``val_pred``/``val_sigreg``/
+    ``effective_rank`` on the held-out eval split plus per-round ``frame_drift_deg`` from released
+    pseudo-gradients. No raw participant trajectory ever leaves a participant boundary.
+    """
+
+    run_dir = Path(run_dir)
+    _prepare_run_dir(run_dir)
+    save_probe(inputs.probe, inputs.probe_path)
+    validate_phase3_registry_against_manifest(inputs.registry, inputs.manifest)
+    transport = InProcessTransport()
+    service = Phase3CoordinatorService(
+        inputs.cfg,
+        manifest=inputs.manifest,
+        registry=inputs.registry,
+        transport=transport,
+        artifacts_dir=run_dir / "coordinator-artifacts",
+        trace_path=run_dir / "phase3_coordinator_trace.jsonl",
+    )
+    coordinator_endpoint = f"in-process://{inputs.manifest.coordinator_id}"
+    agents = {
+        participant_id: Phase3ParticipantAgent(
+            inputs.participant_configs[participant_id],
+            manifest=inputs.manifest,
+            participant_id=participant_id,
+            transport=transport,
+            state_dir=run_dir / "participant-agents",
+            coordinator_endpoint=coordinator_endpoint,
+            registry=inputs.registry,
+            participant_factory=inputs.participant_factory,
+            emit_observability=True,
+        )
+        for participant_id in inputs.participant_ids
+    }
+    for participant_id in inputs.participant_ids:
+        service.join(
+            participant_id=participant_id,
+            endpoint=f"in-process://{participant_id}",
+        )
+    for agent in agents.values():
+        agent.preflight()
+
+    round_summaries, blockers, assigned_counts, submitted_counts = (
+        _run_consortium_rounds(
+            inputs.cfg,
+            service=service,
+            transport=transport,
+            agents=agents,
+            participant_ids=inputs.participant_ids,
+            rounds=rounds,
+            run_dir=run_dir,
+            probe=inputs.probe,
+            eval_windows=inputs.eval_windows,
+            eval_action_spec=inputs.eval_action_spec,
+            compute_metrics=compute_metrics,
+            metric_windows=metric_windows,
+        )
+    )
+    run_manifest_path = _write_run_manifest(
+        inputs.cfg,
+        inputs.manifest,
+        run_dir=run_dir,
+        generated_at=generated_at,
+        artifact_targets=artifact_targets,
+        eval_budget=eval_budget,
+    )
+    return _assemble_long_run_report(
+        inputs.cfg,
+        manifest=inputs.manifest,
+        service=service,
+        run_dir=run_dir,
+        generated_at=generated_at,
+        target_rounds=rounds,
+        round_summaries=round_summaries,
+        blockers=blockers,
+        assigned_counts=assigned_counts,
+        submitted_counts=submitted_counts,
+        participant_ids=inputs.participant_ids,
+        run_manifest_path=run_manifest_path,
+        claim_boundary=claim_boundary,
+        artifact_targets=artifact_targets,
+        eval_budget=eval_budget,
     )
 
 
@@ -657,7 +924,24 @@ def to_phase3_long_run_report_json(report: Phase3LongRunReport) -> str:
     )
 
 
-def _run_shape(cfg: LensembleConfig) -> Phase3RunShape:
+_SMOKE_EVAL_BUDGET = "deferred to #228; smoke reserves synthetic downstream eval budget"
+
+
+def _default_artifact_targets() -> Phase3ArtifactTargets:
+    return Phase3ArtifactTargets(
+        model_repo="hf://models/abdelstark/lensemble-phase3-consortium-checkpoint",
+        dataset_repo="hf://datasets/abdelstark/lensemble-phase3-consortium-data",
+        reports_prefix="reports/phase3/",
+        publication_mode="local_smoke",
+    )
+
+
+def _run_shape(
+    cfg: LensembleConfig,
+    *,
+    artifact_targets: Phase3ArtifactTargets | None = None,
+    eval_budget: str | None = None,
+) -> Phase3RunShape:
     return Phase3RunShape(
         participant_count=int(cfg.federation.participant_count),
         rounds=int(cfg.federation.num_rounds),
@@ -673,13 +957,10 @@ def _run_shape(cfg: LensembleConfig) -> Phase3RunShape:
         dp_accountant=cfg.privacy.accountant,
         secure_aggregation_backend=cfg.federation.aggregation_backend,
         secure_aggregation_threshold=int(cfg.federation.secure_agg_threshold),
-        eval_budget="deferred to #228; smoke reserves synthetic downstream eval budget",
-        artifact_targets=Phase3ArtifactTargets(
-            model_repo="hf://models/abdelstark/lensemble-phase3-consortium-checkpoint",
-            dataset_repo="hf://datasets/abdelstark/lensemble-phase3-consortium-data",
-            reports_prefix="reports/phase3/",
-            publication_mode="local_smoke",
-        ),
+        eval_budget=eval_budget if eval_budget is not None else _SMOKE_EVAL_BUDGET,
+        artifact_targets=artifact_targets
+        if artifact_targets is not None
+        else _default_artifact_targets(),
     )
 
 
@@ -689,6 +970,8 @@ def _write_run_manifest(
     *,
     run_dir: Path,
     generated_at: datetime,
+    artifact_targets: Phase3ArtifactTargets | None = None,
+    eval_budget: str | None = None,
 ) -> Path:
     payload = {
         "schema": "phase3-long-run-manifest/v1",
@@ -696,7 +979,9 @@ def _write_run_manifest(
         "config_hash": config_hash(asdict(cfg)),
         "consortium_id": manifest.consortium_id,
         "run_id": manifest.run_id,
-        "run_shape": _run_shape(cfg).model_dump(mode="json"),
+        "run_shape": _run_shape(
+            cfg, artifact_targets=artifact_targets, eval_budget=eval_budget
+        ).model_dump(mode="json"),
     }
     path = run_dir / "phase3_run_manifest.json"
     path.write_text(
@@ -715,6 +1000,7 @@ def _root(participant_id: str) -> bytes:
 __all__ = [
     "PHASE3_LONG_RUN_REPORT_SCHEMA_VERSION",
     "Phase3ArtifactTargets",
+    "Phase3ConsortiumInputs",
     "Phase3LongRunReport",
     "Phase3ParticipantRunSummary",
     "Phase3RoundRunSummary",
@@ -723,6 +1009,7 @@ __all__ = [
     "parse_phase3_long_run_report",
     "phase3_long_run_smoke_config",
     "phase3_long_run_smoke_manifest",
+    "run_phase3_consortium",
     "run_phase3_long_run_smoke",
     "to_phase3_long_run_report_json",
     "write_phase3_long_run_report",
