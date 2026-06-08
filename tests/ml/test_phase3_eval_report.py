@@ -12,6 +12,8 @@ import pytest
 from lensemble.errors import ConfigError, SchemaVersionMismatch
 from lensemble.eval import (
     PHASE3_EVAL_REPORT_SCHEMA_VERSION,
+    Phase3CompletedControlInput,
+    Phase3ControlGaugeValue,
     build_phase3_eval_report,
     load_phase3_eval_report,
     load_phase3_long_run_evidence,
@@ -20,6 +22,52 @@ from lensemble.eval import (
 )
 
 _LONG_RUN_REPORT = Path("docs/evidence/phase3_long_run_smoke_report.json")
+
+
+def _control_input(
+    control_role: str,
+    *,
+    frame_drift_deg: float,
+    effective_rank: float,
+) -> Phase3CompletedControlInput:
+    return Phase3CompletedControlInput(
+        control_role=control_role,  # type: ignore[arg-type]
+        task_env_id=f"phase3://consortium-control-{control_role}",
+        repo=f"abdelstark/lensemble-phase3-consortium-{control_role}",
+        revision="0" * 40,
+        checkpoint_hash="a" * 64,
+        config_hash="b" * 64,
+        run_manifest_hash="c" * 64,
+        seed=0,
+        source_label=f"Phase 3 {control_role} control run report",
+        source_uri=f"abdelstark/lensemble-phase3-consortium-{control_role}",
+        source_report_sha256="d" * 64,
+        source_schema_name="phase3_long_run_report",
+        source_schema_version=1,
+        gauges=(
+            Phase3ControlGaugeValue(
+                metric="latent_frame_drift_deg",
+                value=frame_drift_deg,
+                notes="round-0 inter-participant latent frame-drift",
+            ),
+            Phase3ControlGaugeValue(
+                metric="effective_rank",
+                value=effective_rank,
+                notes="round-0 global-representation effective rank",
+            ),
+        ),
+        note=f"matched {control_role} control bound to published run hashes",
+    )
+
+
+def _completed_controls() -> tuple[Phase3CompletedControlInput, ...]:
+    return (
+        _control_input("naive-fedavg", frame_drift_deg=180.0, effective_rank=1.08),
+        _control_input(
+            "fork-a-frozen-encoder", frame_drift_deg=0.0, effective_rank=2.39
+        ),
+        _control_input("local-only", frame_drift_deg=180.0, effective_rank=120.32),
+    )
 
 
 def test_phase3_eval_report_links_metrics_to_hashes_and_blockers() -> None:
@@ -44,6 +92,62 @@ def test_phase3_eval_report_links_metrics_to_hashes_and_blockers() -> None:
         assert len(row.config_hash) == 64
         assert len(row.run_manifest_hash) == 64
         assert row.planner_budget.planner == "not_applicable"
+
+
+def test_phase3_eval_report_flips_controls_to_completed() -> None:
+    report = build_phase3_eval_report(
+        _LONG_RUN_REPORT, completed_controls=_completed_controls()
+    )
+
+    assert parse_phase3_eval_report(report.model_dump(mode="json")) == report
+    # All three previously-blocked controls are now completed; none remain blocked.
+    assert report.blocked_controls == ()
+    completed_roles = {row.control_role for row in report.metric_rows}
+    assert completed_roles == {
+        "anchored-federation",
+        "naive-fedavg",
+        "fork-a-frozen-encoder",
+        "local-only",
+    }
+    # 4 lifecycle rows for anchored + 2 gauge rows for each of 3 controls.
+    assert len(report.metric_rows) == 10
+
+    by_role: dict[str, dict[str, float]] = {}
+    for row in report.metric_rows:
+        if row.control_role == "anchored-federation":
+            continue
+        by_role.setdefault(row.control_role, {})[row.metric] = row.value
+        assert len(row.checkpoint_hash) == 64
+        assert len(row.config_hash) == 64
+        assert len(row.run_manifest_hash) == 64
+        assert row.source_report_sha256 in {
+            artifact.sha256 for artifact in report.source_artifacts
+        }
+    assert by_role["naive-fedavg"]["latent_frame_drift_deg"] == 180.0
+    assert by_role["fork-a-frozen-encoder"]["latent_frame_drift_deg"] == 0.0
+    assert by_role["local-only"]["effective_rank"] == 120.32
+    # Each control contributes a source-artifact reference (1 smoke + 3 controls).
+    assert len(report.source_artifacts) == 4
+
+
+def test_phase3_eval_report_rejects_anchored_as_completed_control() -> None:
+    with pytest.raises(ConfigError):
+        build_phase3_eval_report(
+            _LONG_RUN_REPORT,
+            completed_controls=(
+                _control_input(
+                    "anchored-federation",
+                    frame_drift_deg=48.97,
+                    effective_rank=2.23,
+                ),
+            ),
+        )
+
+
+def test_phase3_eval_report_rejects_duplicate_completed_control() -> None:
+    dup = _control_input("naive-fedavg", frame_drift_deg=180.0, effective_rank=1.08)
+    with pytest.raises(ConfigError):
+        build_phase3_eval_report(_LONG_RUN_REPORT, completed_controls=(dup, dup))
 
 
 def test_phase3_eval_report_rejects_missing_required_control() -> None:
@@ -122,9 +226,25 @@ def test_checked_in_phase3_eval_report_is_schema_valid() -> None:
     path = Path("docs/evidence/phase3_eval_report.json")
     report = parse_phase3_eval_report(json.loads(path.read_text()))
 
-    assert len(report.metric_rows) == 4
-    assert {row.control_role for row in report.blocked_controls} == {
-        "local-only",
-        "naive-fedavg",
-        "fork-a-frozen-encoder",
-    }
+    # 4 anchored lifecycle rows + 2 gauge rows for each of the 3 flipped controls.
+    assert len(report.metric_rows) == 10
+    # All three previously-blocked controls are now completed; nothing remains blocked.
+    assert report.blocked_controls == ()
+    completed_roles = {row.control_role for row in report.metric_rows}
+    assert {"local-only", "naive-fedavg", "fork-a-frozen-encoder"} <= completed_roles
+
+    # Each completed control gauge row is bound to a published source artifact.
+    source_hashes = {artifact.sha256 for artifact in report.source_artifacts}
+    for row in report.metric_rows:
+        if row.control_role == "anchored-federation":
+            continue
+        assert row.metric in {"latent_frame_drift_deg", "effective_rank"}
+        assert len(row.checkpoint_hash) == 64
+        assert len(row.config_hash) == 64
+        assert len(row.run_manifest_hash) == 64
+        assert row.source_report_sha256 in source_hashes
+
+    # The gauge contrast is stated honestly as the round-0 measurement.
+    assert "round-0 48.97 deg vs naive-FedAvg 180 deg" in report.model_card_eval_text
+    assert "collapses over rounds" in report.model_card_eval_text
+    assert "paper-scale LeWorldModel performance" in report.claim_boundary

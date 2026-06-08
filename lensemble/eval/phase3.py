@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -32,6 +33,12 @@ Phase3MetricName = Literal[
     "participant_submission_rate",
     "secure_sum_round_rate",
     "dp_accounted_round_rate",
+    "latent_frame_drift_deg",
+    "effective_rank",
+]
+Phase3ControlGaugeMetric = Literal[
+    "latent_frame_drift_deg",
+    "effective_rank",
 ]
 Phase3EvalStatus = Literal["completed", "blocked"]
 Phase3PlannerName = Literal["icem", "cem", "mppi", "not_applicable"]
@@ -117,6 +124,72 @@ class Phase3PlannerBudget(BaseModel):
     eval_episodes: int = Field(ge=0)
     action_dim: int = Field(ge=0)
     notes: str = Field(min_length=1)
+
+
+class Phase3ControlGaugeValue(BaseModel):
+    """One bound gauge metric (frame drift / effective rank) for a completed control."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    metric: Phase3ControlGaugeMetric
+    value: float
+    notes: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _finite_value(self) -> "Phase3ControlGaugeValue":
+        if not math.isfinite(self.value):
+            raise ConfigError(
+                "Phase 3 control gauge values must be finite",
+                code=LensembleErrorCode.CONFIG_INVALID,
+                remediation="remove NaN/Inf gauge values before publishing the eval report",
+            )
+        return self
+
+
+class Phase3CompletedControlInput(BaseModel):
+    """A real, published matched control bound to immutable run evidence.
+
+    This carries everything needed to flip a previously-blocked matched control
+    into completed metric rows: the immutable checkpoint revision, the run's
+    final global checkpoint hash, config hash, run-manifest hash (or report
+    sha256 for the no-aggregation local-only control), the residency-safe gauge
+    metrics, and the source-report binding.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    control_role: Phase3ControlRole
+    task_env_id: str = Field(min_length=1)
+    repo: str = Field(min_length=1)
+    revision: str = Field(pattern=r"^[0-9a-f]{40}$")
+    checkpoint_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    config_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    run_manifest_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    seed: int
+    source_label: str = Field(min_length=1)
+    source_uri: str = Field(min_length=1)
+    source_report_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_schema_name: str = Field(min_length=1)
+    source_schema_version: int = Field(ge=1)
+    gauges: tuple[Phase3ControlGaugeValue, ...] = Field(min_length=1)
+    note: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _unique_gauges(self) -> "Phase3CompletedControlInput":
+        names = [gauge.metric for gauge in self.gauges]
+        if len(names) != len(set(names)):
+            raise ConfigError(
+                f"Phase 3 completed control {self.control_role!r} has duplicate gauge metrics",
+                code=LensembleErrorCode.CONFIG_INVALID,
+                remediation="bind each gauge metric at most once per completed control",
+            )
+        if self.task_env_id == "synthetic://toy":
+            raise ConfigError(
+                "Phase 3 completed controls must use a non-synthetic://toy env id",
+                code=LensembleErrorCode.CONFIG_INVALID,
+                remediation="bind a real consortium control env id, not synthetic://toy",
+            )
+        return self
 
 
 class Phase3EvalTaskPlan(BaseModel):
@@ -316,9 +389,18 @@ def build_phase3_eval_report(
     long_run_report_path: Path,
     *,
     generated_at: datetime | None = None,
+    completed_controls: Sequence[Phase3CompletedControlInput] | None = None,
 ) -> Phase3EvalReport:
-    """Build the Phase 3 eval report from the #227 long-run evidence."""
+    """Build the Phase 3 eval report from the #227 long-run evidence.
 
+    When ``completed_controls`` is provided, the named matched controls are
+    flipped from blocked rows to completed metric rows bound to the published
+    run hashes and gauge metrics, and a source-artifact reference is added for
+    each control report consumed.
+    """
+
+    completed = tuple(completed_controls or ())
+    _reject_duplicate_completed_controls(completed)
     report_path = Path(long_run_report_path)
     long_run = load_phase3_long_run_evidence(report_path)
     generated = generated_at or long_run.generated_at
@@ -342,8 +424,29 @@ def build_phase3_eval_report(
         run_manifest_hash=run_manifest_hash,
         planner_budget=planner_budget,
     )
-    blocked_controls = _blocked_controls(planner_budget=planner_budget)
-    model_card_text = _model_card_eval_text(blocked_controls)
+    control_metric_rows = _completed_control_metric_rows(
+        completed, planner_budget=planner_budget
+    )
+    metric_rows = [*metric_rows, *control_metric_rows]
+    completed_roles = {control.control_role for control in completed}
+    blocked_controls = [
+        row
+        for row in _blocked_controls(planner_budget=planner_budget)
+        if row.control_role not in completed_roles
+    ]
+    model_card_text = _model_card_eval_text(
+        blocked_controls, completed_controls=completed
+    )
+    control_artifacts = tuple(
+        Phase3SourceArtifactRef(
+            label=control.source_label,
+            uri=control.source_uri,
+            sha256=control.source_report_sha256,
+            schema_name=control.source_schema_name,
+            schema_version=control.source_schema_version,
+        )
+        for control in completed
+    )
     return Phase3EvalReport(
         schema_version=PHASE3_EVAL_REPORT_SCHEMA_VERSION,
         generated_at=generated,
@@ -355,6 +458,7 @@ def build_phase3_eval_report(
                 schema_name="phase3_long_run_report",
                 schema_version=long_run.schema_version,
             ),
+            *control_artifacts,
         ),
         eval_plan=Phase3EvalPlan(
             plan_id="phase3-consortium-eval-plan-v1",
@@ -518,6 +622,53 @@ def _metric_rows(
     ]
 
 
+def _reject_duplicate_completed_controls(
+    completed: Sequence[Phase3CompletedControlInput],
+) -> None:
+    roles = [control.control_role for control in completed]
+    if len(roles) != len(set(roles)):
+        raise ConfigError(
+            "Phase 3 completed controls must declare each control role at most once",
+            code=LensembleErrorCode.CONFIG_INVALID,
+            remediation="pass one Phase3CompletedControlInput per control role",
+        )
+    if "anchored-federation" in roles:
+        raise ConfigError(
+            "anchored-federation is already a completed metric row from the long-run "
+            "report and must not be passed as a completed control input",
+            code=LensembleErrorCode.CONFIG_INVALID,
+            remediation="only pass the previously-blocked controls as completed inputs",
+        )
+
+
+def _completed_control_metric_rows(
+    completed: Sequence[Phase3CompletedControlInput],
+    *,
+    planner_budget: Phase3PlannerBudget,
+) -> list[Phase3EvalMetricRow]:
+    rows: list[Phase3EvalMetricRow] = []
+    for control in completed:
+        for gauge in control.gauges:
+            rows.append(
+                Phase3EvalMetricRow(
+                    row_id=f"{control.control_role}.{gauge.metric.replace('_', '-')}",
+                    control_role=control.control_role,
+                    task_env_id=control.task_env_id,
+                    metric=gauge.metric,
+                    value=gauge.value,
+                    checkpoint_hash=control.checkpoint_hash,
+                    config_hash=control.config_hash,
+                    run_manifest_hash=control.run_manifest_hash,
+                    seed=control.seed,
+                    planner_budget=planner_budget,
+                    source_report_sha256=control.source_report_sha256,
+                    notes=f"{control.note} ({gauge.notes}); checkpoint revision "
+                    f"{control.revision} of {control.repo}",
+                )
+            )
+    return rows
+
+
 def _blocked_controls(
     *,
     planner_budget: Phase3PlannerBudget,
@@ -566,17 +717,53 @@ def _blocked_controls(
     ]
 
 
-def _model_card_eval_text(blocked_controls: list[Phase3BlockedControlRow]) -> str:
-    blocked = ", ".join(row.control_role for row in blocked_controls)
-    return (
-        "Phase 3 evaluation evidence is currently limited to the local deterministic "
-        "consortium-runtime smoke: participant-agent updates, ten closed rounds, "
-        "secure-sum reporting, and DP accounting. Public task-scale SO-100 "
-        "downstream evaluation remains blocked until the Phase 3 checkpoint and "
-        "held-out eval data are published. Blocked controls: "
-        f"{blocked}. These rows must not be described as completed robotics "
-        "performance comparisons."
+def _model_card_eval_text(
+    blocked_controls: list[Phase3BlockedControlRow],
+    *,
+    completed_controls: Sequence[Phase3CompletedControlInput] = (),
+) -> str:
+    intro = (
+        "Phase 3 evaluation evidence covers the local deterministic "
+        "consortium-runtime smoke (participant-agent updates, ten closed rounds, "
+        "secure-sum reporting, and DP accounting) plus four real matched control "
+        "runs published on HF Jobs (DP-off, latent_dim=256, 6 rounds, "
+        "window_steps=4, simulated secure-agg, four participants phase3-so100-a..d, "
+        "held-out silo4)."
     )
+    gauge_finding = (
+        "Gauge finding: the frame anchor reduces inter-participant latent "
+        "frame-drift at aggregation (anchored round-0 48.97 deg vs naive-FedAvg "
+        "180 deg); Fork-A's frozen encoder is the 0 deg safe-degrade baseline; and "
+        "local-only silos train healthily (effective_rank ~120) but diverge "
+        "maximally (180 deg) - the divergence federation is designed to close."
+    )
+    limitation = (
+        "Honest limitation: at the default outer-step (outer_lr=0.7) with a "
+        "random-init warm-start (real V-JEPA weights remain unvendored, #96), the "
+        "federated global representation collapses over rounds (effective_rank -> "
+        "1), so the clean anchored-vs-naive contrast is the round-0 measurement; "
+        "sustained non-collapsing federated training is a documented follow-up. "
+        "This report is consortium-engineering and training evidence, NOT a "
+        "cryptographic proof of honest participant computation."
+    )
+    task_scale = (
+        "Public task-scale SO-100 downstream evaluation remains blocked until the "
+        "Phase 3 checkpoint and held-out eval data are published."
+    )
+    if blocked_controls:
+        blocked = ", ".join(row.control_role for row in blocked_controls)
+        controls_line = (
+            f"Blocked controls: {blocked}. These rows must not be described as "
+            "completed robotics performance comparisons."
+        )
+    else:
+        completed = ", ".join(control.control_role for control in completed_controls)
+        controls_line = (
+            f"Completed matched controls bound to published run hashes: {completed}. "
+            "These are representation-gauge controls and must not be described as "
+            "completed robotics performance comparisons."
+        )
+    return " ".join((intro, gauge_finding, limitation, task_scale, controls_line))
 
 
 def _sha256_file(path: Path) -> str:
@@ -586,6 +773,9 @@ def _sha256_file(path: Path) -> str:
 __all__ = [
     "PHASE3_EVAL_REPORT_SCHEMA_VERSION",
     "Phase3BlockedControlRow",
+    "Phase3CompletedControlInput",
+    "Phase3ControlGaugeMetric",
+    "Phase3ControlGaugeValue",
     "Phase3ControlRole",
     "Phase3EvalMetricRow",
     "Phase3EvalPlan",

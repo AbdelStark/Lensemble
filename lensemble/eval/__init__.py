@@ -58,6 +58,8 @@ from .phase2_downstream import (
 from .phase3 import (
     PHASE3_EVAL_REPORT_SCHEMA_VERSION,
     Phase3BlockedControlRow,
+    Phase3CompletedControlInput,
+    Phase3ControlGaugeValue,
     Phase3EvalMetricRow,
     Phase3EvalPlan,
     Phase3EvalReport,
@@ -104,6 +106,8 @@ __all__ = [
     "Phase3EvalPlan",
     "Phase3EvalMetricRow",
     "Phase3BlockedControlRow",
+    "Phase3CompletedControlInput",
+    "Phase3ControlGaugeValue",
     "Phase3EvalReport",
     "Phase3LongRunEvidence",
     "Phase3LongRunParticipantEvidence",
