@@ -465,8 +465,12 @@ uv run --extra dev python scripts/phase3_bundle.py \
 The generated bundle verifies the local manifest, dataset/probe registry,
 long-run report, eval/control report, observability/dropout report,
 privacy/aggregation rows embedded in the training report, run manifest, and
-final checkpoint header/weights before writing a success bundle. The generated
-model card distinguishes consortium-runtime evidence, tiny local
+final checkpoint header/weights before writing a success bundle. Validation
+also binds the run-manifest and final checkpoint artifact-check SHA-256 values
+to the hashes recorded in the training summary, so the checked-in report cannot
+drift from the referenced release-candidate artifacts. Absolute local artifact
+paths are rendered as residency-safe artifact URIs rather than host-local paths.
+The generated model card distinguishes consortium-runtime evidence, tiny local
 training/eval scale, completed and blocked controls, privacy controls, and
 non-claims.
 
