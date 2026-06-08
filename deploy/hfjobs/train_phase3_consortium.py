@@ -57,6 +57,7 @@ from lensemble.config import (
     Phase3RuntimePolicy,
 )
 from lensemble.config.manifest import config_hash
+from lensemble.config.seed import round_sketch_seed
 from lensemble.contracts import WMCP_VERSION, ActionSpec, union_action_specs
 from lensemble.data.adapters import load_episodes
 from lensemble.data.phase3 import (
@@ -65,6 +66,12 @@ from lensemble.data.phase3 import (
     write_phase3_dataset_registry,
 )
 from lensemble.data.probe import PublicProbe, build_probe, save_probe
+from lensemble.eval.jepa_metrics import (
+    JepaWindowMetrics,
+    _probe_embedding,
+    evaluate_jepa_windows,
+    mean_frame_drift_deg,
+)
 from lensemble.federation import (
     InProcessTransport,
     Phase3ArtifactTargets,
@@ -73,10 +80,13 @@ from lensemble.federation import (
     run_phase3_consortium,
     write_phase3_long_run_report,
 )
-from lensemble.federation.participant import Participant
+from lensemble.federation.participant import Participant, _inner_loop
 from lensemble.federation.phase3_orchestration import Phase3LongRunReport
 from lensemble.federation.transport import Transport
+from lensemble.gauge import frame_drift
+from lensemble.model.action_head import build_action_head
 from lensemble.model.encoder import build_encoder, snapshot_reference
+from lensemble.model.predictor import build_predictor
 
 # The honest scope of the evidence this launcher produces (RFC-0005 §4, RFC-0002): a real federated
 # consortium-engineering + training run, NOT a cryptographic honest-computation proof.
@@ -93,6 +103,17 @@ _CLAIM_BOUNDARY = (
 _EVAL_BUDGET = (
     "Per-round JEPA representation metrics only (val_pred/val_sigreg/effective_rank/frame_drift_deg); "
     "downstream planner/task-success eval budget deferred to #245."
+)
+
+# The honest scope of the --local-only control (issue #244): the no-aggregation baseline that quantifies
+# what federation buys. Each participant trains in ISOLATION on its own silo with NO coordinator
+# aggregation; the reported inter-participant frame-drift is the latent-gauge divergence that federated
+# aggregation (which the real run runs) is designed to close.
+_LOCAL_ONLY_CLAIM_BOUNDARY = (
+    "No-aggregation control baseline: each participant trains in isolation on its own silo with NO "
+    "coordinator aggregation and NO pseudo-gradient exchange. The per-participant held-out JEPA metrics "
+    "and the inter-participant latent frame-drift measure the divergence federation is designed to close; "
+    "this is a control comparison, NOT a federated run and NOT a cryptographic proof of honest computation."
 )
 
 _OBS_DTYPE = "float32"
@@ -180,6 +201,20 @@ def _args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--lambda-anc", type=float, default=0.01)
     parser.add_argument("--target-stop-gradient", action="store_true")
     parser.add_argument(
+        "--encoder-frozen",
+        action="store_true",
+        help="Fork A (RFC-0002): freeze f_theta at warm-start, federate g_phi only.",
+    )
+    parser.add_argument(
+        "--local-only",
+        action="store_true",
+        help=(
+            "No-aggregation baseline: train each participant in ISOLATION (no coordinator "
+            "aggregation), then report per-participant held-out metrics + the inter-participant "
+            "latent frame-drift."
+        ),
+    )
+    parser.add_argument(
         "--privacy",
         dest="privacy",
         action="store_true",
@@ -227,7 +262,7 @@ def _model_cfg(args: argparse.Namespace) -> _JobModelConfig:
         predictor_depth=args.predictor_depth,
         predictor_width=args.latent_dim,
         wmcp_version=WMCP_VERSION,
-        encoder_frozen=False,
+        encoder_frozen=bool(args.encoder_frozen),
         d=args.latent_dim,
         in_channels=3,
         num_frames=args.num_frames,
@@ -706,6 +741,141 @@ def _real_run(
     return report
 
 
+def _train_participant_in_isolation(
+    args: argparse.Namespace,
+    *,
+    participant_cfg: LensembleConfig,
+    participant_id: str,
+    action_spec: ActionSpec,
+    probe: PublicProbe,
+) -> tuple[Any, Any, Any]:
+    """Train ONE participant on ONLY its own silo with NO coordinator aggregation.
+
+    Reuses the library inner loop exactly as the federated round does: it builds the encoder/predictor/
+    action-head from ``participant_cfg`` (cfg == warm-start), builds the SAME :class:`Objective` the
+    federated :meth:`Participant.local_round` builds via ``Participant._build_objective`` (sketch seed
+    ``round_sketch_seed(root_seed, 0)``, anchor from the pinned probe when ``lambda_anc > 0``), resolves
+    the participant's own windows through the #22 data layer, and runs ``num_rounds * inner_horizon``
+    independent inner AdamW steps through the module-level :func:`_inner_loop`. No PseudoGradient is
+    formed and nothing crosses a participant boundary — this is the no-aggregation baseline.
+
+    Returns the trained ``(encoder, predictor, action_head)``.
+    """
+    # The factory-built participant carries the consortium-agreed action contract + the #22 data hooks.
+    participant = _participant_factory(action_spec)(
+        participant_cfg, participant_id, InProcessTransport()
+    )
+
+    encoder = build_encoder(participant_cfg)
+    predictor = build_predictor(participant_cfg)
+    action_head = build_action_head(participant_cfg, action_spec)
+
+    # Build the objective EXACTLY as the federated round does (Participant._build_objective): single-site
+    # == round 0, so the broadcast sketch seed is s_0 = round_sketch_seed(root_seed, 0).
+    sketch_seed = round_sketch_seed(participant_cfg.determinism.root_seed, 0)
+    objective = participant._build_objective(
+        participant_cfg, sketch_seed, encoder, probe
+    )
+
+    # The total isolated step budget mirrors the federated run's num_rounds * inner_horizon steps so the
+    # baseline gets the same compute as one participant would across the real run's rounds.
+    horizon = int(args.num_rounds) * int(args.inner_horizon)
+    windows = participant._local_windows_for_horizon(horizon)
+    lr = float(getattr(participant_cfg.federation, "inner_lr", 1e-3))
+    _inner_loop(
+        encoder, predictor, action_head, objective, windows, horizon=horizon, lr=lr
+    )
+    return encoder, predictor, action_head
+
+
+def _local_only_run(
+    args: argparse.Namespace,
+    *,
+    out_dir: Path,
+    cfg: LensembleConfig,
+    manifest: Phase3ConsortiumManifest,
+    metas: list[_SiloMetadata],
+    probe: PublicProbe,
+    probe_path: Path,
+    manifest_path: Path,
+    registry_path: Path,
+) -> dict[str, Any]:
+    """The no-aggregation baseline (#244): train every participant in ISOLATION, report per-participant
+    held-out metrics + the inter-participant latent frame-drift. This path NEVER calls the coordinator or
+    any aggregation — it is the control the federated real run is compared against."""
+    registry = phase3_registry_from_consortium_manifest(
+        manifest,
+        min_participant_count=len(metas),
+        window_counts={meta.participant_id: meta.window_count for meta in metas},
+    )
+    validate_phase3_registry_against_manifest(registry, manifest)
+    save_probe(probe, probe_path)
+    _write_json(manifest_path, manifest.model_dump(mode="json"))
+    write_phase3_dataset_registry(registry, registry_path)
+
+    eval_windows = _eval_windows(args)
+    action_spec = _global_action_spec(metas)
+
+    per_participant: list[dict[str, Any]] = []
+    embeddings: dict[str, Any] = {}
+    for meta in metas:
+        participant_cfg = _participant_cfg(cfg, args, data_source=meta.data_ref)
+        encoder, predictor, action_head = _train_participant_in_isolation(
+            args,
+            participant_cfg=participant_cfg,
+            participant_id=meta.participant_id,
+            action_spec=action_spec,
+            probe=probe,
+        )
+        metrics: JepaWindowMetrics | None = evaluate_jepa_windows(
+            participant_cfg,
+            encoder=encoder,
+            predictor=predictor,
+            action_head=action_head,
+            windows=eval_windows,
+            max_windows=args.metric_windows,
+        )
+        embeddings[meta.participant_id] = _probe_embedding(encoder, probe)
+        per_participant.append(
+            {
+                "participant_id": meta.participant_id,
+                "val_pred": None if metrics is None else float(metrics.val_pred),
+                "val_sigreg": None if metrics is None else float(metrics.val_sigreg),
+                "effective_rank": (
+                    None if metrics is None else float(metrics.effective_rank)
+                ),
+            }
+        )
+
+    # The inter-participant latent frame-drift on the public probe: the divergence federated aggregation is
+    # designed to close (RFC-0002). Mirror lensemble.eval.jepa_metrics.mean_frame_drift_deg.
+    drift_report = frame_drift(
+        embeddings,
+        round_index=0,
+        probe=probe,
+        expected_probe_hash=probe.content_hash.hex(),
+    )
+    frame_drift_deg = mean_frame_drift_deg(drift_report)
+
+    payload: dict[str, Any] = {
+        "mode": "local-only",
+        "consortium_id": manifest.consortium_id,
+        "run_id": manifest.run_id,
+        "num_rounds": int(args.num_rounds),
+        "inner_horizon": int(args.inner_horizon),
+        "isolated_steps_per_participant": int(args.num_rounds)
+        * int(args.inner_horizon),
+        "per_participant": per_participant,
+        "frame_drift_deg": None if frame_drift_deg is None else float(frame_drift_deg),
+        "manifest_path": str(manifest_path),
+        "registry_path": str(registry_path),
+        "claim_boundary": _LOCAL_ONLY_CLAIM_BOUNDARY,
+        "eval_budget": _EVAL_BUDGET,
+    }
+    _write_json(out_dir / "phase3_local_only_report.json", payload)
+    return payload
+
+
 def _push(args: argparse.Namespace, out_dir: Path) -> tuple[bool, str | None]:
     if not args.push:
         return False, None
@@ -768,6 +938,24 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
             manifest_path=manifest_path,
             registry_path=registry_path,
         )
+        print(json.dumps(payload, indent=2, sort_keys=True), flush=True)
+        return payload
+
+    if args.local_only:
+        payload = _local_only_run(
+            args,
+            out_dir=out_dir,
+            cfg=cfg,
+            manifest=manifest,
+            metas=metas,
+            probe=probe,
+            probe_path=probe_path,
+            manifest_path=manifest_path,
+            registry_path=registry_path,
+        )
+        pushed, blocker = _push(args, out_dir)
+        payload["pushed"] = pushed
+        payload["push_blocker"] = blocker
         print(json.dumps(payload, indent=2, sort_keys=True), flush=True)
         return payload
 
