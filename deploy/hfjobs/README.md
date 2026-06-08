@@ -267,6 +267,37 @@ to [#245](https://github.com/AbdelStark/Lensemble/issues/245). The evidence is r
 consortium-engineering + training evidence, **not** a cryptographic honest-computation proof or a
 paper-scale robotics performance result.
 
+### Published headline run (#243)
+
+The headline anchored-federation consortium run completed on **HF Jobs `h200`** (job
+[`6a26885bece949d7b3dcb715`](https://huggingface.co/jobs/abdelstark/6a26885bece949d7b3dcb715), pinned
+source commit `056f7407053b5f3d8031b003c8afb3f81a648314`, ~13 min wall-clock, ≈ \$1.1). It pushed the
+checkpoint + manifests + contribution ledger + per-round metrics report + the pinned public probe to
+[`abdelstark/lensemble-phase3-consortium-checkpoint`](https://huggingface.co/abdelstark/lensemble-phase3-consortium-checkpoint)
+at the immutable revision **`828e210cba4870b2be4ab573a5f0dd4ee30bae29`**. The checked-in copy of the
+run's per-round report is [`docs/evidence/phase3_consortium_run_report.json`](../../docs/evidence/phase3_consortium_run_report.json).
+
+- **10 closed federated rounds**, `completed_target: true`, all four participants submitted every round
+  (0 dropped). Model shape `latent_dim=256`, `num_tokens=196` (`patch_size=16`), predictor depth 4.
+- **Secure-aggregation** status `secure_sum` and **DP `(ε, δ)` accounting** recorded per round
+  (ε spent ≈ `5.30`, δ `1e-5`, RDP accountant, `noise_multiplier=1.0`, `clip_norm=0.5`).
+- Final global-model hash `bb31c0922de639cb9220c4cc5fc35d79aec719eb6fcedb09159bdff8cfb8fd43`; run-config
+  hash `27f2c77c9d47a7d053c01ab65f8d43aad79463b27d882f2d85ec28bc062cb2b2`; run-manifest sha256
+  `21819c9b936468ffc38f943b4ce13ec2ac150d328410f503fa73d9014e040c9d`; `publication.status:
+  hf_jobs_release`.
+- **Per-round `effective_rank` stays high** (≈ 36–47 of 256 across the run) — the frame anchor
+  (`lambda_anc=0.01`) prevents representation collapse under federated DP training (RFC-0002).
+
+**Honest limitation (the DP–utility frontier at this scale).** At four participants and an ~8.4M-param
+model, a meaningful-privacy regime (`noise_multiplier=1.0`, ε ≈ 5.3) is gradient-noise-dominated: the
+released pseudo-gradients are noise ≫ signal, so `val_pred` grows across rounds and `frame_drift_deg`
+saturates at 180° (the reconstructed local-vs-global probe embeddings are dominated by DP noise). The
+anti-collapse result (`effective_rank`) is robust to this; the fine-grained **anchored-vs-naive
+latent-gauge contrast and learning curves are measured in a dedicated relaxed-DP probe regime**
+([#244](https://github.com/AbdelStark/Lensemble/issues/244) /
+[#246](https://github.com/AbdelStark/Lensemble/issues/246)), clearly separated from this
+privacy-preserving production run.
+
 ## Single-Site Run
 
 The dataset is mounted read-only at `/data`; the script is a PEP-723 uv script with inline deps:
