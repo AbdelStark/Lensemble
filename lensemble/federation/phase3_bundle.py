@@ -384,21 +384,23 @@ def build_phase3_evidence_bundle(
         dataset_repo_revision=dataset_repo_revision,
     )
     claim_boundaries = (
-        "Consortium-runtime evidence: four simulated sovereign participant agents completed a governed local Phase 3 run with ten closed federated rounds.",
-        "Training/eval scale: this is a deterministic tiny-model local smoke, not a public HF Jobs robotics-scale training result.",
-        "Controls: anchored-federation runtime metrics are completed; local-only, naive-FedAvg, and Fork-A/frozen-encoder Phase 3 controls remain blocked rows.",
-        "Privacy controls: secure_sum aggregation status and DP accounting are exercised as operational controls, not cryptographic computation proofs.",
+        "Consortium-runtime evidence: four sovereign participant agents on the union SO-100 action contract completed a governed Phase 3 run with ten closed federated rounds, secure-sum aggregation, and DP accounting.",
+        "Training/eval scale: this is consortium-engineering and real-training evidence on tiny tokens/latent, not a public HF Jobs paper-scale robotics training result.",
+        "Controls: anchored-federation, naive-FedAvg, Fork-A/frozen-encoder, and local-only controls are completed as representation-metric rows; no Phase 3 control rows remain blocked.",
+        "Privacy controls: secure_sum aggregation status and DP accounting are exercised as operational controls, not cryptographic computation proofs (RFC-0006 honest-computation proofs remain out of scope).",
     )
     non_claims = (
         "Phase 3 does not include a provenance ledger implementation.",
         "Phase 3 does not cryptographically prove honest participant computation.",
         "Phase 3 does not claim paper-scale LeWorldModel performance.",
         "Phase 3 does not claim public SO-100 robotics task success.",
+        "Phase 3 is consortium-engineering and real-training evidence, not a cryptographic honest-computation proof; RFC-0006 honest-computation proofs are out of scope.",
     )
     known_limitations = tuple(
         f"{row.control_role}: {row.reason}" for row in eval_report.blocked_controls
     ) + (
-        "Public task-scale SO-100 downstream evaluation is blocked until a public Phase 3 task checkpoint and held-out eval dataset are published.",
+        "DP-utility / federated-collapse (#244): the published checkpoints exhibit global-representation collapse over rounds under the DP noise/clipping budget, so latent quality degrades and downstream planning success would be uninformative on these checkpoints.",
+        "Downstream task-success (stable-worldmodel #96): closed-loop physical SO-100 task success is deferred, not claimed; it requires the unvendored stable-worldmodel planner suite and a non-collapsing federated checkpoint, because a recorded held-out split is open-loop and cannot apply arbitrary planner actions to recorded frames.",
     )
     model_card = render_phase3_model_card(
         manifest=manifest_summary,

@@ -32,17 +32,35 @@ def test_checked_in_phase3_evidence_bundle_and_model_card_are_consistent() -> No
     assert bundle.schema_version == PHASE3_EVIDENCE_BUNDLE_SCHEMA_VERSION
     assert bundle.raw_data_in_report is False
     assert all(check.exists for check in bundle.artifact_checks)
+    assert bundle.publication.status == "published"
+    assert (
+        bundle.publication.model_repo_revision
+        == "828e210cba4870b2be4ab573a5f0dd4ee30bae29"
+    )
+    assert (
+        bundle.publication.dataset_repo_revision
+        == "15f71911432b300dfdf41c998e27492e8c986be4"
+    )
+    assert bundle.publication.blockers == ()
+    assert bundle.manifest.consortium_id == "lensemble-phase3-consortium"
+    assert bundle.manifest.run_id == "phase3-consortium-v1"
+    assert bundle.training.run_id == "phase3-consortium-v1"
     assert bundle.training.closed_rounds == 10
     assert bundle.training.completed_target is True
+    assert (
+        bundle.training.final_global_model_hash
+        == "bb31c0922de639cb9220c4cc5fc35d79aec719eb6fcedb09159bdff8cfb8fd43"
+    )
     assert bundle.privacy_aggregation.secure_sum_rounds == 10
     assert bundle.privacy_aggregation.dp_accounted_rounds == 10
     assert bundle.observability.dropout_decision_count == 1
-    assert bundle.eval_controls.completed_controls == ("anchored-federation",)
-    assert set(bundle.eval_controls.blocked_controls) == {
-        "local-only",
+    assert set(bundle.eval_controls.completed_controls) == {
+        "anchored-federation",
         "naive-fedavg",
         "fork-a-frozen-encoder",
+        "local-only",
     }
+    assert bundle.eval_controls.blocked_controls == ()
     assert model_card_path.read_text() == bundle.model_card_markdown
     assert "does not include a provenance ledger" in bundle.model_card_markdown
     assert (
