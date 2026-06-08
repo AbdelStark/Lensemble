@@ -6,8 +6,15 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from lensemble.config.consortium import load_consortium_manifest
-from lensemble.data.phase3 import load_phase3_dataset_registry
+from lensemble.config.consortium import (
+    load_consortium_manifest,
+    write_consortium_manifest,
+)
+from lensemble.data.phase3 import (
+    load_phase3_dataset_registry,
+    validate_phase3_registry_against_manifest,
+    write_phase3_dataset_registry,
+)
 from lensemble.eval.phase3 import load_phase3_eval_report
 from lensemble.federation import (
     build_phase3_evidence_bundle,
@@ -78,6 +85,26 @@ def _args() -> argparse.Namespace:
         "--observability-report",
         type=Path,
         default=Path("docs/evidence/phase3_observability_report.json"),
+    )
+    parser.add_argument(
+        "--consortium-manifest",
+        type=Path,
+        default=None,
+        help=(
+            "Real consortium manifest to bundle. When provided (with "
+            "--dataset-registry), the manifest/registry identity is taken from "
+            "these real artifacts instead of materializing the local smoke "
+            "contracts from the long-run report."
+        ),
+    )
+    parser.add_argument(
+        "--dataset-registry",
+        type=Path,
+        default=None,
+        help=(
+            "Real dataset/probe registry to bundle. Required when "
+            "--consortium-manifest is provided."
+        ),
     )
     parser.add_argument(
         "--manifest-output",
@@ -162,13 +189,25 @@ def main() -> None:
         )
         return
 
-    materialize_phase3_run_contracts(
-        long_run_report_path=args.long_run_report,
-        manifest_path=args.manifest_output,
-        registry_path=args.registry_output,
-    )
-    manifest = load_consortium_manifest(args.manifest_output)
-    registry = load_phase3_dataset_registry(args.registry_output)
+    if args.consortium_manifest is not None or args.dataset_registry is not None:
+        if args.consortium_manifest is None or args.dataset_registry is None:
+            raise SystemExit(
+                "--consortium-manifest and --dataset-registry must be provided "
+                "together to bundle the real run contracts"
+            )
+        manifest = load_consortium_manifest(args.consortium_manifest)
+        registry = load_phase3_dataset_registry(args.dataset_registry)
+        validate_phase3_registry_against_manifest(registry, manifest)
+        write_consortium_manifest(manifest, args.manifest_output)
+        write_phase3_dataset_registry(registry, args.registry_output)
+    else:
+        materialize_phase3_run_contracts(
+            long_run_report_path=args.long_run_report,
+            manifest_path=args.manifest_output,
+            registry_path=args.registry_output,
+        )
+        manifest = load_consortium_manifest(args.manifest_output)
+        registry = load_phase3_dataset_registry(args.registry_output)
     long_run = load_phase3_long_run_report(args.long_run_report)
     eval_report = load_phase3_eval_report(args.eval_report)
     observability = load_phase3_observability_report(args.observability_report)

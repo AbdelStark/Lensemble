@@ -34,6 +34,22 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:artifacts`: **Phase 3 final evidence bundle + model card regenerated from the REAL #242 consortium
+  run** (#247) — `scripts/phase3_bundle.py` gains `--consortium-manifest`/`--dataset-registry` input options
+  that load the checked-in real `docs/evidence/phase3_consortium_manifest.json` +
+  `phase3_long_run_dataset_registry.json` (validated via `validate_phase3_registry_against_manifest`),
+  copy them to the manifest/registry outputs, and bundle them directly — bypassing the local-smoke
+  `materialize_phase3_run_contracts` path (which stays the default for the fresh-smoke generator). The
+  checked-in `docs/evidence/phase3_evidence_bundle.json` + `phase3_model_card.md` now carry the REAL run
+  identity `lensemble-phase3-consortium` / `phase3-consortium-v1` (was the local smoke), `publication.status
+  published` @ model revision `828e210c…` / dataset revision `15f71911…`, 10/10 closed rounds with final
+  global hash `bb31c092…`, all four completed controls (`anchored-federation`, `naive-fedavg`,
+  `fork-a-frozen-encoder`, `local-only`) and zero blocked, one induced-dropout decision, and honest
+  `known_limitations` covering the DP-utility / federated-collapse limitation (#244) and the deferred
+  downstream task-success blocker (stable-worldmodel #96) while keeping RFC-0006 honest-computation proofs
+  explicitly out of scope. Published to `abdelstark/lensemble-phase3-consortium-checkpoint`
+  (`reports/phase3_evidence_bundle.json`, `reports/phase3_model_card.md`) at revision
+  `90a71318339802aa2121f71cd82fb05d927b8b81`.
 - `area:eval`: **Phase 3 downstream latent-MPC eval report — honest bounded version** (#245, RFC-0005)
   — `lensemble/eval/phase3_downstream.py` adds `Phase3DownstreamEvalReport` (pydantic, frozen,
   `schema_version`-gated) with `parse_*`/`load_*`/`write_*`/`build_phase3_downstream_eval_report` and a
