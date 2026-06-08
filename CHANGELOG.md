@@ -34,6 +34,20 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:data`: **Phase 3 training-scale SO-100 silos + held-out eval split**
+  (#242, RFC-0004/RFC-0007) — published four sovereign participant silos
+  (`phase3-so100-a..d`, 1259–1339 windows each at `window_steps=4`) plus one
+  disjoint held-out eval split to
+  [`abdelstark/lensemble-phase3-so100-silos`](https://huggingface.co/datasets/abdelstark/lensemble-phase3-so100-silos),
+  a deterministic episode-modulo (`k % 5`) split of the public SO-100 set. The
+  generator `scripts/phase3_consortium_silos.py` derives the agreed action/
+  observation contracts and the deterministic public-probe pin, builds the
+  consortium manifest bound to the immutable `hf://` refs, and regenerates
+  `docs/evidence/phase3_long_run_dataset_registry.json` so every participant is
+  `published` (zero placeholders) with its real window/episode counts and
+  `raw_data_crosses_boundary: false` (`INV-RESIDENCY`). The registry validates
+  against the checked-in `docs/evidence/phase3_consortium_manifest.json`
+  (`tests/unit/test_phase3_consortium_silos.py`).
 - `area:federation` / `area:deploy`: **Phase 3 consortium HF Jobs launcher**
   (#241) — `deploy/hfjobs/train_phase3_consortium.py` drives the full Phase 3
   consortium runtime (networked `Phase3CoordinatorService` plus one sovereign

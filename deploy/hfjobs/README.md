@@ -225,30 +225,36 @@ per-round metrics via `--heldout-source` (required for a real run). Always valid
 every participant agent **without running any federated round or any training compute**, writing
 `phase3_consortium_dry_run.json`:
 
+The published Phase 3 silos + held-out split are
+[`abdelstark/lensemble-phase3-so100-silos`](https://huggingface.co/datasets/abdelstark/lensemble-phase3-so100-silos)
+(#242): four participant silos `phase3-so100-silo{0..3}.h5` and the disjoint held-out split
+`phase3-so100-silo4.h5`. The model shape (`latent_dim=256`, `patch_size=16` → 196 tokens) and the
+`--probe-points 512` / seed `20260608` pin match the public-probe hash recorded in the dataset registry.
+
 ```bash
 hf jobs uv run --flavor h200 --timeout 2h --secrets HF_TOKEN \
   --with 'lensemble @ git+https://github.com/AbdelStark/Lensemble.git@<SHA>' \
-  -v hf://datasets/<org>/phase3-silos:/data/phase3 \
+  -v hf://datasets/abdelstark/lensemble-phase3-so100-silos:/data/phase3 \
   -d https://raw.githubusercontent.com/AbdelStark/Lensemble/<SHA>/deploy/hfjobs/train_phase3_consortium.py \
-  --data-source lerobot-h5:///data/phase3/silo0.h5 \
-  --data-source lerobot-h5:///data/phase3/silo1.h5 \
-  --data-source lerobot-h5:///data/phase3/silo2.h5 \
-  --data-source lerobot-h5:///data/phase3/silo3.h5 \
+  --data-source lerobot-h5:///data/phase3/phase3-so100-silo0.h5 \
+  --data-source lerobot-h5:///data/phase3/phase3-so100-silo1.h5 \
+  --data-source lerobot-h5:///data/phase3/phase3-so100-silo2.h5 \
+  --data-source lerobot-h5:///data/phase3/phase3-so100-silo3.h5 \
   --participant-id phase3-so100-a \
   --participant-id phase3-so100-b \
   --participant-id phase3-so100-c \
   --participant-id phase3-so100-d \
-  --heldout-source lerobot-h5:///data/phase3/heldout.h5 \
+  --heldout-source lerobot-h5:///data/phase3/phase3-so100-silo4.h5 \
   --out-dir /tmp/lensemble-phase3 \
-  --image-size 224 --patch-size 14 --latent-dim 192 \
-  --depth 12 --predictor-depth 6 --num-heads 3 \
-  --probe-points 1024 --inner-horizon 4 --window-steps 4 \
+  --image-size 224 --patch-size 16 --latent-dim 256 \
+  --depth 6 --predictor-depth 4 --num-heads 8 \
+  --probe-points 512 --inner-horizon 2 --window-steps 4 \
   --num-rounds 10 --metric-windows 256 \
   --secure-agg-backend simulated --secure-agg-threshold 4 --min-trainers 3 \
   --privacy --dp-epsilon 8.0 --dp-delta 1e-5 --dp-clip-norm 0.5 \
   --dp-noise-multiplier 1.0 --dp-accountant rdp \
   --consortium-id lensemble-phase3-consortium --run-id phase3-consortium-v1 \
-  --push --out-repo <org>/lensemble-phase3-consortium-checkpoint
+  --push --out-repo abdelstark/lensemble-phase3-consortium-checkpoint
 ```
 
 Add `--dry-run` to the same command for the validation-only preflight. DP is **on by default** for the
