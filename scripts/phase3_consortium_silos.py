@@ -36,6 +36,7 @@ from lensemble.config import (
     Phase3PublicProbe,
     Phase3RuntimePolicy,
 )
+from lensemble.contracts import ActionKind, ActionSpec, union_action_specs
 from lensemble.data.phase3 import (
     phase3_registry_from_consortium_manifest,
     validate_phase3_registry_against_manifest,
@@ -113,21 +114,32 @@ def _silo_meta(smoke: dict[str, Any], participant_id: str) -> dict[str, Any]:
     raise KeyError(f"{participant_id!r} missing from the dataset smoke report")
 
 
-def _action_contract(action_spec: dict[str, Any]) -> Phase3ActionContract:
+def _action_spec_from_dict(spec: dict[str, Any]) -> ActionSpec:
+    return ActionSpec(
+        embodiment_id=spec["embodiment_id"],
+        kind=ActionKind(spec["kind"]),
+        dim=spec["dim"],
+        low=tuple(spec["low"]) if spec["low"] is not None else None,
+        high=tuple(spec["high"]) if spec["high"] is not None else None,
+        num_classes=(
+            tuple(spec["num_classes"]) if spec["num_classes"] is not None else None
+        ),
+        units=tuple(spec["units"]),
+        wmcp_version=spec["wmcp_version"],
+    )
+
+
+def _action_contract(action_spec: ActionSpec) -> Phase3ActionContract:
     return Phase3ActionContract(
         contract_id="phase3-consortium-so100-action-v1",
-        embodiment_id=action_spec["embodiment_id"],
-        kind=action_spec["kind"],
-        dim=action_spec["dim"],
-        low=tuple(action_spec["low"]) if action_spec["low"] is not None else None,
-        high=tuple(action_spec["high"]) if action_spec["high"] is not None else None,
-        num_classes=(
-            tuple(action_spec["num_classes"])
-            if action_spec["num_classes"] is not None
-            else None
-        ),
-        units=tuple(action_spec["units"]),
-        wmcp_version=action_spec["wmcp_version"],
+        embodiment_id=action_spec.embodiment_id,
+        kind=action_spec.kind.value,
+        dim=action_spec.dim,
+        low=action_spec.low,
+        high=action_spec.high,
+        num_classes=action_spec.num_classes,
+        units=action_spec.units,
+        wmcp_version=action_spec.wmcp_version,
     )
 
 
@@ -175,7 +187,14 @@ def _build_manifest(
     participant_smoke_sha: dict[str, str],
 ) -> Phase3ConsortiumManifest:
     first = _silo_meta(smoke, _PARTICIPANT_SILOS[0][0])
-    action = _action_contract(first["action_spec"])
+    # The agreed action contract unions the per-silo observed bounds (silos partition one embodiment).
+    action_spec = union_action_specs(
+        [
+            _action_spec_from_dict(_silo_meta(smoke, participant_id)["action_spec"])
+            for participant_id, _ in _PARTICIPANT_SILOS
+        ]
+    )
+    action = _action_contract(action_spec)
     observation = _observation_contract(first["observation_shape"])
     capabilities = Phase3ParticipantCapabilities(
         network_transport=False,

@@ -57,7 +57,7 @@ from lensemble.config import (
     Phase3RuntimePolicy,
 )
 from lensemble.config.manifest import config_hash
-from lensemble.contracts import WMCP_VERSION, ActionSpec
+from lensemble.contracts import WMCP_VERSION, ActionSpec, union_action_specs
 from lensemble.data.adapters import load_episodes
 from lensemble.data.phase3 import (
     phase3_registry_from_consortium_manifest,
@@ -73,7 +73,9 @@ from lensemble.federation import (
     run_phase3_consortium,
     write_phase3_long_run_report,
 )
+from lensemble.federation.participant import Participant
 from lensemble.federation.phase3_orchestration import Phase3LongRunReport
+from lensemble.federation.transport import Transport
 from lensemble.model.encoder import build_encoder, snapshot_reference
 
 # The honest scope of the evidence this launcher produces (RFC-0005 §4, RFC-0002): a real federated
@@ -384,9 +386,16 @@ def _smoke_report_sha256(meta: _SiloMetadata) -> str:
     ).hexdigest()
 
 
+def _global_action_spec(metas: list[_SiloMetadata]) -> ActionSpec:
+    """The consortium-agreed action spec: silos share embodiment/dim/units but report per-file bounds,
+    so the accepted contract unions the continuous low/high (every silo's actions fall inside)."""
+
+    return union_action_specs([meta.action_spec for meta in metas])
+
+
 def _shared_contracts(
     metas: list[_SiloMetadata], *, wmcp_version: str
-) -> tuple[Phase3ActionContract, Phase3ObservationContract]:
+) -> tuple[Phase3ActionContract, Phase3ObservationContract, ActionSpec]:
     first = metas[0]
     for meta in metas[1:]:
         if meta.first_obs_shape != first.first_obs_shape:
@@ -395,21 +404,55 @@ def _shared_contracts(
                 f"{meta.participant_id!r} has {meta.first_obs_shape}, "
                 f"{first.participant_id!r} has {first.first_obs_shape}"
             )
-        if meta.action_spec != first.action_spec:
-            raise ValueError(
-                "all participant silos must share one ActionSpec; "
-                f"{meta.participant_id!r} differs from {first.participant_id!r}"
-            )
         if meta.embodiment_id != first.embodiment_id:
             raise ValueError(
                 "all participant silos must share one window embodiment_id; "
                 f"{meta.participant_id!r} has {meta.embodiment_id!r}, "
                 f"{first.participant_id!r} has {first.embodiment_id!r}"
             )
+    # union_action_specs raises if the silos disagree on anything but the continuous bounds.
+    action_spec = _global_action_spec(metas)
     return (
-        _action_contract(first.action_spec),
+        _action_contract(action_spec),
         _observation_contract(first.first_obs_shape, wmcp_version=wmcp_version),
+        action_spec,
     )
+
+
+class _FixedActionParticipant(Participant):
+    """A default participant that adopts the consortium-agreed action spec instead of its silo's own.
+
+    The participant still streams its own private windows + commits its own dataset Merkle root; only the
+    action head's declared bounds are pinned to the agreed contract, so every participant's local
+    ActionSpec matches the manifest exactly (`Phase3ParticipantAgent.preflight` requires bound equality)."""
+
+    def __init__(
+        self,
+        config: LensembleConfig,
+        *,
+        participant_id: str,
+        transport: Transport,
+        action_spec: ActionSpec,
+    ) -> None:
+        super().__init__(config, participant_id=participant_id, transport=transport)
+        self._fixed_action_spec = action_spec
+
+    def _action_spec(self) -> ActionSpec:
+        return self._fixed_action_spec
+
+
+def _participant_factory(action_spec: ActionSpec) -> Any:
+    def build(
+        config: LensembleConfig, participant_id: str, transport: Transport
+    ) -> Participant:
+        return _FixedActionParticipant(
+            config,
+            participant_id=participant_id,
+            transport=transport,
+            action_spec=action_spec,
+        )
+
+    return build
 
 
 def _build_manifest(
@@ -420,7 +463,9 @@ def _build_manifest(
     public_probe_hash: str,
 ) -> Phase3ConsortiumManifest:
     wmcp_version = cfg.model.wmcp_version
-    action, observation = _shared_contracts(metas, wmcp_version=wmcp_version)
+    action, observation, _action_spec = _shared_contracts(
+        metas, wmcp_version=wmcp_version
+    )
     probe = Phase3PublicProbe(
         probe_id=f"{args.consortium_id}-public-probe",
         version=1,
@@ -577,6 +622,7 @@ def _dry_run(
         "dataset_registry_validated_against_manifest",
         f"public_probe_hash_pinned:{probe.content_hash.hex()}",
     ]
+    factory = _participant_factory(_global_action_spec(metas))
     for meta in metas:
         agent = Phase3ParticipantAgent(
             _participant_cfg(cfg, args, data_source=meta.data_ref),
@@ -586,7 +632,7 @@ def _dry_run(
             state_dir=out_dir / "participant-agents-dry-run",
             coordinator_endpoint=coordinator_endpoint,
             registry=registry,
-            participant_factory=None,
+            participant_factory=factory,
             emit_observability=False,
         )
         agent.preflight()
@@ -629,6 +675,7 @@ def _real_run(
     write_phase3_dataset_registry(registry, registry_path)
 
     eval_windows = _eval_windows(args)
+    action_spec = _global_action_spec(metas)
     inputs = Phase3ConsortiumInputs(
         cfg=cfg,
         participant_configs={
@@ -641,8 +688,8 @@ def _real_run(
         probe_path=probe_path,
         participant_ids=tuple(meta.participant_id for meta in metas),
         eval_windows=eval_windows,
-        eval_action_spec=metas[0].action_spec,
-        participant_factory=None,
+        eval_action_spec=action_spec,
+        participant_factory=_participant_factory(action_spec),
     )
     report = run_phase3_consortium(
         inputs,
