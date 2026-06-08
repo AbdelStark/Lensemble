@@ -7,7 +7,7 @@ import json
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any, Literal, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -265,6 +265,7 @@ class Phase3EvidenceBundle(BaseModel):
                 code=LensembleErrorCode.CONFIG_INVALID,
                 remediation="include every Phase 3 contract/train/eval/observability/checkpoint artifact",
             )
+        self._cross_check_artifact_hashes()
         card = self.model_card_markdown.lower()
         required_text = (
             "does not include a provenance ledger",
@@ -279,6 +280,32 @@ class Phase3EvidenceBundle(BaseModel):
             )
         validate_phase3_bundle_residency(self.model_dump(mode="json"))
         return self
+
+    def _cross_check_artifact_hashes(self) -> None:
+        expected_by_kind: tuple[tuple[Phase3ArtifactKind, str], ...] = (
+            ("run-manifest", self.training.run_manifest_hash),
+            ("checkpoint-header", self.training.checkpoint_header_sha256),
+            ("checkpoint-weights", self.training.checkpoint_weights_sha256),
+        )
+        for kind, expected_hash in expected_by_kind:
+            checks = [check for check in self.artifact_checks if check.kind == kind]
+            sha_checks = [check for check in checks if check.sha256 is not None]
+            if not sha_checks:
+                raise ConfigError(
+                    f"Phase 3 evidence bundle artifact check {kind!r} is missing sha256",
+                    code=LensembleErrorCode.CONFIG_INVALID,
+                    remediation="regenerate the bundle so run/checkpoint artifact hashes are bound",
+                )
+            mismatched = [
+                check for check in sha_checks if check.sha256 != expected_hash
+            ]
+            if mismatched:
+                uris = ", ".join(check.uri for check in mismatched)
+                raise ConfigError(
+                    f"Phase 3 evidence bundle artifact hash mismatch for {kind!r}: {uris}",
+                    code=LensembleErrorCode.CONFIG_INVALID,
+                    remediation="regenerate the bundle from the same run manifest and checkpoint artifacts",
+                )
 
 
 def parse_phase3_evidence_bundle(raw: dict[str, Any]) -> Phase3EvidenceBundle:
@@ -438,12 +465,21 @@ def local_artifact_check(
         kind=kind,
         label=label,
         location="local",
-        uri=uri or str(path),
+        uri=uri or local_artifact_uri(path),
         checked_at=checked_at,
         exists=exists,
         sha256=sha256_file(path) if exists and path.is_file() else None,
         error=None if exists else "missing local artifact",
     )
+
+
+def local_artifact_uri(path: Path) -> str:
+    """Return a residency-safe default URI for a local artifact path."""
+
+    path = Path(path)
+    if path.is_absolute():
+        return f"artifact://local/{path.name}"
+    return path.as_posix()
 
 
 def check_hf_artifact_exists(
@@ -876,7 +912,7 @@ def _scan_bundle(value: Any, *, path: str) -> None:
             _scan_bundle(child, path=f"{path}[{idx}]")
         return
     if isinstance(value, str):
-        if value.startswith(("/Users/", "/home/", "file://", "~")):
+        if _is_sensitive_path_value(value):
             raise ConfigError(
                 f"Phase 3 evidence bundle contains sensitive path at {path}",
                 code=LensembleErrorCode.CONFIG_INVALID,
@@ -893,6 +929,12 @@ def _scan_bundle(value: Any, *, path: str) -> None:
                 code=LensembleErrorCode.CONFIG_INVALID,
                 remediation="remove tokens, keys, and secret-like values",
             )
+
+
+def _is_sensitive_path_value(value: str) -> bool:
+    if value.startswith(("file://", "~")):
+        return True
+    return Path(value).is_absolute() or PureWindowsPath(value).is_absolute()
 
 
 __all__ = [
@@ -914,6 +956,7 @@ __all__ = [
     "check_hf_artifact_exists",
     "load_phase3_evidence_bundle",
     "local_artifact_check",
+    "local_artifact_uri",
     "materialize_phase3_run_contracts",
     "parse_phase3_evidence_bundle",
     "render_phase3_model_card",
