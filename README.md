@@ -138,6 +138,52 @@ now contains `README.md`, `reports/phase2_evidence_bundle.json`,
 `reports/phase2_model_card.md`, and `reports/phase2_baselines_curves_report.json`
 at revision `eaf13136b42cde324758a191c98e377636ded7f8`.
 
+Phase 3 is now completed on real HF Jobs GPU compute. The headline run
+[`6a26885bece949d7b3dcb715`](https://huggingface.co/jobs/abdelstark/6a26885bece949d7b3dcb715)
+ran an anchored federation on an `h200` HF Job from pinned commit `056f7407`:
+ten closed federated rounds with four participants, all `0`-dropped, at
+`latent_dim=256` and `num_tokens=196`, with per-round `secure_sum` secure
+aggregation and DP accounting `(ε≈5.30, δ=1e-5, rdp, noise_multiplier=1.0,
+clip_norm=0.5)`. It recorded final global hash
+`bb31c0922de639cb9220c4cc5fc35d79aec719eb6fcedb09159bdff8cfb8fd43`, config hash
+`27f2c77c9d47a7d053c01ab65f8d43aad79463b27d882f2d85ec28bc062cb2b2`, run-manifest
+SHA-256 `21819c9b936468ffc38f943b4ce13ec2ac150d328410f503fa73d9014e040c9d`, and
+per-round `effective_rank` ≈36–47 of 256 — the public-probe frame anchor holds
+representational rank under DP federation. The four published training silos plus
+a held-out split live in
+[`abdelstark/lensemble-phase3-so100-silos`](https://huggingface.co/datasets/abdelstark/lensemble-phase3-so100-silos)
+at revision `15f71911432b300dfdf41c998e27492e8c986be4`, and the checkpoint,
+manifests, ledger, report, and pinned probe are published to
+[`abdelstark/lensemble-phase3-consortium-checkpoint`](https://huggingface.co/abdelstark/lensemble-phase3-consortium-checkpoint)
+at immutable revision `828e210cba4870b2be4ab573a5f0dd4ee30bae29`
+(`publication.status: hf_jobs_release`).
+
+Matched DP-off control probes (each an `a10g-large` job, six rounds,
+`latent_dim=256`) make the gauge finding concrete on real SO-100 data: the
+anchored probe (`abdelstark/lensemble-phase3-consortium-anchored-probe` @
+`567755d2`) reduces inter-participant latent frame-drift to **48.97°** at
+round 0, versus **180°** for naive FedAvg (`…-naive-fedavg` @ `1aace225`). Fork-A
+frozen-encoder (`…-fork-a` @ `148e4217`) is the 0° safe-degrade with constant
+`effective_rank` 2.39, and local-only silos (`…-local-only` @ `a696da17`) train
+healthily (`effective_rank` ≈120) but diverge maximally (180°) without a shared
+frame. The downstream eval report records real held-out SO-100 latent metrics
+beyond the `synthetic://toy` boundary (final-round `effective_rank` ≈35.8/256),
+and the evidence bundle is `published` at revision `828e210c` with four completed
+controls, zero blocked controls, and nine artifact checks all `exists:true`.
+
+This is consortium-engineering plus real federated-training evidence, **not** a
+cryptographic proof of honest participant computation (RFC-0006 remains out of
+scope) and not a paper-scale robotics result. The honest residual limitations:
+at four participants × ~8.4M parameters the meaningful-DP regime is
+gradient-noise-dominated, so the gauge contrast rests on the round-0 measurement
+and the DP-off probes; the federated global representation collapses over rounds
+at the default outer step with a random-init warm-start (real V-JEPA-2 weights
+unvendored, [#96](https://github.com/AbdelStark/Lensemble/issues/96)), so
+sustained non-collapsing federated training is a documented follow-up; and
+closed-loop physical SO-100 task-success remains blocked pending stable-worldmodel
+([#96](https://github.com/AbdelStark/Lensemble/issues/96)). Full detail is in
+[`docs/roadmap/PHASE3.md`](docs/roadmap/PHASE3.md).
+
 ## Working assumptions
 
 Assumptions, all overridable:
