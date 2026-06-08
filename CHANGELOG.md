@@ -34,6 +34,25 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:eval`: **Phase 3 downstream latent-MPC eval report — honest bounded version** (#245, RFC-0005)
+  — `lensemble/eval/phase3_downstream.py` adds `Phase3DownstreamEvalReport` (pydantic, frozen,
+  `schema_version`-gated) with `parse_*`/`load_*`/`write_*`/`build_phase3_downstream_eval_report` and a
+  `scripts/phase3_downstream_eval_report.py --validate` generator, exported from
+  `lensemble/eval/__init__.py`. The checked-in `docs/evidence/phase3_downstream_eval_report.json` goes
+  **beyond the prior `synthetic://toy`, 1-sample, `success_rate=0.5` placeholder** by binding the REAL
+  held-out SO-100 latent metrics — the headline run's final-round `effective_rank ≈ 35.80` and
+  `val_pred ≈ 32476.09` measured on the disjoint held-out split `phase3-so100-silo4.h5` (1216 windows,
+  #242) — to the published checkpoint `abdelstark/lensemble-phase3-consortium-checkpoint` @ revision
+  `828e210c…` (checkpoint hash `bb31c092…`, config hash `27f2c77c…`). It records a NON-TOY latent-MPC
+  planner budget a closed-loop run WOULD use (`icem`, horizon 16, 512 planning samples, 8 iterations, 20
+  episodes, action_dim 6, `executed=false`) and an explicit `task_success.status="blocked"`,
+  `success_rate=null` with two structured blockers — **(#96)** closed-loop physical task-success is
+  blocked by the unvendored `stable-worldmodel` suite (`resolve_env` raises `EvaluationError`; a recorded
+  held-out dataset is open-loop) and **(#244)** latent-MPC planning success would be uninformative on the
+  collapsing federated checkpoints. The report does NOT fabricate a task-success pass, is residency-safe
+  (no raw observation/action arrays), and the claim boundary distinguishes real held-out latent evidence
+  from a cryptographic proof and from paper-scale performance
+  (`tests/ml/test_phase3_downstream_eval.py`).
 - `area:observability` / `area:gauge`: **Phase 3 observability/dropout report regenerated from the real
   run** (#246, RFC-0002/RFC-0015) — `docs/evidence/phase3_observability_report.json` is now bound to the
   real headline run (`phase3-consortium-v1`, checkpoint `bb31c092…`): 11 round summaries (the 10 real
