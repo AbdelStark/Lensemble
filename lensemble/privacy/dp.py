@@ -79,8 +79,12 @@ def add_gaussian_noise(
     """
     d = delta.to(torch.float32)
     std = noise_multiplier * clip_norm
+    # The noise is drawn on the generator's device (CPU — the seeded, RunManifest-recorded generator
+    # whose draw is bitwise-reproducible) and then moved onto the delta's device, so a CUDA-resident
+    # delta (a GPU training round) and the CPU noise add on one device. The move is value-preserving:
+    # on CPU it is a no-op, so the bitwise-determinism golden is unchanged (INV-DP-BOUND, RFC-0012).
     noise = torch.randn(d.shape, generator=generator, dtype=torch.float32) * std
-    return d + noise
+    return d + noise.to(d.device)
 
 
 def privatize(
