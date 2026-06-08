@@ -207,6 +207,60 @@ hf jobs uv run --flavor h200 --timeout 2h --secrets HF_TOKEN \
   --push --out-repo <org>/lensemble-phase2-checkpoint
 ```
 
+## Phase 3 Consortium Run
+
+[`train_phase3_consortium.py`](train_phase3_consortium.py) drives the **full** Phase 3 consortium
+runtime — the networked `Phase3CoordinatorService` plus one sovereign `Phase3ParticipantAgent` per
+mounted participant-local data ref — for `--num-rounds` closed federated rounds and emits REAL
+residency-safe per-round JEPA metrics (`val_pred` / `val_sigreg` / `effective_rank` / `frame_drift_deg`)
+measured off the committed global checkpoints and a disjoint held-out eval split. It builds the agreed
+consortium manifest and dataset/probe registry **from the actual loaded data** (deriving the action and
+observation contracts from each silo's `ActionSpec` and first-window shape), pins the public-probe hash,
+and calls the frozen library entry point `lensemble.federation.run_phase3_consortium`. No raw participant
+trajectory ever leaves a participant boundary; only pseudo-gradients and residency-safe metadata cross.
+
+Each mounted store is one sovereign participant silo. Hold one disjoint split out for the residency-safe
+per-round metrics via `--heldout-source` (required for a real run). Always validate first with
+`--dry-run`, which pins the probe hash, builds + validates the manifest and registry, and preflights
+every participant agent **without running any federated round or any training compute**, writing
+`phase3_consortium_dry_run.json`:
+
+```bash
+hf jobs uv run --flavor h200 --timeout 2h --secrets HF_TOKEN \
+  --with 'lensemble @ git+https://github.com/AbdelStark/Lensemble.git@<SHA>' \
+  -v hf://datasets/<org>/phase3-silos:/data/phase3 \
+  -d https://raw.githubusercontent.com/AbdelStark/Lensemble/<SHA>/deploy/hfjobs/train_phase3_consortium.py \
+  --data-source lerobot-h5:///data/phase3/silo0.h5 \
+  --data-source lerobot-h5:///data/phase3/silo1.h5 \
+  --data-source lerobot-h5:///data/phase3/silo2.h5 \
+  --data-source lerobot-h5:///data/phase3/silo3.h5 \
+  --participant-id phase3-so100-a \
+  --participant-id phase3-so100-b \
+  --participant-id phase3-so100-c \
+  --participant-id phase3-so100-d \
+  --heldout-source lerobot-h5:///data/phase3/heldout.h5 \
+  --out-dir /tmp/lensemble-phase3 \
+  --image-size 224 --patch-size 14 --latent-dim 192 \
+  --depth 12 --predictor-depth 6 --num-heads 3 \
+  --probe-points 1024 --inner-horizon 4 --window-steps 4 \
+  --num-rounds 10 --metric-windows 256 \
+  --secure-agg-backend simulated --secure-agg-threshold 4 --min-trainers 3 \
+  --privacy --dp-epsilon 8.0 --dp-delta 1e-5 --dp-clip-norm 0.5 \
+  --dp-noise-multiplier 1.0 --dp-accountant rdp \
+  --consortium-id lensemble-phase3-consortium --run-id phase3-consortium-v1 \
+  --push --out-repo <org>/lensemble-phase3-consortium-checkpoint
+```
+
+Add `--dry-run` to the same command for the validation-only preflight. DP is **on by default** for the
+real run; pass `--no-privacy` only for a non-private control. The launcher writes
+`phase3_long_run_smoke_report.json`, `phase3_consortium_manifest.json`,
+`phase3_dataset_probe_registry.json`, the pinned probe, the coordinator artifacts/ledger, and the run
+manifest into `--out-dir`; with `--push` and `HF_TOKEN` it uploads that directory to `--out-repo`. The
+per-round JEPA metrics are representation metrics only — downstream planner/task-success eval is deferred
+to [#245](https://github.com/AbdelStark/Lensemble/issues/245). The evidence is real federated
+consortium-engineering + training evidence, **not** a cryptographic honest-computation proof or a
+paper-scale robotics performance result.
+
 ## Single-Site Run
 
 The dataset is mounted read-only at `/data`; the script is a PEP-723 uv script with inline deps:

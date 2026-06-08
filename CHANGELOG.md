@@ -34,6 +34,23 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:federation` / `area:deploy`: **Phase 3 consortium HF Jobs launcher**
+  (#241) — `deploy/hfjobs/train_phase3_consortium.py` drives the full Phase 3
+  consortium runtime (networked `Phase3CoordinatorService` plus one sovereign
+  `Phase3ParticipantAgent` per mounted participant-local data ref) for
+  `--num-rounds` closed federated rounds via the frozen
+  `lensemble.federation.run_phase3_consortium` library entry point. It derives
+  the agreed consortium manifest and dataset/probe registry from the actual
+  loaded data (action/observation contracts from each silo's `ActionSpec` and
+  first-window shape), pins the public-probe hash, and emits REAL residency-safe
+  per-round JEPA metrics (`val_pred`/`val_sigreg`/`effective_rank`/
+  `frame_drift_deg`) measured off the committed global checkpoints and a
+  disjoint `--heldout-source` eval split (`INV-RESIDENCY`). `--dry-run`
+  validates the manifest + registry and pins the probe hash without running any
+  federated round or training compute. `tests/ml/test_phase3_consortium_launcher.py`
+  is a deterministic CPU smoke covering both the dry-run preflight and a real
+  two-round run with reproducible per-round metric tuples and a residency-safe
+  report.
 - `area:federation` / `area:docs`: **Phase 3 final evidence bundle and
   model card** (#230) — `lensemble.federation.Phase3EvidenceBundle` aggregates
   the run-specific consortium manifest, dataset/probe registry, long-run
