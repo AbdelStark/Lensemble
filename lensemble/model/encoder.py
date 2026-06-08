@@ -265,6 +265,13 @@ def build_encoder(cfg: Any) -> Encoder:
     apply_numerics(
         encoder, resolve_device()
     )  # CUDA primary (bf16 forward) / CPU fallback (fp32)
+    if bool(getattr(m, "encoder_frozen", False)):
+        # Fork A (RFC-0002): freeze f_theta at warm-start and federate g_phi only. The inner loop
+        # (`_inner_loop`) optimizes only `requires_grad` params, so a frozen encoder contributes a zero
+        # encoder-delta while the predictor still trains. The weight values are untouched, so the
+        # warm-start content hash (INV-WARMSTART-T0) is unchanged.
+        for param in encoder.parameters():
+            param.requires_grad_(False)
     return encoder
 
 

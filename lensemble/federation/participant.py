@@ -514,11 +514,17 @@ def _inner_loop(
             code=LensembleErrorCode.ROUND_FAILED,
             remediation="provide at least one local Window (the #22 loader yields them)",
         )
-    params = (
-        list(encoder.parameters())
-        + list(predictor.parameters())
-        + list(action_head.parameters())
-    )
+    # Only trainable params enter the optimizer: a frozen encoder (Fork A, RFC-0002 — `encoder_frozen`)
+    # contributes no encoder-delta, federating g_phi only, while θ stays bit-identical to the warm start.
+    params = [
+        p
+        for p in (
+            list(encoder.parameters())
+            + list(predictor.parameters())
+            + list(action_head.parameters())
+        )
+        if p.requires_grad
+    ]
     optimizer = torch.optim.AdamW(params, lr=lr)
     encoder.train()
     predictor.train()

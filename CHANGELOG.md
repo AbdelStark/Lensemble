@@ -34,6 +34,23 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:eval`: **Phase 3 matched controls flipped from blocked to completed**
+  (#244, RFC-0002) — `build_phase3_eval_report(..., completed_controls=...)` now binds the three
+  previously-blocked controls (`local-only`, `naive-fedavg`, `fork-a-frozen-encoder`) to four real
+  matched control runs published on HF Jobs (DP-off, `latent_dim=256`, 6 rounds, simulated secure-agg,
+  participants `phase3-so100-a..d`, held-out silo4). Each completed control row is bound to its immutable
+  checkpoint revision, final global hash, config hash, and run-manifest sha256 (the no-aggregation
+  local-only control binds its report sha256 instead), plus the residency-safe round-0 frame-drift and
+  effective-rank gauges. `docs/evidence/phase3_eval_report.json` regenerates to **10 metric rows, 0
+  blocked controls**. The honest gauge finding: the frame anchor reduces inter-participant latent
+  frame-drift at aggregation (anchored round-0 48.97° vs naive-FedAvg 180°), Fork-A's frozen encoder is
+  the 0° safe-degrade baseline, and local-only silos train healthily (`effective_rank ≈120`) but diverge
+  maximally (180°). The model card states the limitation plainly — at the default outer-step
+  (`outer_lr=0.7`) with a random-init warm-start (real V-JEPA weights unvendored, #96) the federated
+  global representation collapses over rounds (`effective_rank → 1`), so the clean anchored-vs-naive
+  contrast is the round-0 measurement and sustained non-collapsing training is a documented follow-up.
+  This is consortium-engineering and training evidence, not a cryptographic honest-computation proof
+  (`scripts/phase3_eval_report.py`, `tests/ml/test_phase3_eval_report.py`).
 - `area:federation` / `area:deploy`: **Phase 3 headline GPU consortium run published**
   (#243, RFC-0002/RFC-0003) — the anchored-federation run completed on HF Jobs `h200` (job
   `6a26885bece949d7b3dcb715`, pinned commit `056f7407`): **10 closed federated rounds** at non-toy size

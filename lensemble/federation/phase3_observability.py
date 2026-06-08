@@ -743,6 +743,16 @@ def _metric_links(
             )
         )
     for row in eval_report.metric_rows:
+        # The eval report may carry cross-run matched-control rows (#244) that
+        # reference separate published runs with their own config/checkpoint
+        # hashes. Observability cross-references only the headline run's own eval
+        # metrics, so bind only rows whose config + checkpoint hashes match this
+        # run; the matched controls are evidenced by the eval report itself.
+        if (
+            row.config_hash != long_run.config_hash
+            or row.checkpoint_hash != long_run.final_global_model_hash
+        ):
+            continue
         links.append(
             Phase3MetricCrossReference(
                 metric_source="eval",
