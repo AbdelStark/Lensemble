@@ -79,6 +79,9 @@ class GaugeConfig:
 class FederationConfig:
     participant_count: int = 4  # C
     inner_horizon: int = 50  # H
+    inner_lr: float = (
+        1e-3  # AdamW lr of the participant inner loop (the local SGD/AdamW step size)
+    )
     num_rounds: int = 100
     outer_lr: float = 0.7
     outer_nesterov_momentum: float = 0.9
