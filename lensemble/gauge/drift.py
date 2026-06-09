@@ -74,6 +74,7 @@ def frame_drift(
     round_index: int = 0,
     probe: Any = None,
     expected_probe_hash: str | None = None,
+    degenerate_safe: bool = False,
 ) -> FrameDriftReport:
     """Compute the frame-drift diagnostic from per-participant probe embeddings (RFC-0002 9).
 
@@ -85,7 +86,16 @@ def frame_drift(
     Probe pin (``INV-PROBE-PIN``): when ``probe`` is given its content hash is recomputed; if
     ``expected_probe_hash`` is given and differs, raises :class:`~lensemble.errors.ProbeError` and
     refuses to run. The verified hash populates ``probe_hash``.
+
+    ``degenerate_safe`` (#262): a STRONG frame anchor (the converged regime) can pin two participants onto
+    a near-identical frame, whose inter-pair Procrustes ``M`` is rank-deficient — that is the GOOD anchored
+    case (drift → 0), NOT an error. With ``degenerate_safe=True`` a :class:`~lensemble.errors.DegenerateProcrustes`
+    on a pair is recorded as ``0.0°`` drift (coinciding frames) instead of raising, so the per-round drift
+    metric stays alive through convergence. The default ``False`` keeps the strict "raise rather than emit a
+    meaningless angle" contract for the bare diagnostic.
     """
+    from lensemble.errors import DegenerateProcrustes
+
     if probe is not None:
         recomputed = probe_content_hash(probe.points, probe.landmark_idx).hex()
         if expected_probe_hash is not None and recomputed != expected_probe_hash:
@@ -103,7 +113,21 @@ def frame_drift(
     pairs: list[PairDrift] = []
     for i, a in enumerate(participants):
         for b in participants[i + 1 :]:
-            rotation, residual = procrustes_align(embeddings[a], embeddings[b])
+            try:
+                rotation, residual = procrustes_align(embeddings[a], embeddings[b])
+            except DegenerateProcrustes:
+                if not degenerate_safe:
+                    raise
+                # Coinciding frames (a strong anchor pinned both onto the reference): ~0° drift.
+                pairs.append(
+                    PairDrift(
+                        participant_a=a,
+                        participant_b=b,
+                        rotation_angle_deg=0.0,
+                        procrustes_residual=0.0,
+                    )
+                )
+                continue
             pairs.append(
                 PairDrift(
                     participant_a=a,
@@ -116,7 +140,13 @@ def frame_drift(
     drift_from_global: dict[str, float] = {}
     if _GLOBAL_KEY in embeddings:
         for c in participants:
-            rotation, _ = procrustes_align(embeddings[c], embeddings[_GLOBAL_KEY])
+            try:
+                rotation, _ = procrustes_align(embeddings[c], embeddings[_GLOBAL_KEY])
+            except DegenerateProcrustes:
+                if not degenerate_safe:
+                    raise
+                drift_from_global[c] = 0.0  # coinciding with the global frame
+                continue
             drift_from_global[c] = _rotation_angle_deg(rotation)
 
     return FrameDriftReport(

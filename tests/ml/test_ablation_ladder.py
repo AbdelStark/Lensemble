@@ -245,6 +245,76 @@ def test_lambda_anc_sweep_resolves_distinct_valid_configs() -> None:
     assert sweep[0.0].objective.lambda_anc != sweep[2.0].objective.lambda_anc
 
 
+def test_tuned_anchor_lowers_round_n_drift_vs_weak_001() -> None:
+    """#261: the tuned per-round frame leash (lambda_anc=1.0) holds round-N frame drift far below 0.01.
+
+    The #249 runs used ``lambda_anc=0.01`` — 100x below the ``ObjectiveConfig`` schema default of 1.0 —
+    too weak to hold each participant near the shared broadcast global through the ``H`` inner steps, so
+    their released deltas rotated apart before aggregation. This is the falsifiable #261 claim on a seeded
+    toy CPU budget: at the tuned strength the inter-participant frame drift measured on the SAME pinned
+    probe at the final round is materially lower than at 0.01, while the committed global frame's effective
+    dimension is preserved (no collapse, no saturation). The anchor target is the SAME shared round-0
+    reference for both sweep points (one composed probe), so the only variable is the leash STRENGTH.
+    """
+    from lensemble.eval.ablation import RungSpec, cleanup_rung, compose_rung
+
+    base = _base_cfg()
+    # Compose an anchored rung once to pin a real k>=d landmark probe (round-0 f_ref targets); both sweep
+    # points reuse its probe_path so the anchor reference is identical and only lambda_anc differs.
+    composed = compose_rung(
+        base,
+        RungSpec(
+            "frame-anchor",
+            lambda_sig=0.1,
+            lambda_anc=1.0,
+            backstop=False,
+            distill=False,
+        ),
+    )
+    try:
+        cfg_tuned = composed.cfg  # lambda_anc = 1.0 (the schema strength)
+        cfg_weak = dataclasses.replace(
+            cfg_tuned,
+            objective=dataclasses.replace(cfg_tuned.objective, lambda_anc=0.01),
+        )
+        silos = _silos(num_silos=3)
+        weak = run_federated_simulation(
+            silos, cfg=cfg_weak, num_rounds=3, backstop=False
+        )
+        tuned = run_federated_simulation(
+            silos, cfg=cfg_tuned, num_rounds=3, backstop=False
+        )
+        # Determinism: a re-run reproduces the round-N drift bit-for-bit (INV-AGG-DETERMINISM upstream).
+        tuned_again = run_federated_simulation(
+            silos, cfg=cfg_tuned, num_rounds=3, backstop=False
+        )
+    finally:
+        cleanup_rung(composed)
+
+    weak_drift = weak.per_round[-1].frame_drift_angle_deg
+    tuned_drift = tuned.per_round[-1].frame_drift_angle_deg
+    # THE #261 CLAIM: round-N inter-participant frame drift is materially lower at the tuned strength.
+    # Measured on the seeded toy config: weak (0.01) ~15.3 deg, tuned (1.0) ~5.7 deg — a ~9.6 deg gap, so
+    # the >= 6 deg margin is a wide, non-flaky floor.
+    assert tuned_drift < weak_drift - 6.0, (
+        f"tuned lambda_anc=1.0 drift {tuned_drift:.3f} deg should be materially below the weak "
+        f"lambda_anc=0.01 drift {weak_drift:.3f} deg (#261)"
+    )
+    # Rank preserved: the committed global frame's effective dimension is NOT collapsed under the tuned
+    # anchor (toy d=8; measured ~5.1) and stays within a hair of the weak baseline (no saturation killing
+    # the frame's spread).
+    tuned_eff = tuned.per_round[-1].effective_dim
+    weak_eff = weak.per_round[-1].effective_dim
+    assert tuned_eff > 2.0, (
+        f"tuned anchor collapsed the frame (eff_dim {tuned_eff:.3f})"
+    )
+    assert tuned_eff >= 0.85 * weak_eff, (
+        f"tuned anchor saturated the frame: eff_dim {tuned_eff:.3f} fell well below the weak "
+        f"baseline {weak_eff:.3f}"
+    )
+    assert tuned_again.per_round[-1].frame_drift_angle_deg == tuned_drift
+
+
 def test_rung_report_is_frozen() -> None:
     report = RungReport(
         frame_drift_residual=0.1,

@@ -247,5 +247,8 @@ def frame_drift_deg_from_updates(
         round_index=prior_round,
         probe=probe,
         expected_probe_hash=probe.content_hash.hex(),
+        # A strong anchor (the converged regime) can pin participants onto a near-identical frame; that
+        # coinciding-frame case is ~0° drift, not a degenerate-SVD error that should abort the metric.
+        degenerate_safe=True,
     )
     return mean_frame_drift_deg(report)

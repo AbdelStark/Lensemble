@@ -142,9 +142,18 @@ class Coordinator:
         *,
         transport: "Transport",
         artifacts_dir: "Path | None" = None,
+        enable_backstop: bool = False,
     ) -> None:
         self.config = config
         self.transport = transport
+        # #262: the LIVE Layer-3 Procrustes backstop. When enabled AND a real probe is pinned
+        # (cfg.data.probe_path), the coordinator drives the public probe through each released-delta-
+        # reconstructed encoder to measure f_c(P), aligns each over-threshold participant's ENCODER frame
+        # + predictor I/O to the shared round-0 reference E_ref before the outer step (RFC-0002 §5), and
+        # fires the same drift diagnostic. Default OFF — the base coordinator stays the byte-identical
+        # measured pass-through every existing test relies on.
+        self._enable_backstop = bool(enable_backstop)
+        self._round_updates: dict[str, PseudoGradient] = {}
 
         cfg = config
         # Build the initial global model on CPU (the tiny-config / warm-start path; #43's participants
@@ -197,6 +206,16 @@ class Coordinator:
         self._ledger = ContributionLedger(self._artifacts_dir / "ledger.jsonl", [])
         self._config_hash = config_hash(asdict(cfg))
         self._probe_hash = self._resolve_probe_hash(cfg)
+
+        # #262: resolve the pinned probe + the round-0 reference frame E_ref = f_ref(P) ONCE, when the live
+        # backstop is enabled and a real probe is pinned. f_ref is the round-0 encoder snapshot (the SAME
+        # round-0 frame the participants' anchor targets derive from, INV-PROBE-PIN/INV-WARMSTART-T0), so
+        # E_ref and each per-round f_c(P) live on one consistent reference. Both are measured the SAME way —
+        # encoder(probe landmarks).tokens reshaped to (k*N, d) — so the Procrustes alignment is meaningful.
+        self._backstop_probe: object | None = None
+        self._backstop_e_ref: Tensor | None = None
+        if self._enable_backstop:
+            self._setup_backstop(cfg, encoder)
 
         # The frame-drift report measured at ALIGNING each round (None until the first measured round). The
         # Layer-3 Procrustes backstop (#18) is applied alongside it when the #18/#22 hooks are wired; this is
@@ -375,6 +394,10 @@ class Coordinator:
         # default — the measured pass-through). The Layer-3 Procrustes backstop (#18) fires only when BOTH
         # are wired (the #18/#22 seam); the backstop runs in ALIGNING but the deltas it produces must be the
         # ones the AGGREGATING self-check and COMMITTING step both see, so embeddings are resolved here.
+        # Stash the round's updates first so the #262 live backstop can reconstruct each participant's
+        # encoder (θ_t + Δ_enc) to measure f_c(P) — embeddings are computed ONCE here and reused by both the
+        # determinism self-check thunk and the real reduction, so INV-AGG-DETERMINISM holds.
+        self._round_updates = updates
         embeddings = self._probe_embeddings(t)
         e_ref = self._reference_embeddings(t)
 
@@ -548,11 +571,15 @@ class Coordinator:
         """
         if embeddings is None or len(embeddings) < 2:
             return
+        # The drift report is a DIAGNOSTIC, never a gate: a strong anchor can pin two participants onto a
+        # near-identical frame whose inter-pair Procrustes M is rank-deficient. That is the GOOD anchored
+        # case (drift → 0), so the diagnostic records it as 0° (degenerate_safe) rather than aborting.
         self._last_drift = frame_drift(
             embeddings,
             round_index=t,
             probe=self._probe(),
             expected_probe_hash=self._probe_hash.hex(),
+            degenerate_safe=True,
         )
 
     def _align_updates(
@@ -621,35 +648,86 @@ class Coordinator:
             )
         return aligned
 
+    def _setup_backstop(self, cfg: "LensembleConfig", encoder: object) -> None:
+        """#262: load the pinned probe + compute the round-0 reference frame ``E_ref = f_ref(P)``.
+
+        Resolves the probe from ``cfg.data.probe_path`` (when set) and forwards the round-0 encoder snapshot
+        ``f_ref`` on the probe landmarks to ``E_ref`` ``(k*N, d)`` — the shared frame each over-threshold
+        participant is aligned onto. A run with the backstop enabled but no pinned probe simply leaves the
+        backstop un-wired (the measured pass-through): there is no shared frame to align to.
+        """
+        from lensemble.data.probe import load_probe
+        from lensemble.model.encoder import snapshot_reference
+        from lensemble.model.numerics import module_input_tensor
+
+        probe_path = getattr(cfg.data, "probe_path", None)
+        if probe_path is None:
+            return
+        probe = load_probe(Path(probe_path))
+        f_ref = snapshot_reference(encoder)  # type: ignore[arg-type]
+        landmarks = module_input_tensor(f_ref, probe.points[probe.landmark_idx])
+        with torch.no_grad():
+            tokens = f_ref(landmarks).tokens.to(torch.float32)
+        self._backstop_probe = probe
+        self._backstop_e_ref = tokens.reshape(-1, tokens.shape[-1])
+
     def _probe_embeddings(
         self,
         t: int,  # noqa: ARG002 — t is the #18 boundary hook signature (unused here)
     ) -> "dict[str, Tensor] | None":
-        """Per-participant probe embeddings for ALIGNING (the #18/#22 boundary; ``None`` here).
+        """Per-participant probe embeddings ``f_c(P)`` for ALIGNING (the #18/#22/#262 boundary).
 
-        The Layer-3 Procrustes fold-in (#18) consumes these; with no embeddings wired here the ALIGNING
-        state is a measured pass-through. Subclasses / #18 override this to supply ``f_c(P)`` per
-        participant (and the reserved ``"global"`` key for the aggregated model).
+        With the live backstop wired (#262), reconstructs each contributing participant's encoder from the
+        current global ``θ_t`` plus its released encoder delta (``θ_c = θ_t + Δ_enc``) and forwards it on the
+        pinned probe landmarks to ``f_c(P)`` ``(k*N, d)`` — the trained frame the drift diagnostic measures
+        and the Procrustes backstop aligns. Computed ONCE per round (reused by the determinism self-check and
+        the committed reduction). Reconstruction uses the SAME canonical un-flatten as the outer step, so the
+        measured frame is exactly the one whose delta is aggregated. With the backstop un-wired (the default)
+        returns ``None`` and ALIGNING is the byte-identical measured pass-through.
         """
-        return None
+        from lensemble.model.encoder import build_encoder
+        from lensemble.model.numerics import module_input_tensor
+
+        probe = self._backstop_probe
+        if not self._enable_backstop or probe is None or not self._round_updates:
+            return None
+        landmarks = probe.points[probe.landmark_idx]  # type: ignore[attr-defined]
+        embeddings: dict[str, Tensor] = {}
+        for pid, pg in self._round_updates.items():
+            theta_delta, _phi = _unflatten_groups(self._param_manifest, pg.delta)
+            recon = {
+                name: self._theta_weights[name] + theta_delta[name]
+                for name in self._theta_weights
+            }
+            enc = build_encoder(self.config)
+            enc.load_state_dict(recon, strict=True)
+            enc.eval()
+            with torch.no_grad():
+                tokens = enc(module_input_tensor(enc, landmarks)).tokens.to(
+                    torch.float32
+                )
+            embeddings[pid] = tokens.reshape(-1, tokens.shape[-1])
+        return embeddings
 
     def _reference_embeddings(
         self,
         t: int,  # noqa: ARG002 — t is the #18 boundary hook signature (unused here)
     ) -> "Tensor | None":
-        """The reference frame ``E_ref`` ``(n, d)`` the Layer-3 backstop aligns each participant to (#18).
+        """The reference frame ``E_ref`` ``(k*N, d)`` the Layer-3 backstop aligns each participant to (#262).
 
-        Returns ``None`` by default, so the backstop is un-wired and ALIGNING is a byte-identical
-        pass-through. The Layer-3 Procrustes backstop fires only when BOTH this and :meth:`_probe_embeddings`
-        return non-``None`` (the #18/#22 seam): each over-threshold participant's predictor delta is
-        conjugated by ``Q_c* = procrustes_align(f_c(P), E_ref)`` before the outer step (RFC-0002 §5).
-        Subclasses / #18 override this to supply the reference frame (for example the round-0 ``E_ref``).
+        Returns the round-0 ``E_ref = f_ref(P)`` computed at construction when the live backstop is wired,
+        else ``None`` (the byte-identical pass-through). The Layer-3 Procrustes backstop fires only when BOTH
+        this and :meth:`_probe_embeddings` return non-``None``: each over-threshold participant's encoder
+        terminal frame + predictor I/O are conjugated by ``Q_c* = procrustes_align(f_c(P), E_ref)`` before the
+        outer step (RFC-0002 §5).
         """
-        return None
+        if not self._enable_backstop:
+            return None
+        return self._backstop_e_ref
 
     def _probe(self) -> object | None:
-        """The pinned public probe for drift measurement (the #22/#04 boundary; ``None`` here)."""
-        return None
+        """The pinned public probe for the drift diagnostic (the live backstop's probe, or ``None``)."""
+        return self._backstop_probe
 
     def _resolve_probe_hash(self, cfg: "LensembleConfig") -> bytes:
         """The 32-byte ``probe_hash`` for the broadcast ``GlobalState`` (``INV-PROBE-PIN``; #22/#04).

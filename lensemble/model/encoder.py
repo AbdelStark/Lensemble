@@ -110,6 +110,17 @@ class Encoder(nn.Module):
         )
         self.norm = nn.LayerNorm(d)
         nn.init.trunc_normal_(self.pos_embed, std=0.02)
+        # The terminal frame projection f_theta ends in (RFC-0002 §5): a square (d, d) linear over the
+        # output latent axis, IDENTITY-initialized, so it is the *weight-expressible gauge surface* the
+        # Layer-3 Procrustes backstop folds Q into. The original V-JEPA-shaped encoder ended in `norm`
+        # with no terminal linear, so the backstop could realign only the predictor frame and left the
+        # encoder frame in activation space (#18); for the from-scratch MVP (no warm-start to match) this
+        # restores RFC-0002 §5's terminal linear, so the *encoder* frame — the surface that collapses —
+        # is realigned in the committed weights too. eye-init makes it a round-0 no-op. Created LAST and
+        # immediately overwritten by eye, so pos_embed/blocks consume the SAME global RNG as the
+        # pre-frame_proj encoder — every non-frame_proj weight is byte-identical to before (#262).
+        self.frame_proj = nn.Linear(d, d, bias=False)
+        nn.init.eye_(self.frame_proj.weight)
 
     def forward(self, clip: Tensor) -> LatentState:
         if clip.ndim != 5:
@@ -134,7 +145,8 @@ class Encoder(nn.Module):
                     remediation="set num_tokens = (num_frames//tubelet) * (image_size//patch_size)**2",
                 )
             x = x + self.pos_embed
-            x = self.norm(self.blocks(x))  # (B, N, d)
+            # (B, N, d); frame_proj is the terminal gauge surface (eye-init → round-0 no-op).
+            x = self.frame_proj(self.norm(self.blocks(x)))
         return LatentState(
             tokens=x,
             num_tokens=self.num_tokens,

@@ -250,3 +250,65 @@ def test_real_run_emits_real_per_round_metrics_deterministically(
     report_keys = _keys(raw_report)
     for forbidden in ("obs", "observation", "trajectory"):
         assert forbidden not in report_keys
+
+
+def test_outer_step_and_anchor_knobs_thread_into_coordinator_config(
+    tmp_path: Path,
+) -> None:
+    """#263/#261: --outer-lr/--outer-momentum/--anchor-variant/--lambda-anc reach the coordinator config.
+
+    The DiLoCo outer step (``OuterOptimizer(lr, momentum)``) is built from ``cfg.federation.outer_lr`` /
+    ``outer_nesterov_momentum`` and the frame anchor from ``cfg.objective.lambda_anc`` / ``anchor_variant``,
+    so threading the launcher knobs into those config fields is what makes them load-bearing for the run.
+    The defaults encode the M1 decisions: the tuned anchor strength (1.0, not the #249 0.01) and a
+    conservative outer step (smaller lr, zero Nesterov momentum) that does not amplify a partial aggregate.
+    """
+    module = _load_launcher()
+    args = module._args(
+        [
+            "--data-source",
+            "lerobot-h5:///tmp/x.h5",
+            "--outer-lr",
+            "0.3",
+            "--outer-momentum",
+            "0.1",
+            "--anchor-variant",
+            "rotational",
+            "--lambda-anc",
+            "0.7",
+        ]
+    )
+    cfg = module._coordinator_cfg(
+        args, probe_path=tmp_path / "probe.safetensors", participant_count=4
+    )
+    assert cfg.federation.outer_lr == 0.3
+    assert cfg.federation.outer_nesterov_momentum == 0.1
+    assert cfg.objective.anchor_variant == "rotational"
+    assert cfg.objective.lambda_anc == 0.7
+
+    defaults = module._args(["--data-source", "lerobot-h5:///tmp/x.h5"])
+    assert defaults.lambda_anc == 1.0  # tuned strength, not the #249 0.01
+    assert defaults.outer_lr == 0.5  # conservative real-run outer step
+    assert defaults.outer_momentum == 0.0  # zero Nesterov momentum
+    assert defaults.anchor_variant == "landmark"
+
+
+def test_custom_outer_step_run_is_deterministic(tmp_path: Path) -> None:
+    """#263 CPU smoke: a run with custom --outer-lr/--outer-momentum closes and is bitwise-reproducible.
+
+    The knobs flow into the persistent ``OuterOptimizer`` the coordinator steps each round; a second
+    identical run into a fresh dir reproduces every per-round metric tuple (``INV-AGG-DETERMINISM``).
+    """
+    module = _load_launcher()
+    silos, heldout = _write_silos(tmp_path)
+    extra = ["--outer-lr", "0.3", "--outer-momentum", "0.1"]
+
+    out_a = tmp_path / "outer-a"
+    summary_a = module.main(_tiny_argv(silos, heldout, out_a) + extra)
+    assert summary_a["closed_rounds"] == 2
+    tuples_a = _metric_tuples(out_a / "phase3_long_run_smoke_report.json")
+
+    out_b = tmp_path / "outer-b"
+    module.main(_tiny_argv(silos, heldout, out_b) + extra)
+    tuples_b = _metric_tuples(out_b / "phase3_long_run_smoke_report.json")
+    assert tuples_a == tuples_b
