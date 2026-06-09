@@ -184,6 +184,37 @@ closed-loop physical SO-100 task-success remains blocked pending stable-worldmod
 ([#96](https://github.com/AbdelStark/Lensemble/issues/96)). Full detail is in
 [`docs/roadmap/PHASE3.md`](docs/roadmap/PHASE3.md).
 
+## MVP Benchmarks / Results (#259)
+
+The MVP ([#259](https://github.com/AbdelStark/Lensemble/issues/259)) closes the documented follow-up: with
+the M1 convergence fixes — the frame anchor strengthened and pinned to the **fixed round-0 reference**
+(not the drifting global), the live Procrustes backstop wired into the coordinator over the encoder
+terminal frame + predictor, and a tamed DiLoCo outer step — **sustained non-collapsing federated training
+is achieved**. Three real HF Jobs `a10g-large` runs from scratch (`latent_dim=256`, `depth=8`, 224px, four
+SO-100 silos + held-out silo4), relaxed-DP probe regime, simulated secure-aggregation:
+
+| control | effective_rank (held-out) | val_pred (held-out) | frame_drift_deg | verdict |
+|---|---|---|---|---|
+| local-only (per-silo) | ~105 (healthy) | ~0.025 | 180 (inter-silo) | silos learn alone; gauges diverge |
+| naive-FedAvg | 1.1 → ~1 (collapse) | 3 → **203 776** (explode) | **180** every round | catastrophic collapse |
+| **anchored (M1)** | 2.6 → **14.8** (held, grows) | 1.4 → **22.2** (bounded) | 7–124 (controlled) | **gauge held, rank builds** |
+
+The anchored federation **prevents the gauge collapse** (the #259 root cause): `effective_rank` holds and
+grows where naive collapses to ~1, drift is controlled where naive is pinned at 180°, and `val_pred` stays
+~4 orders of magnitude below naive. The converged model is then **used** for latent-space multi-step
+prediction + latent-MPC on held-out SO-100 — dramatically more usable than the collapsed naive control
+(`val_pred` 19 vs 103 320). Artifacts (checkpoint, per-round metrics, ledger, benchmark report, inference
+report, model card) are published to
+[`abdelstark/lensemble-phase3-converged-checkpoint`](https://huggingface.co/abdelstark/lensemble-phase3-converged-checkpoint)
+at immutable revision `a6f5a961…` (anchored run `3c2258ce…`).
+
+Honest boundary: convergence is demonstrated in the **gauge sense** (no collapse; rank held; drift
+controlled; `val_pred` bounded ≪ naive). The aggregated global's prediction quality does **not** yet reach
+the single-silo local-only baseline (`val_pred` ~0.025) — under DiLoCo separate-averaging of the
+co-adapted encoder/predictor over heterogeneous silos, rank and predictability trade off; that is the
+documented remaining limitation, not a collapse. Latent-space only; closed-loop physical task-success
+stays gated on [#96](https://github.com/AbdelStark/Lensemble/issues/96).
+
 ## Working assumptions
 
 Assumptions, all overridable:
