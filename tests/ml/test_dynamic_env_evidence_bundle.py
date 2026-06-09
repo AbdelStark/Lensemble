@@ -45,6 +45,7 @@ def _control(label: str, r2: float, success_rate: float) -> DynamicEnvControlRep
         checkpoint=DynamicEnvCheckpointRef(
             repo_id=f"abdelstark/lensemble-dynamic-{label}",
             revision="0123456789abcdef0123456789abcdef01234567",
+            round_index=1,
             checkpoint_hash=f"{len(label):064x}",
         ),
         state_probe_r2=r2,
@@ -171,7 +172,9 @@ def test_dynamic_env_observability_and_bundle_round_trip(tmp_path: Path) -> None
     )
     assert bundle.benchmark.model_arch == "scratch"
     assert bundle.benchmark.controls[0].state_probe_r2 >= 0.5
+    assert bundle.benchmark.controls[0].round_index == 1
     card = bundle.model_card_markdown.lower()
+    assert "`federated` round 1" in bundle.model_card_markdown
     assert "closed-loop success_rate is reported non-binding" in card
     assert "not vjepa2-vit-l" in bundle.model_card_markdown
     assert "does not cryptographically prove honest participant computation" in (

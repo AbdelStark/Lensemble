@@ -22,6 +22,7 @@ def _control() -> DynamicEnvControlReport:
         checkpoint=DynamicEnvCheckpointRef(
             repo_id="abdelstark/lensemble-dynamic-checkpoint",
             revision="abc123",
+            round_index=1,
             checkpoint_hash="a" * 64,
         ),
         state_probe_r2=0.72,
@@ -70,7 +71,10 @@ def test_dynamic_env_control_rejects_bad_metric_ranges() -> None:
         DynamicEnvControlReport(
             label="bad",
             checkpoint=DynamicEnvCheckpointRef(
-                repo_id="repo", revision="rev", checkpoint_hash="a" * 64
+                repo_id="repo",
+                revision="rev",
+                round_index=0,
+                checkpoint_hash="a" * 64,
             ),
             state_probe_r2=1.01,
             success_rate=0.5,
@@ -80,7 +84,10 @@ def test_dynamic_env_control_rejects_bad_metric_ranges() -> None:
         DynamicEnvControlReport(
             label="bad",
             checkpoint=DynamicEnvCheckpointRef(
-                repo_id="repo", revision="rev", checkpoint_hash="a" * 64
+                repo_id="repo",
+                revision="rev",
+                round_index=0,
+                checkpoint_hash="a" * 64,
             ),
             state_probe_r2=0.1,
             success_rate=1.5,
@@ -100,7 +107,10 @@ def test_dynamic_env_control_requires_gameable_supporting_boundary() -> None:
         DynamicEnvControlReport(
             label="bad",
             checkpoint=DynamicEnvCheckpointRef(
-                repo_id="repo", revision="rev", checkpoint_hash="a" * 64
+                repo_id="repo",
+                revision="rev",
+                round_index=0,
+                checkpoint_hash="a" * 64,
             ),
             state_probe_r2=0.1,
             success_rate=0.5,

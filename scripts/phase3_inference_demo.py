@@ -32,7 +32,9 @@ from lensemble.eval import (
     DynamicEnvCheckpointRef,
     DynamicEnvControlReport,
     DynamicEnvDownstreamEvalReport,
+    effective_dim,
     evaluate,
+    state_probe_r2,
     write_dynamic_env_downstream_eval_report,
 )
 from lensemble.eval.inference_demo import (
@@ -107,6 +109,50 @@ def _download_round(repo: str, round_index: int) -> tuple[Path, str]:
     return Path(header).parent, sha
 
 
+def _parse_checkpoint_spec(spec: str, default_round: int) -> tuple[str, str, int]:
+    label, repo_round = spec.split("=", 1)
+    repo, sep, round_raw = repo_round.rpartition("@")
+    if sep:
+        try:
+            round_index = int(round_raw)
+        except ValueError as exc:
+            raise ValueError(
+                f"checkpoint round suffix must be an integer in {spec!r}"
+            ) from exc
+        return label, repo, round_index
+    return label, repo_round, default_round
+
+
+def _dynamic_state_probe(args: argparse.Namespace, round_dir: Path) -> dict[str, float]:
+    """Compute RFC-0017's binding probe on the held-out dynamic data ref."""
+    cfg = _eval_cfg(args)
+    encoder, _ = load_round_models(cfg, round_dir)
+    dataset = load_episodes(args.dynamic_data_ref, fmt="synthetic-dynamic")
+    latents: list[torch.Tensor] = []
+    states: list[torch.Tensor] = []
+    with torch.no_grad():
+        for window in dataset.windows(1):
+            if window.state is None:
+                continue
+            latents.append(encoder(window.obs).tokens.detach().cpu())
+            states.append(window.state.detach().cpu())
+    if len(latents) < 4:
+        raise ValueError(
+            "dynamic state probe needs at least four state-labeled held-out windows"
+        )
+    x = torch.cat(latents, dim=0)
+    y = torch.cat(states, dim=0)
+    split = max(2, int(0.7 * x.shape[0]))
+    if x.shape[0] - split < 2:
+        raise ValueError(
+            "dynamic state probe needs at least two held-out rows after the split"
+        )
+    return {
+        "state_probe_r2": state_probe_r2(x[:split], y[:split], x[split:], y[split:]),
+        "effective_dim": effective_dim(x.reshape(x.shape[0], -1)),
+    }
+
+
 def _evaluate_checkpoint(
     args: argparse.Namespace,
     *,
@@ -118,6 +164,7 @@ def _evaluate_checkpoint(
     cfg = _cfg(args)
     round_dir, sha = _download_round(repo, args.round)
     if args.dynamic_env:
+        probe = _dynamic_state_probe(args, round_dir)
         report = evaluate(
             round_dir,
             "kinematic://swipe-dot",
@@ -130,11 +177,12 @@ def _evaluate_checkpoint(
             "model_repo": repo,
             "revision": sha,
             "dynamic_env": {
+                "round_index": args.round,
                 "checkpoint_hash": report.checkpoint_hash,
-                "state_probe_r2": report.state_probe_r2,
+                "state_probe_r2": probe["state_probe_r2"],
                 "success_rate": report.success_rate,
                 "success_rate_role": "reported_non_binding",
-                "effective_dim": report.effective_dim,
+                "effective_dim": probe["effective_dim"],
                 "planner": report.planner,
                 "planning_samples": report.planning_samples,
             },
@@ -188,7 +236,10 @@ def _args(argv: list[str] | None) -> argparse.Namespace:
         action="append",
         required=True,
         metavar="LABEL=REPO",
-        help="A control to evaluate, e.g. converged-federated=abdelstark/lensemble-phase3-converged-checkpoint. Repeat.",
+        help=(
+            "A control to evaluate, e.g. converged-federated=abdelstark/lensemble-phase3-converged-checkpoint. "
+            "Append @ROUND to override --round for one control. Repeat."
+        ),
     )
     p.add_argument("--round", type=int, default=12)
     p.add_argument("--heldout-repo", default="abdelstark/lensemble-phase3-so100-silos")
@@ -238,11 +289,17 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
 
     controls = []
     for spec in args.checkpoint:
-        label, repo = spec.split("=", 1)
+        label, repo, round_index = _parse_checkpoint_spec(spec, args.round)
+        checkpoint_args = argparse.Namespace(**vars(args))
+        checkpoint_args.round = round_index
         torch.manual_seed(0)
         controls.append(
             _evaluate_checkpoint(
-                args, label=label, repo=repo, action_spec=action_spec, windows=windows
+                checkpoint_args,
+                label=label,
+                repo=repo,
+                action_spec=action_spec,
+                windows=windows,
             )
         )
 
@@ -257,6 +314,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
                     checkpoint=DynamicEnvCheckpointRef(
                         repo_id=control["model_repo"],
                         revision=control["revision"],
+                        round_index=metrics["round_index"],
                         checkpoint_hash=metrics["checkpoint_hash"],
                     ),
                     state_probe_r2=metrics["state_probe_r2"],
@@ -286,6 +344,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         print(json.dumps(report, indent=2, sort_keys=True), flush=True)
         return report
 
+    assert windows is not None
     report = {
         "schema_version": 1,
         "task_env_id": "held-out-so100://phase3-so100-silo4",

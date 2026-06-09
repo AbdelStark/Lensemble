@@ -181,6 +181,7 @@ class DynamicEnvBenchmarkControl(BaseModel):
     label: str = Field(min_length=1)
     repo_id: str = Field(min_length=1)
     revision: str = Field(min_length=1)
+    round_index: int = Field(ge=0)
     checkpoint_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     state_probe_r2: float
     success_rate: float = Field(ge=0.0, le=1.0)
@@ -618,8 +619,9 @@ def render_dynamic_env_model_card(
     """Render the dynamic-env model card markdown."""
 
     controls = "\n".join(
-        "- `{label}`: state_probe_r2={r2:.4f}, success_rate={success:.4f} ({role})".format(
+        "- `{label}` round {round_index}: state_probe_r2={r2:.4f}, success_rate={success:.4f} ({role})".format(
             label=control.label,
+            round_index=control.round_index,
             r2=control.state_probe_r2,
             success=control.success_rate,
             role=control.success_rate_role.replace("_", "-"),
@@ -932,6 +934,7 @@ def _benchmark_control(
         label=control.label,
         repo_id=control.checkpoint.repo_id,
         revision=control.checkpoint.revision,
+        round_index=control.checkpoint.round_index,
         checkpoint_hash=control.checkpoint.checkpoint_hash,
         state_probe_r2=control.state_probe_r2,
         success_rate=control.success_rate,
