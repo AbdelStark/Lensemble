@@ -187,6 +187,10 @@ def _args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--probe-points", type=int, default=None)
     parser.add_argument("--num-rounds", type=int, default=10)
     parser.add_argument("--inner-horizon", type=int, default=1)
+    # Participant inner-loop AdamW step size. With a small --inner-horizon (frequent sync ≈ centralized
+    # SGD on the union of silos) a larger inner-lr trains the global fast enough to learn predictable
+    # dynamics without the per-round drift a long inner loop causes (#259 MVP usefulness).
+    parser.add_argument("--inner-lr", type=float, default=1e-3)
     parser.add_argument("--window-steps", type=int, default=1)
     parser.add_argument("--latent-dim", type=int, default=256)
     parser.add_argument("--depth", type=int, default=8)
@@ -338,6 +342,7 @@ def _coordinator_cfg(
         participant_count=participant_count,
         num_rounds=args.num_rounds,
         inner_horizon=args.inner_horizon,
+        inner_lr=args.inner_lr,  # #259: inner-loop step size (centralized-like frequent-sync regime)
         # #263: the launcher-exposed DiLoCo outer-step knobs, threaded into the coordinator's
         # OuterOptimizer (config_hash captures them, so the run is reproducible from the manifest).
         outer_lr=args.outer_lr,

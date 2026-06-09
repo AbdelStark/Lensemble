@@ -29,8 +29,11 @@ from lensemble.config import config_hash, load
 # config's canonical encoding.
 # Re-pinned for #191: ObjectiveConfig gained `target_stop_gradient: bool = True`, preserving the existing
 # default path while enabling claim-grade LeWorldModel base mode with `False`.
+# Re-pinned for #259: FederationConfig gained `inner_lr: float = 1e-3` (the participant inner-loop AdamW
+# step size, exposed as a launcher knob for the centralized-like frequent-sync regime), an intentional,
+# reviewed schema addition that shifts the default config's canonical encoding.
 _GOLDEN_DEFAULT_CONFIG_HASH = (
-    "5924364fec268d09bc5843d719ac8bae622deca614cd2c44c4ee362d08bd9c97"
+    "a60d96c4f563541fa437d0ea48f3bf005d64c9a7da1267704b0213bb9875912d"
 )
 
 
