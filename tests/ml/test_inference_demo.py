@@ -19,6 +19,9 @@ from lensemble.eval.inference_demo import (
     multistep_prediction_report,
 )
 from lensemble.model import build_action_head, build_encoder, build_predictor
+from lensemble.model.action_head import ActionHead
+from lensemble.model.encoder import Encoder
+from lensemble.model.predictor import Predictor
 
 _D = 8
 _T, _C, _H, _W = 2, 3, 4, 4
@@ -78,7 +81,7 @@ def _windows(n: int = 6, seed: int = 0) -> list[Window]:
     ]
 
 
-def _models() -> tuple[object, object, object]:
+def _models() -> tuple[Encoder, Predictor, ActionHead]:
     cfg = _Cfg()
     torch.manual_seed(0)
     encoder = build_encoder(cfg).eval()

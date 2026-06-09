@@ -652,6 +652,15 @@ def _run_consortium_rounds(
             if compute_metrics
             else _NO_METRICS
         )
+        # Stream the per-round gauge/learning metrics to stdout so a live GPU run is observable (and an
+        # early divergence killable) via `hf jobs logs -f` — the report file is only written at the end.
+        print(
+            f"[round {round_index}] eff_rank={metrics.effective_rank} "
+            f"val_pred={metrics.val_pred} val_sigreg={metrics.val_sigreg} "
+            f"frame_drift_deg={metrics.frame_drift_deg} "
+            f"hash={record.global_model_hash[:12]}",
+            flush=True,
+        )
         round_summaries.append(
             Phase3RoundRunSummary(
                 round_index=round_index,
