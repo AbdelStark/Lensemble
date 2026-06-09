@@ -603,6 +603,32 @@ def test_live_backstop_disabled_without_probe_is_passthrough(tmp_path: Path) -> 
     assert _commit(enable_backstop=True) == _commit(enable_backstop=False)
 
 
+def test_warm_start_loads_checkpoint_weights_into_global() -> None:
+    """2-phase Fork-A: ``warm_start`` loads a committed checkpoint's encoder.*/predictor.* weights into the
+    round-0 global θ_0/φ_0 (so every participant fetches the warm-started global), not the random init.
+    """
+    cfg = _cfg()
+    # A warm-start dict from a DIFFERENT seed's model, keyed encoder.*/predictor.* (the checkpoint layout).
+    torch.manual_seed(7)
+    enc = build_encoder(cfg)
+    pred = build_predictor(cfg)
+    ws = {f"encoder.{k}": v.detach().clone() for k, v in enc.state_dict().items()}
+    ws.update(
+        {f"predictor.{k}": v.detach().clone() for k, v in pred.state_dict().items()}
+    )
+
+    cold = Coordinator(_cfg(), transport=InProcessTransport())
+    warm = Coordinator(_cfg(), transport=InProcessTransport(), warm_start=ws)
+
+    # The warm-started global differs from the random cold init.
+    assert cold.global_state_hash() != warm.global_state_hash()
+    # ...and its θ_0/φ_0 are byte-equal to the warm-start checkpoint.
+    for k, v in warm._theta_weights.items():  # noqa: SLF001
+        assert torch.allclose(v, ws[f"encoder.{k}"])
+    for k, v in warm._phi_weights.items():  # noqa: SLF001
+        assert torch.allclose(v, ws[f"predictor.{k}"])
+
+
 def test_default_coordinator_commits_same_hash_as_before() -> None:
     # The default (no #18/#22 hooks overridden) coordinator is the byte-identical pass-through: the backstop
     # is un-wired, so the committed hash is exactly the pre-#18 outer-step-only commit.

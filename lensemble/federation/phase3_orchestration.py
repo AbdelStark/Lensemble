@@ -783,6 +783,7 @@ def run_phase3_consortium(
     artifact_targets: Phase3ArtifactTargets | None = None,
     eval_budget: str | None = None,
     enable_backstop: bool = False,
+    warm_start: "dict[str, Any] | None" = None,
     claim_boundary: str,
 ) -> Phase3LongRunReport:
     """Drive the full Phase 3 consortium runtime and emit a long-run report with per-round metrics.
@@ -812,6 +813,7 @@ def run_phase3_consortium(
         artifacts_dir=run_dir / "coordinator-artifacts",
         trace_path=run_dir / "phase3_coordinator_trace.jsonl",
         enable_backstop=enable_backstop,
+        warm_start=warm_start,
     )
     coordinator_endpoint = f"in-process://{inputs.manifest.coordinator_id}"
     agents = {
