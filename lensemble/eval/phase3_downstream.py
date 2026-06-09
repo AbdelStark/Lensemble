@@ -236,6 +236,24 @@ class Phase3DownstreamEvalReport(BaseModel):
                 code=LensembleErrorCode.CONFIG_INVALID,
                 remediation="state that closed-loop task-success is deferred pending #96 and #244",
             )
+        required_correction_phrases = (
+            "magnitude collapse",
+            "central ceiling",
+            "skill_vs_identity is gameable",
+            "effective_rank is scale-invariant",
+        )
+        missing = [
+            phrase
+            for phrase in required_correction_phrases
+            if phrase not in self.claim_boundary
+        ]
+        if missing:
+            raise ConfigError(
+                "Phase 3 downstream claim boundary is missing SO-100 correction phrases: "
+                + ", ".join(missing),
+                code=LensembleErrorCode.CONFIG_INVALID,
+                remediation="disclose the held-out collapse, central ceiling, and gameable/scale-invariant metrics",
+            )
         return self
 
 
@@ -374,10 +392,13 @@ def build_phase3_downstream_eval_report(
         window_steps=window_steps,
         measured_on=held_out_data_ref,
         note=(
-            "Real held-out SO-100 latent metrics: the final-round effective_rank "
-            "and val_pred were computed by the headline consortium run on the "
-            "disjoint held-out split phase3-so100-silo4.h5 (#242), not on "
-            "synthetic://toy data."
+            "Corrected SO-100 latent metrics: final-round effective_rank and "
+            "val_pred were computed on the disjoint held-out split "
+            "phase3-so100-silo4.h5 (#242), but effective_rank is "
+            "scale-invariant and blind to held-out magnitude collapse "
+            "(~7.5e-6 latent variance; thoughts/collapse_fix_probe.py). "
+            "The central ceiling probe (thoughts/central_ceiling_probe.py) "
+            "keeps this from being a downstream usefulness claim."
         ),
     )
     return Phase3DownstreamEvalReport(

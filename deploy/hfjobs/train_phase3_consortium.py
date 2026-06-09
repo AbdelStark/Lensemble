@@ -192,6 +192,14 @@ def _args(argv: list[str] | None) -> argparse.Namespace:
     # dynamics without the per-round drift a long inner loop causes (#259 MVP usefulness).
     parser.add_argument("--inner-lr", type=float, default=1e-3)
     parser.add_argument("--window-steps", type=int, default=1)
+    parser.add_argument(
+        "--encoder",
+        default="vjepa2-vit-l",
+        help=(
+            "Encoder backend to build. Use 'scratch' for RFC-0017 dynamic-env "
+            "from-scratch runs; the default preserves the existing V-JEPA Phase 3 path."
+        ),
+    )
     parser.add_argument("--latent-dim", type=int, default=256)
     parser.add_argument("--depth", type=int, default=8)
     parser.add_argument("--predictor-depth", type=int, default=6)
@@ -296,7 +304,7 @@ def _num_tokens(args: argparse.Namespace) -> int:
 
 def _model_cfg(args: argparse.Namespace) -> _JobModelConfig:
     return _JobModelConfig(
-        encoder="vjepa2-vit-l",
+        encoder=args.encoder,
         warm_start_release="vjepa2-2.0",
         latent_dim=args.latent_dim,
         num_tokens=_num_tokens(args),

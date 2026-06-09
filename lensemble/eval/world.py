@@ -31,6 +31,7 @@ _STABLE_WORLDMODEL_PREFIX = "stable-worldmodel://"
 # The built-in toy env id (#167): a deterministic CPU world that lets `evaluate` produce a real EvalReport
 # for a green end-to-end run WITHOUT the unvendored stable-worldmodel suite (#96).
 SYNTHETIC_TOY_ENV_ID = "synthetic://toy"
+KINEMATIC_SWIPE_DOT_ENV_ID = "kinematic://swipe-dot"
 
 
 @runtime_checkable
@@ -40,8 +41,8 @@ class EvalWorld(Protocol):
     ``action_spec`` is the embodiment's :class:`~lensemble.contracts.ActionSpec`; ``reset(seed)`` returns
     an observation clip ``(T, C, Hpx, Wpx)`` matching the encoder config; ``goal()`` returns the goal
     observation clip; ``step(action)`` advances and returns the next observation clip; ``succeeded()``
-    reports whether the current state is within the goal tolerance. Deterministic given the seed
-    (best-effort, seed-pinned; conventions 9).
+    reports the per-episode outcome. Worlds may additionally expose ``state()`` for resident labels used
+    by RFC-0017 dynamic-env probes. Deterministic given the seed (best-effort, seed-pinned; conventions 9).
     """
 
     action_spec: "ActionSpec"
@@ -154,6 +155,7 @@ class _ToyWorld:
         )
         self._seed = 0
         self._steps = 0
+        self._state = None
 
     def _clip(self, seed: int) -> "Tensor":
         import torch
@@ -168,8 +170,13 @@ class _ToyWorld:
         )
 
     def reset(self, seed: int) -> "Tensor":
+        import torch
+
         self._seed = seed
         self._steps = 0
+        self._state = torch.tensor(
+            [float(seed % 2), float((seed // 2) % 2)], dtype=torch.float32
+        )
         return self._clip(seed)
 
     def goal(self) -> "Tensor":
@@ -187,6 +194,13 @@ class _ToyWorld:
         # dynamics) so the success rate is stable across runs.
         return self._seed % 2 == 0
 
+    def state(self) -> "Tensor":
+        import torch
+
+        if self._state is None:
+            return torch.zeros(2, dtype=torch.float32)
+        return self._state.clone()
+
 
 def _toy_factory(cfg: "LensembleConfig") -> "_ToyWorld":
     """Build the deterministic ``synthetic://toy`` world from ``cfg`` (the registered factory, #167)."""
@@ -196,3 +210,97 @@ def _toy_factory(cfg: "LensembleConfig") -> "_ToyWorld":
 # Self-register the built-in toy env at import (mirrors the data adapters' self-registration), so a bare
 # `evaluate(..., env_id="synthetic://toy")` resolves without any deployment wiring (#167).
 register_env(SYNTHETIC_TOY_ENV_ID, _toy_factory)
+
+
+class SwipeDotWorld:
+    """Action-conditioned RFC-0017 kinematic control world.
+
+    The state is a resident true ``(x,y)`` point in ``[0, 1]^2``. ``step`` applies
+    ``p' = clamp(p + k * a)`` and renders a single-frame ``rgb-video`` Gaussian blob matching
+    ``cfg.model``. ``succeeded`` scores the true state against a fixed goal, not the latent planner
+    objective, so the reported closed-loop success is action-sensitive and non-binding.
+    """
+
+    action_spec: "ActionSpec"
+
+    def __init__(self, cfg: "LensembleConfig") -> None:
+        import torch
+
+        from lensemble.contracts import WMCP_VERSION, ActionKind, ActionSpec
+
+        m = cfg.model
+        self._num_frames = int(getattr(m, "num_frames"))
+        self._in_channels = int(getattr(m, "in_channels", 3))
+        self._image_size = int(getattr(m, "image_size"))
+        self._step_scale = 0.12
+        self._sigma = 0.055
+        self._tol = 0.08
+        self._goal = torch.tensor([0.82, 0.82], dtype=torch.float32)
+        self._state = torch.zeros(2, dtype=torch.float32)
+        self.action_spec = ActionSpec(
+            embodiment_id="swipe-dot-2dof",
+            kind=ActionKind.CONTINUOUS,
+            dim=2,
+            low=(-1.0, -1.0),
+            high=(1.0, 1.0),
+            num_classes=None,
+            units=("u", "u"),
+            wmcp_version=WMCP_VERSION,
+        )
+
+    def _clip(self, state: "Tensor") -> "Tensor":
+        import torch
+
+        coords = torch.linspace(0.0, 1.0, self._image_size, dtype=torch.float32)
+        yy, xx = torch.meshgrid(coords, coords, indexing="ij")
+        dx = xx - state[0].to(torch.float32)
+        dy = yy - state[1].to(torch.float32)
+        blob = torch.exp(
+            -0.5 * (dx.square() + dy.square()) / (self._sigma * self._sigma)
+        )
+        blob = blob.clamp(0.0, 1.0)
+        channels = torch.stack(
+            (
+                blob,
+                (0.35 + 0.65 * blob).clamp(0.0, 1.0),
+                (1.0 - 0.55 * blob).clamp(0.0, 1.0),
+            ),
+            dim=0,
+        )
+        if self._in_channels != 3:
+            channels = channels[:1].repeat(self._in_channels, 1, 1)
+        return channels.unsqueeze(0).repeat(self._num_frames, 1, 1, 1)
+
+    def reset(self, seed: int) -> "Tensor":
+        import torch
+
+        gen = torch.Generator().manual_seed(seed)
+        self._state = torch.empty(2, dtype=torch.float32).uniform_(
+            0.12, 0.42, generator=gen
+        )
+        return self._clip(self._state)
+
+    def goal(self) -> "Tensor":
+        return self._clip(self._goal)
+
+    def step(self, action: "Tensor") -> "Tensor":
+        action = action.to(dtype=self._state.dtype).reshape(-1)[:2].clamp(-1.0, 1.0)
+        self._state = (self._state + self._step_scale * action).clamp(0.0, 1.0)
+        return self._clip(self._state)
+
+    def succeeded(self) -> bool:
+        import torch
+
+        return bool(
+            torch.linalg.vector_norm(self._state - self._goal, ord=2) < self._tol
+        )
+
+    def state(self) -> "Tensor":
+        return self._state.clone()
+
+
+def _swipe_dot_factory(cfg: "LensembleConfig") -> SwipeDotWorld:
+    return SwipeDotWorld(cfg)
+
+
+register_env(KINEMATIC_SWIPE_DOT_ENV_ID, _swipe_dot_factory)

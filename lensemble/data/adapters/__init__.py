@@ -30,6 +30,7 @@ from lensemble.data.adapters.registry import (
     register_adapter,
     save_episodes,
 )
+from lensemble.data.adapters.synthetic_dynamic_backend import load_synthetic_dynamic
 
 # Built-in adapters (02 §5.2). The lerobot view is read-only → no saver (save_episodes raises for it).
 register_adapter("lance", loader=load_lance, saver=save_lance)
@@ -37,11 +38,14 @@ register_adapter("hdf5", loader=load_hdf5, saver=save_hdf5)
 register_adapter("lerobot", loader=load_lerobot, saver=None)
 # Read-only LeRobot-layout single-file HDF5 (real robot datasets as a first-class data_source).
 register_adapter("lerobot-h5", loader=load_lerobot_h5, saver=None)
+# Read-only RFC-0017 swipe-dot source; generated local episodes are residency-bound.
+register_adapter("synthetic-dynamic", loader=load_synthetic_dynamic, saver=None)
 
 __all__ = [
     "save_episodes",
     "load_episodes",
     "register_adapter",
     "load_lerobot_h5",
+    "load_synthetic_dynamic",
     "_validate_episode_conformance",
 ]

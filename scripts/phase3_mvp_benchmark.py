@@ -18,21 +18,22 @@ from typing import Any
 from huggingface_hub import HfApi, hf_hub_download
 
 _HEADLINE = (
-    "The M1 anchored federation PREVENTS the gauge collapse that destroys naive-FedAvg: effective_rank "
-    "holds and grows (no collapse to ~1), frame drift is controlled (<<180 deg), and held-out val_pred "
-    "stays ~4 orders of magnitude below naive-FedAvg. First from-scratch distributed JEPA LeWorldModel "
-    "that does not collapse."
+    "The M1 anchored federation prevents the naive-FedAvg gauge collapse, but this is now a corrected "
+    "SO-100 gauge-only result: held-out magnitude collapse (~7.5e-6 latent variance; "
+    "thoughts/collapse_fix_probe.py) and the central ceiling probe (thoughts/central_ceiling_probe.py) "
+    "show the checkpoint is not useful downstream. skill_vs_identity is gameable, and effective_rank is "
+    "scale-invariant."
 )
 _BOUNDARY = (
-    "Convergence is demonstrated in the GAUGE sense (no collapse; effective_rank held; drift controlled; "
-    "val_pred bounded << naive) — the #259 root cause is solved. The aggregated global's prediction quality "
-    "(val_pred ~O(10)) does not yet reach the single-silo local-only baseline (~0.025): under DiLoCo "
-    "separate-averaging of the co-adapted encoder/predictor over heterogeneous SO-100 silos, representation "
-    "richness (effective_rank) and predictability trade off — a documented remaining limitation, not a "
-    "collapse. Relaxed-DP (DP-off) probe regime for the gauge measurement; secure-aggregation simulated. "
-    "Latent-space inference only; closed-loop physical task-success stays gated on the unvendored "
-    "stable-worldmodel simulator (#96). Consortium-engineering + from-scratch federated-training evidence, "
-    "NOT a cryptographic honest-computation proof."
+    "Corrected SO-100 gauge-only boundary: M1 prevents the naive-FedAvg gauge collapse, but the held-out "
+    "representation has magnitude collapse (~7.5e-6 latent variance; thoughts/collapse_fix_probe.py) and "
+    "the central ceiling probe (thoughts/central_ceiling_probe.py) shows the downstream ceiling is not "
+    "cleared. skill_vs_identity is gameable; effective_rank is scale-invariant and blind to magnitude "
+    "collapse; latent-MPC success_rate=0.0 is a negative result, not a near-static-video success story. "
+    "The #259 SO-100 checkpoint is not a useful downstream world model; the dynamic-env RFC-0017 pivot is "
+    "the ground-truth usefulness path. Relaxed-DP (DP-off) probe regime for the gauge measurement; "
+    "secure-aggregation simulated. Consortium-engineering + from-scratch federated-training evidence, "
+    "NOT a cryptographic honest-computation proof and NOT a paper-scale robotics claim."
 )
 
 

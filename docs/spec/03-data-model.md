@@ -527,12 +527,13 @@ class EvalReport(BaseModel):
     time_per_action_ms: float       # planning wall-cost per action, milliseconds
     effective_dim: float            # embedding-covariance effective dimension (collapse guard)
     probe_accuracy: float | None    # supporting linear/attentive probe accuracy, in [0,1]
+    state_probe_r2: float | None    # RFC-0017 ground-truth state probe R2, finite and <=1
     run_manifest_hash: str          # binds the report to its RunManifest
 ```
 
 **Validation rules.** `0 <= success_rate <= 1`; `effective_dim > 0`; `planner` in the enum;
-`probe_accuracy in [0,1]` when present. Out-of-range raises `EvaluationError`. Unknown `schema_version`
-→ `SchemaVersionMismatch`.
+`probe_accuracy in [0,1]` when present; `state_probe_r2` finite and `<= 1` when present. Out-of-range
+raises `EvaluationError`. Unknown `schema_version` → `SchemaVersionMismatch`.
 
 ### 13.2 `FrameDriftReport` — the headline empirical artifact
 

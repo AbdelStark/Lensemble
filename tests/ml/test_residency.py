@@ -90,11 +90,25 @@ def test_resident_dataset_types_rejected() -> None:
             actions=torch.zeros(1, 2),
             num_steps=1,
             embodiment_id="emb",
+            state=torch.zeros(2, 2),
         ),
         EpisodeDataset([ep]),
     ):
         with pytest.raises(ResidencyViolation):
             guard_egress(resident)
+
+
+def test_window_state_tensor_is_residency_bound() -> None:
+    window = Window(
+        obs=torch.zeros(2, 1, 3, 4, 4),
+        actions=torch.zeros(1, 2),
+        num_steps=1,
+        embodiment_id="swipe-dot-2dof",
+        state=torch.zeros(2, 2),
+    )
+    with pytest.raises(ResidencyViolation) as exc:
+        guard_egress({"window": window})
+    assert exc.value.tensor_role == "raw_window"  # type: ignore[attr-defined]
 
 
 def test_valid_payload_passes() -> None:

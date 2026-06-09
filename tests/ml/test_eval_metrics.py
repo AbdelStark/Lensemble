@@ -18,6 +18,7 @@ from lensemble.eval import (
     linear_probe_accuracy,
     planning_cost,
     quant_ratio,
+    state_probe_r2,
     success_rate,
 )
 from lensemble.eval.mpc import PlanResult
@@ -139,3 +140,57 @@ def test_linear_probe_accuracy_on_separable_data() -> None:
     assert acc > 0.9  # separable -> a linear probe recovers it
     with pytest.raises(EvaluationError):
         linear_probe_accuracy(x, y[:10], x, y)  # length mismatch
+
+
+# --- binding: ground-truth state probe R2 (RFC-0017) ---
+
+
+def _split_state_probe(latents: torch.Tensor, states: torch.Tensor):
+    split = int(0.7 * latents.shape[0])
+    return latents[:split], states[:split], latents[split:], states[split:]
+
+
+def test_state_probe_r2_recovers_ground_truth_xy_from_token_latents() -> None:
+    gen = torch.Generator().manual_seed(3)
+    state = torch.rand(128, 2, generator=gen)
+    noise = 0.005 * torch.randn(128, 9, 4, generator=gen)
+    latents = noise
+    latents[:, :, 0] += state[:, 0:1]
+    latents[:, :, 1] += state[:, 1:2]
+    train_x, train_y, test_x, test_y = _split_state_probe(latents, state)
+    r2 = state_probe_r2(train_x, train_y, test_x, test_y)
+    assert r2 >= 0.99
+
+
+def test_state_probe_r2_rejects_constant_latents() -> None:
+    gen = torch.Generator().manual_seed(4)
+    state = torch.rand(128, 2, generator=gen)
+    latents = torch.ones(128, 9, 4)
+    train_x, train_y, test_x, test_y = _split_state_probe(latents, state)
+    assert state_probe_r2(train_x, train_y, test_x, test_y) <= 0.1
+
+
+def test_state_probe_r2_pins_scale_invariance_gap() -> None:
+    from lensemble.eval.jepa_metrics import effective_rank
+
+    gen = torch.Generator().manual_seed(5)
+    state = torch.rand(128, 2, generator=gen)
+    base = torch.randn(128, 12, generator=gen)
+    collapsed_magnitude = (1e-6 * base).unsqueeze(1).repeat(1, 9, 1)
+    train_x, train_y, test_x, test_y = _split_state_probe(collapsed_magnitude, state)
+    # Scale-invariant rank normalizes the eigenspectrum and can remain healthy under tiny magnitude.
+    assert effective_rank(collapsed_magnitude.reshape(128 * 9, 12)) > 8.0
+    assert state_probe_r2(train_x, train_y, test_x, test_y) <= 0.1
+
+
+def test_state_probe_r2_rejects_undefined_or_out_of_supported_range() -> None:
+    gen = torch.Generator().manual_seed(6)
+    train_x = torch.randn(8, 3, generator=gen)
+    train_y = torch.randn(8, 2, generator=gen)
+    with pytest.raises(EvaluationError):
+        state_probe_r2(train_x, train_y, train_x[:2], torch.ones(2, 2))
+
+    bad_y = train_y.clone()
+    bad_y[0, 0] = float("nan")
+    with pytest.raises(EvaluationError):
+        state_probe_r2(train_x, bad_y, train_x[:2], train_y[:2])

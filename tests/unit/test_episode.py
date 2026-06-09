@@ -54,6 +54,39 @@ def test_windows_have_correct_shapes() -> None:
         assert w.actions.shape[0] == w.num_steps == 2
         assert w.actions.shape[1] == 4
         assert w.embodiment_id == "so101-arm-7dof"
+        assert w.state is None
+
+
+def test_windows_thread_optional_true_state() -> None:
+    spec = _spec(dim=2)
+    transitions = [
+        Transition(
+            obs_t=torch.zeros(1, 3, 4, 4),
+            action_t=torch.zeros(2),
+            obs_tp1=torch.zeros(1, 3, 4, 4),
+            state_t=torch.tensor([float(i), float(i + 1)]),
+            state_tp1=torch.tensor([float(i + 1), float(i + 2)]),
+        )
+        for i in range(3)
+    ]
+    ds = EpisodeDataset(
+        [
+            Episode(
+                episode_id="ep-state",
+                transitions=transitions,
+                embodiment_id=spec.embodiment_id,
+                modality="rgb-video",
+                action_spec=spec,
+                collection_meta={},
+            )
+        ],
+        exportable=False,
+    )
+    window = next(ds.windows(num_steps=2))
+    assert window.state is not None
+    assert tuple(window.state.shape) == (3, 2)
+    assert torch.equal(window.state[0], torch.tensor([0.0, 1.0]))
+    assert torch.equal(window.state[-1], torch.tensor([2.0, 3.0]))
 
 
 def test_episode_shorter_than_window_yields_nothing() -> None:

@@ -24,11 +24,18 @@ if TYPE_CHECKING:  # annotation-only; the loader (dataset.py) imports torch at r
 
 @dataclass(frozen=True)
 class Transition:
-    """A single ``(o_t, a_t, o_{t+1})`` step. Raw, private, residency-bound (``INV-RESIDENCY``)."""
+    """A single ``(o_t, a_t, o_{t+1})`` step. Raw, private, residency-bound (``INV-RESIDENCY``).
+
+    ``state_t`` / ``state_tp1`` are optional true environment state labels, used only by local
+    ground-truth probes such as RFC-0017's swipe-dot ``(x,y)`` metric. They are resident data like
+    observations and actions; only aggregate scalar metrics derived from them may cross a boundary.
+    """
 
     obs_t: "Tensor"  # observation at t; modality-shaped (e.g. video clip C,T,H,W)
     action_t: "Tensor"  # action applied at t; shape (action_dim,) per the ActionSpec
     obs_tp1: "Tensor"  # observation at t+1; same modality-shape as obs_t
+    state_t: "Tensor | None" = None  # optional true env state at t; resident label
+    state_tp1: "Tensor | None" = None  # optional true env state at t+1; resident label
 
 
 @dataclass(frozen=True)
@@ -57,3 +64,6 @@ class Window:
     actions: "Tensor"  # (num_steps, action_dim)
     num_steps: int  # fixed horizon; equals config data.num_steps
     embodiment_id: str
+    state: "Tensor | None" = (
+        None  # optional (num_steps + 1, state_dim) resident true-state labels
+    )

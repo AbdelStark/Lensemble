@@ -44,19 +44,20 @@ _HELD_OUT_WINDOWS = 1216
 _WINDOW_STEPS = 4
 
 _CLAIM_BOUNDARY = (
-    "Real held-out SO-100 latent evidence only: the final-round effective_rank "
-    "and val_pred were measured by the headline federated consortium run on the "
-    "disjoint held-out split phase3-so100-silo4.h5 (#242), so this goes beyond "
-    "the prior synthetic://toy placeholder. Closed-loop physical task-success is "
+    "Corrected held-out SO-100 latent evidence only: final-round val_pred/effective_rank "
+    "were measured on the held-out split, but effective_rank is scale-invariant "
+    "and blind to held-out magnitude collapse (~7.5e-6 latent variance; "
+    "thoughts/collapse_fix_probe.py). The central ceiling probe "
+    "(thoughts/central_ceiling_probe.py) shows the checkpoint does not clear a "
+    "downstream usefulness ceiling. Closed-loop physical task-success is "
     "DEFERRED, not claimed: it requires the unvendored stable-worldmodel suite "
-    "(#96), since a recorded held-out dataset is open-loop and cannot apply "
-    "arbitrary planner actions to recorded frames; and it requires a "
-    "non-collapsing federated checkpoint (#244), since latent-MPC planning "
-    "success would be uninformative on the published checkpoints whose global "
-    "representation collapses over rounds. This is engineering and training "
-    "evidence, NOT a cryptographic proof of honest participant computation, and "
-    "does not claim paper-scale LeWorldModel performance or SO-100 robotics "
-    "task success."
+    "(#96), and it requires a genuinely useful non-collapsed checkpoint (#244). "
+    "This report is a correction of the prior SO-100 overclaim, not a success "
+    "story: skill_vs_identity is gameable, effective_rank is scale-invariant, "
+    "and latent-MPC success on these checkpoints would be uninformative. This is "
+    "engineering and training evidence, NOT a cryptographic proof of honest "
+    "participant computation, and does not claim paper-scale LeWorldModel "
+    "performance or SO-100 robotics task success."
 )
 
 
@@ -94,12 +95,13 @@ def _blockers() -> tuple[Phase3TaskSuccessBlocker, ...]:
             blocker_ref="#244",
             reason=(
                 "Latent-MPC planning success would be uninformative on the published "
-                "federated checkpoints because they collapse (#244): at the default "
-                "outer-step with a random-init warm-start the federated global "
-                "representation collapses over rounds (eff_rank -> 1 for the DP-off "
-                "probes); the DP-on headline holds rank at ~36 but val_pred grows "
-                "monotonically, so a closed-loop number on this checkpoint would not "
-                "reflect a usable world model."
+                "federated checkpoints because they do not show downstream usefulness "
+                "(#244): the held-out representation has magnitude collapse "
+                "(~7.5e-6 latent variance; thoughts/collapse_fix_probe.py), "
+                "effective_rank is scale-invariant and blind to that collapse, and the "
+                "central ceiling probe (thoughts/central_ceiling_probe.py) shows this "
+                "checkpoint would not reflect a usable world model despite the recorded "
+                "val_pred/effective_rank scalars."
             ),
         ),
     )

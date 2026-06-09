@@ -156,6 +156,109 @@ def linear_probe_accuracy(
     return float((pred == ey).to(torch.float32).mean())
 
 
+def _state_probe_features(latents: Tensor) -> Tensor:
+    """Reduce latent tokens exactly as RFC-0017's validated probe: mean-pool tokens."""
+    x = latents.detach().to(device="cpu", dtype=torch.float32)
+    if x.ndim == 3:
+        return x.mean(dim=1)
+    if x.ndim == 2:
+        return x
+    raise _fail(
+        f"state_probe_r2 expects latents of rank 2 or 3, got shape {tuple(x.shape)}",
+        "pass pooled latents (B,d) or token latents (B,N,d)",
+    )
+
+
+def state_probe_r2(
+    train_x: Tensor, train_y: Tensor, test_x: Tensor, test_y: Tensor
+) -> float:
+    """Held-out R2 of a closed-form linear probe from latent tokens to true ``(x,y)`` state.
+
+    This is RFC-0017's binding ungameable usefulness metric. It reproduces the validated CPU probe:
+    mean-pool tokens ``(B,N,d)->(B,d)``, standardize every feature using train-split mean/std, fit an
+    SVD-backed OLS linear solve via :func:`torch.linalg.lstsq`, and return held-out
+    ``1 - SS_res / SS_tot`` averaged over the two target dimensions. Deterministic; no SGD, no ridge
+    regularization, and no silent clamping.
+    """
+    tx = _state_probe_features(train_x)
+    ex = _state_probe_features(test_x)
+    ty = train_y.detach().to(device="cpu", dtype=torch.float32)
+    ey = test_y.detach().to(device="cpu", dtype=torch.float32)
+    if ty.ndim == 1:
+        ty = ty.unsqueeze(-1)
+    if ey.ndim == 1:
+        ey = ey.unsqueeze(-1)
+    if tx.shape[0] != ty.shape[0] or ex.shape[0] != ey.shape[0]:
+        raise _fail(
+            "state_probe_r2 x/y length mismatch",
+            "pass aligned (latents, true-state labels) for train and held-out splits",
+        )
+    if tx.shape[1] != ex.shape[1]:
+        raise _fail(
+            "state_probe_r2 feature dimension mismatch",
+            "train and held-out latents must share the same feature dimension",
+        )
+    if ty.shape[1] != ey.shape[1]:
+        raise _fail(
+            "state_probe_r2 target dimension mismatch",
+            "train and held-out true-state labels must share the same dimension",
+        )
+    if tx.shape[0] < 2 or ex.shape[0] < 1:
+        raise _fail(
+            "state_probe_r2 needs at least two train rows and one held-out row",
+            "collect more state-labeled latents before fitting the probe",
+        )
+    for name, value in (
+        ("train_x", tx),
+        ("train_y", ty),
+        ("test_x", ex),
+        ("test_y", ey),
+    ):
+        if not bool(torch.isfinite(value).all()):
+            raise _fail(
+                f"state_probe_r2 received non-finite values in {name}",
+                "inspect the latent and true-state inputs for NaN/Inf values",
+            )
+    mu = tx.mean(dim=0, keepdim=True)
+    sd = tx.std(dim=0, keepdim=True).clamp_min(1e-6)
+    txs = (tx - mu) / sd
+    exs = (ex - mu) / sd
+    design = torch.cat(
+        [txs, torch.ones(tx.shape[0], 1, dtype=txs.dtype, device=txs.device)], dim=1
+    )
+    test_design = torch.cat(
+        [exs, torch.ones(ex.shape[0], 1, dtype=exs.dtype, device=exs.device)], dim=1
+    )
+    try:
+        weights = torch.linalg.lstsq(design, ty, driver="gelsd").solution
+    except RuntimeError as exc:
+        raise _fail(
+            f"state_probe_r2 least-squares solve failed: {exc}",
+            "inspect the state-probe design matrix for invalid numeric inputs",
+        ) from exc
+    pred = test_design @ weights
+    residual = (ey - pred).square().sum(dim=0)
+    total = (ey - ey.mean(dim=0, keepdim=True)).square().sum(dim=0)
+    if bool((total <= 0.0).any()):
+        raise _fail(
+            "state_probe_r2 held-out targets have zero variance",
+            "use a held-out split with varying true states so R2 is defined",
+        )
+    r2 = 1.0 - residual / total
+    value = float(r2.mean())
+    if not torch.isfinite(torch.tensor(value)):
+        raise _fail(
+            f"state_probe_r2 produced non-finite value {value!r}",
+            "inspect the latent and true-state inputs for NaN/Inf values",
+        )
+    if value > 1.000001:
+        raise _fail(
+            f"state_probe_r2 out of supported range: {value}",
+            "R2 may be negative but should not exceed 1; inspect the inputs",
+        )
+    return min(value, 1.0)
+
+
 # --- the communication-byte accountant (RFC-0005 §4 / 08 §4) ---
 
 

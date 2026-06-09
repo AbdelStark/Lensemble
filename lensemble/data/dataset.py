@@ -17,7 +17,7 @@ import torch
 from lensemble.data.episode import Episode, Transition, Window
 from lensemble.errors import ContractViolation, LensembleErrorCode
 
-Format = Literal["lance", "hdf5", "lerobot", "lerobot-h5"]
+Format = Literal["lance", "hdf5", "lerobot", "lerobot-h5", "synthetic-dynamic"]
 
 
 def _build_window(
@@ -25,8 +25,16 @@ def _build_window(
 ) -> Window:
     obs = torch.stack([t.obs_t for t in transitions] + [transitions[-1].obs_tp1])
     actions = torch.stack([t.action_t for t in transitions])
+    states = [t.state_t for t in transitions] + [transitions[-1].state_tp1]
+    state = None
+    if all(s is not None for s in states):
+        state = torch.stack([s for s in states if s is not None])
     return Window(
-        obs=obs, actions=actions, num_steps=num_steps, embodiment_id=embodiment_id
+        obs=obs,
+        actions=actions,
+        num_steps=num_steps,
+        embodiment_id=embodiment_id,
+        state=state,
     )
 
 
@@ -55,6 +63,11 @@ def _check_window(window: Window, *, action_dim: int) -> None:
         fail(
             f"actions trailing dim != action_spec.dim ({action_dim}); got shape {got}",
             "store actions of shape (num_steps, action_spec.dim) matching the episode's ActionSpec",
+        )
+    if window.state is not None and window.state.shape[0] != window.num_steps + 1:
+        fail(
+            f"state length {window.state.shape[0]} != num_steps + 1 ({window.num_steps + 1})",
+            "a true-state window over num_steps transitions has num_steps + 1 labels",
         )
 
 

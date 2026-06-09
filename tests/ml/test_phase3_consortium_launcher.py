@@ -293,6 +293,28 @@ def test_outer_step_and_anchor_knobs_thread_into_coordinator_config(
     assert defaults.anchor_variant == "landmark"
 
 
+def test_encoder_backend_threads_into_model_config() -> None:
+    """RFC-0017 dynamic-env jobs can request a from-scratch encoder without mutating legacy defaults."""
+    module = _load_launcher()
+
+    defaults = module._model_cfg(
+        module._args(["--data-source", "synthetic-dynamic://swipe-dot?seed=1"])
+    )
+    assert defaults.encoder == "vjepa2-vit-l"
+
+    scratch = module._model_cfg(
+        module._args(
+            [
+                "--data-source",
+                "synthetic-dynamic://swipe-dot?seed=1",
+                "--encoder",
+                "scratch",
+            ]
+        )
+    )
+    assert scratch.encoder == "scratch"
+
+
 def test_warm_start_fork_a_freezes_encoder_and_federates_predictor(
     tmp_path: Path,
 ) -> None:

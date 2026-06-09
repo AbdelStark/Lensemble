@@ -19,6 +19,16 @@ from .claim_mvp import (
     build_claim_mvp_report,
     parse_claim_mvp_report,
 )
+from .dynamic_downstream import (
+    DYNAMIC_ENV_DOWNSTREAM_REPORT_SCHEMA_VERSION,
+    DynamicEnvCheckpointRef,
+    DynamicEnvControlReport,
+    DynamicEnvDownstreamEvalReport,
+    load_dynamic_env_downstream_eval_report,
+    parse_dynamic_env_downstream_eval_report,
+    to_dynamic_env_downstream_eval_report_json,
+    write_dynamic_env_downstream_eval_report,
+)
 from .harness import evaluate
 from .metrics import (
     comm_bytes,
@@ -26,6 +36,7 @@ from .metrics import (
     linear_probe_accuracy,
     planning_cost,
     quant_ratio,
+    state_probe_r2,
     success_rate,
 )
 from .mpc import Planner
@@ -97,7 +108,13 @@ from .sweeps import (
     partition_synthetic_noniid,
     sample_drift_pairs,
 )
-from .world import EvalWorld, register_env, resolve_env
+from .world import (
+    KINEMATIC_SWIPE_DOT_ENV_ID,
+    EvalWorld,
+    SwipeDotWorld,
+    register_env,
+    resolve_env,
+)
 
 __all__ = [
     "evaluate",
@@ -165,13 +182,24 @@ __all__ = [
     "CLAIM_MVP_REPORT_SCHEMA_VERSION",
     "build_claim_mvp_report",
     "parse_claim_mvp_report",
+    "DYNAMIC_ENV_DOWNSTREAM_REPORT_SCHEMA_VERSION",
+    "DynamicEnvCheckpointRef",
+    "DynamicEnvControlReport",
+    "DynamicEnvDownstreamEvalReport",
+    "parse_dynamic_env_downstream_eval_report",
+    "load_dynamic_env_downstream_eval_report",
+    "to_dynamic_env_downstream_eval_report_json",
+    "write_dynamic_env_downstream_eval_report",
     "EvalWorld",
+    "SwipeDotWorld",
+    "KINEMATIC_SWIPE_DOT_ENV_ID",
     "register_env",
     "resolve_env",
     "success_rate",
     "planning_cost",
     "effective_dim",
     "linear_probe_accuracy",
+    "state_probe_r2",
     "comm_bytes",
     "quant_ratio",
     "BASELINES",
