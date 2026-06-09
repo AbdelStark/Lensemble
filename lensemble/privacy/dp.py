@@ -62,7 +62,12 @@ def clip_delta(delta: Tensor, clip_norm: float) -> tuple[Tensor, float]:
     norm = float(d.norm())
     if norm > clip_norm:
         clipped = d * (clip_norm / norm)
-        return clipped, float(clipped.norm())
+        post_clip_norm = float(clipped.norm())
+        if post_clip_norm > clip_norm:
+            eps = torch.finfo(clipped.dtype).eps
+            clipped = clipped * (clip_norm / (post_clip_norm + eps))
+            post_clip_norm = float(clipped.norm())
+        return clipped, min(post_clip_norm, float(clip_norm))
     return d, norm
 
 
