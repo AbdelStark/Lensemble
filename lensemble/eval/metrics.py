@@ -158,7 +158,7 @@ def linear_probe_accuracy(
 
 def _state_probe_features(latents: Tensor) -> Tensor:
     """Reduce latent tokens exactly as RFC-0017's validated probe: mean-pool tokens."""
-    x = latents.detach().to(torch.float32)
+    x = latents.detach().to(device="cpu", dtype=torch.float32)
     if x.ndim == 3:
         return x.mean(dim=1)
     if x.ndim == 2:
@@ -176,14 +176,14 @@ def state_probe_r2(
 
     This is RFC-0017's binding ungameable usefulness metric. It reproduces the validated CPU probe:
     mean-pool tokens ``(B,N,d)->(B,d)``, standardize every feature using train-split mean/std, fit an
-    OLS linear solve via :func:`torch.linalg.lstsq`, and return held-out
+    SVD-backed OLS linear solve via :func:`torch.linalg.lstsq`, and return held-out
     ``1 - SS_res / SS_tot`` averaged over the two target dimensions. Deterministic; no SGD, no ridge
     regularization, and no silent clamping.
     """
     tx = _state_probe_features(train_x)
     ex = _state_probe_features(test_x)
-    ty = train_y.detach().to(torch.float32)
-    ey = test_y.detach().to(torch.float32)
+    ty = train_y.detach().to(device="cpu", dtype=torch.float32)
+    ey = test_y.detach().to(device="cpu", dtype=torch.float32)
     if ty.ndim == 1:
         ty = ty.unsqueeze(-1)
     if ey.ndim == 1:
@@ -208,13 +208,34 @@ def state_probe_r2(
             "state_probe_r2 needs at least two train rows and one held-out row",
             "collect more state-labeled latents before fitting the probe",
         )
+    for name, value in (
+        ("train_x", tx),
+        ("train_y", ty),
+        ("test_x", ex),
+        ("test_y", ey),
+    ):
+        if not bool(torch.isfinite(value).all()):
+            raise _fail(
+                f"state_probe_r2 received non-finite values in {name}",
+                "inspect the latent and true-state inputs for NaN/Inf values",
+            )
     mu = tx.mean(dim=0, keepdim=True)
     sd = tx.std(dim=0, keepdim=True).clamp_min(1e-6)
     txs = (tx - mu) / sd
     exs = (ex - mu) / sd
-    design = torch.cat([txs, torch.ones(tx.shape[0], 1, dtype=txs.dtype)], dim=1)
-    test_design = torch.cat([exs, torch.ones(ex.shape[0], 1, dtype=exs.dtype)], dim=1)
-    weights = torch.linalg.lstsq(design, ty).solution
+    design = torch.cat(
+        [txs, torch.ones(tx.shape[0], 1, dtype=txs.dtype, device=txs.device)], dim=1
+    )
+    test_design = torch.cat(
+        [exs, torch.ones(ex.shape[0], 1, dtype=exs.dtype, device=exs.device)], dim=1
+    )
+    try:
+        weights = torch.linalg.lstsq(design, ty, driver="gelsd").solution
+    except RuntimeError as exc:
+        raise _fail(
+            f"state_probe_r2 least-squares solve failed: {exc}",
+            "inspect the state-probe design matrix for invalid numeric inputs",
+        ) from exc
     pred = test_design @ weights
     residual = (ey - pred).square().sum(dim=0)
     total = (ey - ey.mean(dim=0, keepdim=True)).square().sum(dim=0)
