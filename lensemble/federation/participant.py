@@ -443,9 +443,13 @@ class Participant:
             # a moving, degrading target (as the federated global drifts the anchor target drifts with it), so
             # it cannot RESIST collapse; pinning to the fixed round-0 frame holds every silo on one shared
             # reference and is what lets the aggregated global hold its gauge over many rounds (#264/#261).
+            # The probe is loaded on CPU but the encoder forward (inner loop) runs on the compute device;
+            # move the fixed targets onto it so the anchor residual ``f_theta(p_i) - t_i`` is single-device
+            # (the simulation harness moves the whole probe in _shared_probe — match it for the targets).
+            device = next(encoder.parameters()).device
             anchor = FrameAnchor(
                 probe,
-                probe.landmark_targets,
+                probe.landmark_targets.to(device),
                 variant=o.anchor_variant,
                 probe_hash=probe.content_hash.hex(),
             ).loss
