@@ -293,6 +293,50 @@ def test_outer_step_and_anchor_knobs_thread_into_coordinator_config(
     assert defaults.anchor_variant == "landmark"
 
 
+def test_warm_start_fork_a_freezes_encoder_and_federates_predictor(
+    tmp_path: Path,
+) -> None:
+    """2-phase Fork-A (#259 MVP): Phase 2 warm-starts from a committed checkpoint and, with
+    ``--encoder-frozen``, holds the encoder byte-identical while federating only the predictor.
+    """
+    from lensemble.eval.jepa_metrics import load_checkpoint_groups
+
+    module = _load_launcher()
+    silos, heldout = _write_silos(tmp_path)
+
+    # Phase 1: a tiny federated run → committed round-0002 checkpoint. DP off so the frozen-encoder
+    # assertion below is exact (with DP on, Gaussian noise is added to every released delta — including a
+    # frozen encoder's zero delta — so the committed encoder would move by noise, not by training).
+    out1 = tmp_path / "phase1"
+    module.main(_tiny_argv(silos, heldout, out1) + ["--no-privacy"])
+    warm_ckpt = out1 / "coordinator-artifacts" / "round-00002"
+    assert (warm_ckpt / "weights.safetensors").exists()
+
+    # Phase 2: warm-start from Phase 1 + freeze the encoder (Fork A); DP off.
+    out2 = tmp_path / "phase2"
+    summary = module.main(
+        _tiny_argv(silos, heldout, out2)
+        + ["--warm-start", str(warm_ckpt), "--encoder-frozen", "--no-privacy"]
+    )
+    assert summary["closed_rounds"] == 2
+
+    manifest = json.loads(
+        (out2 / "phase3_consortium_manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["model"]["base_checkpoint_ref"] == str(warm_ckpt)
+
+    # Fork A: the committed encoder is byte-identical to the warm-start (frozen); the predictor moved.
+    ws_theta, ws_phi = load_checkpoint_groups(warm_ckpt)
+    fin_theta, fin_phi = load_checkpoint_groups(
+        out2 / "coordinator-artifacts" / "round-00002"
+    )
+    for k in ws_theta:
+        assert torch.equal(ws_theta[k], fin_theta[k]), f"frozen encoder param {k} moved"
+    assert any(not torch.equal(ws_phi[k], fin_phi[k]) for k in ws_phi), (
+        "the federated predictor should have changed"
+    )
+
+
 def test_custom_outer_step_run_is_deterministic(tmp_path: Path) -> None:
     """#263 CPU smoke: a run with custom --outer-lr/--outer-momentum closes and is bitwise-reproducible.
 

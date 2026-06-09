@@ -225,6 +225,18 @@ def _args(argv: list[str] | None) -> argparse.Namespace:
         "--backstop", dest="backstop", action="store_true", default=True
     )
     parser.add_argument("--no-backstop", dest="backstop", action="store_false")
+    # 2-phase Fork-A (#259 MVP M3): warm-start the round-0 global from a committed checkpoint (an HF model
+    # repo or a local checkpoint dir). Combine with --encoder-frozen to FREEZE a converged gauge-aligned
+    # encoder and federate ONLY the predictor — giving the predictor a stationary shared latent target so
+    # its DiLoCo-averaged updates co-adapt coherently (the path to a usable federated predictor).
+    parser.add_argument("--warm-start", default=None)
+    parser.add_argument("--warm-start-round", type=int, default=12)
+    parser.add_argument(
+        "--warm-start-encoder-only",
+        action="store_true",
+        help="Warm-start ONLY the encoder (fresh predictor) — the textbook 'federated head on a frozen "
+        "backbone' for 2-phase Fork-A.",
+    )
     parser.add_argument(
         "--encoder-frozen",
         action="store_true",
@@ -526,6 +538,7 @@ def _build_manifest(
     *,
     metas: list[_SiloMetadata],
     public_probe_hash: str,
+    base_checkpoint_ref: str | None = None,
 ) -> Phase3ConsortiumManifest:
     wmcp_version = cfg.model.wmcp_version
     action, observation, _action_spec = _shared_contracts(
@@ -582,7 +595,7 @@ def _build_manifest(
             num_tokens=int(cfg.model.num_tokens),
             objective_target_stop_gradient=bool(cfg.objective.target_stop_gradient),
             lambda_anc=float(cfg.objective.lambda_anc),
-            base_checkpoint_ref=None,
+            base_checkpoint_ref=base_checkpoint_ref,
             config_hash=config_hash(asdict(cfg)),
         ),
         public_probe=probe,
@@ -723,6 +736,48 @@ def _dry_run(
     return payload
 
 
+def _load_warm_start(
+    args: argparse.Namespace,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Load warm-start encoder/predictor weights from a committed checkpoint (local dir or HF model repo).
+
+    Returns ``(weights keyed encoder.*/predictor.*, provenance ref)`` or ``(None, None)``. Used by the
+    2-phase Fork-A path: combined with ``--encoder-frozen`` it freezes a converged encoder and federates
+    only the predictor (#259 MVP M3).
+    """
+    if not args.warm_start:
+        return None, None
+    from lensemble.artifacts import load_checkpoint
+
+    src = Path(args.warm_start)
+    if src.exists():
+        weights, _ = load_checkpoint(src)
+        ref = str(src)
+    else:
+        from huggingface_hub import HfApi, hf_hub_download
+
+        sha = HfApi().model_info(args.warm_start).sha or "main"
+        sub = f"coordinator-artifacts/round-{args.warm_start_round:05d}"
+        header = hf_hub_download(
+            args.warm_start, f"{sub}/header.json", repo_type="model", revision=sha
+        )
+        hf_hub_download(
+            args.warm_start,
+            f"{sub}/weights.safetensors",
+            repo_type="model",
+            revision=sha,
+        )
+        weights, _ = load_checkpoint(Path(header).parent)
+        ref = f"{args.warm_start}@{sha}:{sub}"
+    weights = dict(weights)
+    if getattr(args, "warm_start_encoder_only", False):
+        # Fresh predictor on the converged frozen encoder (the textbook "federated head on a frozen
+        # backbone"): keep only the encoder weights so the predictor trains from its random init.
+        weights = {k: v for k, v in weights.items() if k.startswith("encoder.")}
+        ref = f"{ref}#encoder-only"
+    return weights, ref
+
+
 def _real_run(
     args: argparse.Namespace,
     *,
@@ -734,6 +789,7 @@ def _real_run(
     probe_path: Path,
     manifest_path: Path,
     registry_path: Path,
+    warm_start: dict[str, Any] | None = None,
 ) -> Phase3LongRunReport:
     registry = phase3_registry_from_consortium_manifest(
         manifest,
@@ -773,6 +829,7 @@ def _real_run(
         enable_backstop=bool(
             args.backstop
         ),  # #262: live Procrustes backstop (default on)
+        warm_start=warm_start,  # 2-phase Fork-A: warm-start θ_0/φ_0 from a committed checkpoint
         claim_boundary=_CLAIM_BOUNDARY,
     )
     write_phase3_long_run_report(report, out_dir / "phase3_long_run_smoke_report.json")
@@ -959,8 +1016,13 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
     )
     cfg = _coordinator_cfg(args, probe_path=probe_path, participant_count=len(metas))
     probe = _build_probe(args, cfg)
+    warm_start_weights, warm_start_ref = _load_warm_start(args)
     manifest = _build_manifest(
-        args, cfg, metas=metas, public_probe_hash=probe.content_hash.hex()
+        args,
+        cfg,
+        metas=metas,
+        public_probe_hash=probe.content_hash.hex(),
+        base_checkpoint_ref=warm_start_ref,
     )
     manifest_path = out_dir / "phase3_consortium_manifest.json"
     registry_path = out_dir / "phase3_dataset_probe_registry.json"
@@ -1008,6 +1070,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         probe_path=probe_path,
         manifest_path=manifest_path,
         registry_path=registry_path,
+        warm_start=warm_start_weights,
     )
     pushed, blocker = _push(args, out_dir)
     summary = {

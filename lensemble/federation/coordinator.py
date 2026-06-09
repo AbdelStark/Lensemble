@@ -143,6 +143,7 @@ class Coordinator:
         transport: "Transport",
         artifacts_dir: "Path | None" = None,
         enable_backstop: bool = False,
+        warm_start: "dict[str, Tensor] | None" = None,
     ) -> None:
         self.config = config
         self.transport = transport
@@ -161,6 +162,28 @@ class Coordinator:
         torch.manual_seed(cfg.determinism.root_seed)
         encoder = build_encoder(cfg)
         predictor = build_predictor(cfg)
+        # WARM-START (#260 wiring; the MVP 2-phase Fork-A path): load a committed checkpoint's
+        # encoder.*/predictor.* weights into the round-0 global θ_0/φ_0 BEFORE snapshotting, so every
+        # participant fetches the warm-started global (INV-WARMSTART-T0 holds by construction — one
+        # broadcast global). Combined with cfg.model.encoder_frozen (Fork A) this freezes the converged
+        # gauge-aligned encoder and federates ONLY the predictor — giving the predictor a stationary,
+        # shared latent target so its DiLoCo-averaged updates co-adapt coherently. load_state_dict copies
+        # onto each param's device, so a CPU-loaded checkpoint warm-starts a CUDA-built model.
+        if warm_start is not None:
+            enc_sd = {
+                k[len("encoder.") :]: v
+                for k, v in warm_start.items()
+                if k.startswith("encoder.")
+            }
+            phi_sd = {
+                k[len("predictor.") :]: v
+                for k, v in warm_start.items()
+                if k.startswith("predictor.")
+            }
+            if enc_sd:
+                encoder.load_state_dict(enc_sd, strict=True)
+            if phi_sd:
+                predictor.load_state_dict(phi_sd, strict=True)
         theta_weights = {k: v.detach().clone() for k, v in encoder.state_dict().items()}
         phi_weights = {k: v.detach().clone() for k, v in predictor.state_dict().items()}
 

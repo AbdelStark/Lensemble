@@ -35,6 +35,8 @@ from lensemble.federation.round import RoundState
 from lensemble.federation.transport import InProcessTransport
 
 if TYPE_CHECKING:
+    from torch import Tensor
+
     from lensemble.config.schema import LensembleConfig
     from lensemble.federation.pseudogradient import PseudoGradient
     from lensemble.federation.state import GlobalState
@@ -198,6 +200,7 @@ class Phase3CoordinatorService:
         artifacts_dir: Path | None = None,
         trace_path: Path | None = None,
         enable_backstop: bool = False,
+        warm_start: "dict[str, Tensor] | None" = None,
     ) -> None:
         self.config = config
         self.manifest = validate_coordinator_run_agreement(manifest)
@@ -216,6 +219,7 @@ class Phase3CoordinatorService:
             transport=self.transport,
             artifacts_dir=artifacts_dir,
             enable_backstop=enable_backstop,
+            warm_start=warm_start,
         )
         self.trace_path = Path(trace_path or Path("coordinator_trace.jsonl"))
         self.trace_path.parent.mkdir(parents=True, exist_ok=True)
