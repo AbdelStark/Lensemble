@@ -252,6 +252,27 @@ def test_real_run_emits_real_per_round_metrics_deterministically(
         assert forbidden not in report_keys
 
 
+def test_local_only_run_emits_representative_checkpoint(tmp_path: Path) -> None:
+    """The no-aggregation control publishes a checkpoint row for downstream eval."""
+    from lensemble.artifacts import load_checkpoint
+
+    module = _load_launcher()
+    silos, heldout = _write_silos(tmp_path)
+    out_dir = tmp_path / "local-only"
+
+    payload = module.main(_tiny_argv(silos, heldout, out_dir) + ["--local-only"])
+
+    assert payload["mode"] == "local-only"
+    assert payload["representative_checkpoint_participant_id"] == "silo-0"
+    checkpoint_path = Path(payload["representative_checkpoint_path"])
+    assert checkpoint_path == out_dir / "coordinator-artifacts" / "round-00002"
+    assert (checkpoint_path / "header.json").exists()
+    assert (checkpoint_path / "weights.safetensors").exists()
+    _, header = load_checkpoint(checkpoint_path)
+    assert header.content_hash == payload["representative_checkpoint_hash"]
+    assert header.round_index == 2
+
+
 def test_outer_step_and_anchor_knobs_thread_into_coordinator_config(
     tmp_path: Path,
 ) -> None:

@@ -14,8 +14,8 @@ SAME residency-safe per-round JEPA metrics the real run emits:
    own silo with NO coordinator aggregation, then report per-participant held-out metrics + the
    inter-participant latent frame-drift — the divergence federated aggregation is designed to close. The
    third test drives a tiny ``--local-only`` run and asserts it (a) writes ``phase3_local_only_report.json``
-   with per-participant metrics + a ``frame_drift_deg``, (b) creates NO ``coordinator-artifacts/round-*``
-   dirs (no aggregation ran), and (c) is residency-safe (no raw-data keys in the report).
+   with per-participant metrics + a ``frame_drift_deg``, (b) publishes one representative checkpoint for
+   downstream eval without a coordinator ledger, and (c) is residency-safe (no raw-data keys in the report).
 
 The toy CPU V-JEPA shape mirrors ``tests/ml/test_phase3_consortium_launcher.py`` and the toy pipeline
 (``latent_dim=8``, ``num_tokens=4``) so the whole module is CPU-fast and downloads nothing.
@@ -348,7 +348,7 @@ def test_local_only_run_reports_per_participant_without_aggregation(
 ) -> None:
     # The no-aggregation baseline: a tiny --local-only run over 2 toy silos completes, writes
     # phase3_local_only_report.json with per-participant metrics + a frame_drift_deg, and runs NO
-    # coordinator aggregation (no coordinator-artifacts/round-* dirs).
+    # coordinator aggregation ledger. It still writes one representative checkpoint for downstream eval.
     module = _load_launcher()
     silos, heldout = _write_silos(tmp_path, count=2)
     out_dir = tmp_path / "local-only"
@@ -374,10 +374,15 @@ def test_local_only_run_reports_per_participant_without_aggregation(
     assert on_disk["mode"] == "local-only"
     assert on_disk["claim_boundary"]
 
-    # NO aggregation ran: the coordinator never committed a round, so no coordinator-artifacts/round-* dirs.
+    # NO aggregation ran: the coordinator ledger is absent, but a representative single-site checkpoint
+    # is published under the shared checkpoint layout so the local-only control can be evaluated.
     artifacts = out_dir / "coordinator-artifacts"
     round_dirs = list(artifacts.glob("round-*")) if artifacts.exists() else []
-    assert round_dirs == []
+    checkpoint_path = Path(payload["representative_checkpoint_path"])
+    assert round_dirs == [checkpoint_path]
+    assert (checkpoint_path / "header.json").exists()
+    assert (checkpoint_path / "weights.safetensors").exists()
+    assert not (artifacts / "ledger.jsonl").exists()
 
     # Residency: the serialized report carries no raw-data JSON keys.
     report_keys = _all_keys(on_disk)

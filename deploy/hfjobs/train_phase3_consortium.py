@@ -667,6 +667,33 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     )
 
 
+def _save_shared_checkpoint(
+    *,
+    out_dir: Path,
+    encoder: Any,
+    predictor: Any,
+    cfg: LensembleConfig,
+    round_index: int,
+) -> str:
+    """Commit encoder/predictor weights under the standard checkpoint layout."""
+    from lensemble.artifacts.checkpoint import model_arch_from_config, save_checkpoint
+
+    weights: dict[str, torch.Tensor] = {}
+    for name, tensor in encoder.state_dict().items():
+        weights[f"encoder.{name}"] = tensor
+    for name, tensor in predictor.state_dict().items():
+        weights[f"predictor.{name}"] = tensor
+    return save_checkpoint(
+        out_dir / "coordinator-artifacts" / f"round-{round_index:05d}",
+        weights,
+        wmcp_version=cfg.model.wmcp_version,
+        round_index=round_index,
+        config_hash=config_hash(asdict(cfg)),
+        parent_hash=None,
+        model_arch=model_arch_from_config(cfg),
+    )
+
+
 def _artifact_targets(args: argparse.Namespace) -> Phase3ArtifactTargets:
     return Phase3ArtifactTargets(
         model_repo=args.out_repo or f"hf://models/local/{args.consortium_id}",
@@ -926,7 +953,10 @@ def _local_only_run(
 
     per_participant: list[dict[str, Any]] = []
     embeddings: dict[str, Any] = {}
-    for meta in metas:
+    local_checkpoint_hash: str | None = None
+    local_checkpoint_participant_id: str | None = None
+    local_checkpoint_path: str | None = None
+    for idx, meta in enumerate(metas):
         participant_cfg = _participant_cfg(cfg, args, data_source=meta.data_ref)
         encoder, predictor, action_head = _train_participant_in_isolation(
             args,
@@ -935,6 +965,18 @@ def _local_only_run(
             action_spec=action_spec,
             probe=probe,
         )
+        if idx == 0:
+            local_checkpoint_hash = _save_shared_checkpoint(
+                out_dir=out_dir,
+                encoder=encoder,
+                predictor=predictor,
+                cfg=participant_cfg,
+                round_index=int(args.num_rounds),
+            )
+            local_checkpoint_participant_id = meta.participant_id
+            local_checkpoint_path = str(
+                out_dir / "coordinator-artifacts" / f"round-{int(args.num_rounds):05d}"
+            )
         metrics: JepaWindowMetrics | None = evaluate_jepa_windows(
             participant_cfg,
             encoder=encoder,
@@ -978,6 +1020,9 @@ def _local_only_run(
         "frame_drift_deg": None if frame_drift_deg is None else float(frame_drift_deg),
         "manifest_path": str(manifest_path),
         "registry_path": str(registry_path),
+        "representative_checkpoint_hash": local_checkpoint_hash,
+        "representative_checkpoint_participant_id": local_checkpoint_participant_id,
+        "representative_checkpoint_path": local_checkpoint_path,
         "claim_boundary": _LOCAL_ONLY_CLAIM_BOUNDARY,
         "eval_budget": _EVAL_BUDGET,
     }

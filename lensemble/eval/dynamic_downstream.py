@@ -32,6 +32,7 @@ class DynamicEnvCheckpointRef(BaseModel):
 
     repo_id: str = Field(min_length=1)
     revision: str = Field(min_length=1)
+    round_index: int = Field(ge=0)
     checkpoint_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
