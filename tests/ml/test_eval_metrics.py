@@ -25,6 +25,29 @@ from lensemble.eval.mpc import PlanResult
 # --- effective dimension (the collapse guard) ---
 
 
+def test_collapse_metrics_robust_on_ill_conditioned_input() -> None:
+    """#264: a collapsed representation's covariance is so ill-conditioned that ``eigvalsh(X^T X)`` diverges
+    on the accelerated solver — exactly the regime the collapse metrics must read out. The stable SVD path
+    must return ``~1`` (collapsed), never raise.
+    """
+    from lensemble.eval.jepa_metrics import effective_rank
+    from lensemble.eval.metrics import covariance_eigenvalues
+
+    gen = torch.Generator().manual_seed(0)
+    # A near-rank-1 (collapsed) representation: one dominant direction + tiny noise.
+    collapsed = torch.randn(512, 1, generator=gen) @ torch.randn(
+        1, 32, generator=gen
+    ) + 1e-7 * torch.randn(512, 32, generator=gen)
+    assert effective_dim(collapsed) < 1.5  # ~1: collapsed
+    assert effective_rank(collapsed) < 1.5
+    # covariance_eigenvalues yields the covariance eigenvalues without forming X^T X.
+    centered = collapsed - collapsed.mean(dim=0, keepdim=True)
+    ev = covariance_eigenvalues(centered)
+    assert ev.numel() == 32
+    assert float(ev.min()) >= 0.0
+    assert float(ev.max()) > 0.0
+
+
 def test_effective_dim_matches_analytic_participation_ratio(tol) -> None:
     gen = torch.Generator().manual_seed(0)
     spectrum = torch.tensor([4.0, 2.0, 1.0, 0.25])  # known eigenvalue scale
