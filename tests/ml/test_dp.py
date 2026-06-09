@@ -54,6 +54,16 @@ def test_clip_boundary_and_zero_vector() -> None:
     assert torch.equal(clipped_zero, zero) and post_zero == 0.0
 
 
+def test_clip_reprojects_fp32_roundoff_after_large_projection() -> None:
+    generator = torch.Generator().manual_seed(11)
+    delta = torch.randn(524_288, generator=generator)
+
+    clipped, post = clip_delta(delta, 0.5)
+
+    assert float(clipped.norm()) <= 0.5
+    assert post <= 0.5
+
+
 def test_clip_is_bitwise_deterministic() -> None:
     delta = _unit(2) * 10.0
     a, na = clip_delta(delta, _CLIP)
