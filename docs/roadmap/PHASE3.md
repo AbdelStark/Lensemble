@@ -583,12 +583,23 @@ claim. The following limitations are stated as-is and must not be softened:
   gradient-noise-dominated — `val_pred` grows and `frame_drift` saturates over
   rounds — so the gauge contrast rests on the round-0 measurement and the DP-off
   control probes rather than the full DP trajectory.
-- **Federated collapse**: at the default outer step (`outer_lr=0.7`) with a
-  random-init warm-start (real V-JEPA-2 weights remain unvendored,
-  [#96](https://github.com/AbdelStark/Lensemble/issues/96)), the federated global
-  representation collapses over rounds (`effective_rank`→1 for the DP-off
-  probes); sustained non-collapsing federated training is a documented
-  follow-up.
+- **Federated collapse — CLOSED by the #259 MVP**: at the default outer step
+  (`outer_lr=0.7`) with the #249 weak anchor (`lambda_anc=0.01` re-snapshotting
+  the drifting global) the federated global representation collapsed over rounds
+  (`effective_rank`→1, `val_pred`→2×10⁵, drift 180°). The MVP M1 fixes
+  ([#259](https://github.com/AbdelStark/Lensemble/issues/259): anchor pinned to
+  the **fixed** round-0 reference, live Procrustes backstop on the encoder
+  terminal frame + predictor, tamed outer step) **achieve sustained
+  non-collapsing federated training** — the anchored run holds and grows
+  `effective_rank` (2.6→14.8 over 12 rounds, no collapse) with controlled drift,
+  4 orders of magnitude better `val_pred` than naive-FedAvg. See the MVP
+  Benchmarks / Results section in the README and
+  `docs/evidence/phase3_mvp_benchmark_report.json`
+  (`abdelstark/lensemble-phase3-converged-checkpoint` @ `a6f5a961…`). Remaining
+  limitation: the aggregated global's prediction quality does not yet match the
+  single-silo local-only baseline (`val_pred` ~0.025) — under DiLoCo
+  separate-averaging over heterogeneous silos, rank and predictability trade off
+  (not a collapse).
 - **Downstream**: closed-loop physical SO-100 task-success remains blocked
   pending stable-worldmodel
   ([#96](https://github.com/AbdelStark/Lensemble/issues/96)).

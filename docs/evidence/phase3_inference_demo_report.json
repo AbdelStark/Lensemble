@@ -1,0 +1,60 @@
+{
+  "controls": [
+    {
+      "label": "converged-federated",
+      "latent_mpc": {
+        "effective_dim": 2.161933905236547,
+        "episodes": 16,
+        "horizon": 8,
+        "mean_cost_reduction_vs_zero_action": 0.00013393668161173962,
+        "mean_planning_cost": 1277619.71875,
+        "mean_planning_wall_s": 5.997146698078723,
+        "planner": "icem",
+        "planning_samples": 128,
+        "success_rate": 0.0
+      },
+      "model_repo": "abdelstark/lensemble-phase3-converged-checkpoint",
+      "multistep_prediction": {
+        "effective_rank": 2.208156108856201,
+        "horizon": 8,
+        "skill_vs_identity": 53010435.59940984,
+        "val_pred_identity": 3.6154552577119525e-07,
+        "val_pred_model": 19.165685810148716,
+        "val_pred_random": 12.014630854129791,
+        "windows_used": 32
+      },
+      "revision": "3c2258ce4869de9fab52d11a8ec126a7c2f972e0"
+    },
+    {
+      "label": "naive-fedavg",
+      "latent_mpc": {
+        "effective_dim": 9.73919957549867,
+        "episodes": 16,
+        "horizon": 8,
+        "mean_cost_reduction_vs_zero_action": 4.7065498575688236e-07,
+        "mean_planning_cost": 100425161.0,
+        "mean_planning_wall_s": 5.7318958098767325,
+        "planner": "icem",
+        "planning_samples": 128,
+        "success_rate": 0.0
+      },
+      "model_repo": "abdelstark/lensemble-phase3-naive-control",
+      "multistep_prediction": {
+        "effective_rank": 1.009084939956665,
+        "horizon": 8,
+        "skill_vs_identity": 401307761958.6178,
+        "val_pred_identity": 2.5746051396206837e-07,
+        "val_pred_model": 103320.90265083313,
+        "val_pred_random": 52441.7872467041,
+        "windows_used": 32
+      },
+      "revision": "cd8481c4c041d610008491f13e64bf092d3bc94d"
+    }
+  ],
+  "held_out_data_ref": "abdelstark/lensemble-phase3-so100-silos/phase3-so100-silo4.h5",
+  "honest_boundary": "Latent-space goal-reaching / multi-step prediction on real held-out SO-100 data. Closed-loop physical task-success is NOT claimed here \u2014 it stays gated on the unvendored stable-worldmodel simulator (#96). Not a cryptographic honest-computation proof.",
+  "horizon": 8,
+  "schema_version": 1,
+  "task_env_id": "held-out-so100://phase3-so100-silo4",
+  "windows_available": 1176
+}
