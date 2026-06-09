@@ -232,6 +232,12 @@ def _args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--warm-start", default=None)
     parser.add_argument("--warm-start-round", type=int, default=12)
     parser.add_argument(
+        "--warm-start-encoder-only",
+        action="store_true",
+        help="Warm-start ONLY the encoder (fresh predictor) — the textbook 'federated head on a frozen "
+        "backbone' for 2-phase Fork-A.",
+    )
+    parser.add_argument(
         "--encoder-frozen",
         action="store_true",
         help="Fork A (RFC-0002): freeze f_theta at warm-start, federate g_phi only.",
@@ -746,19 +752,30 @@ def _load_warm_start(
     src = Path(args.warm_start)
     if src.exists():
         weights, _ = load_checkpoint(src)
-        return dict(weights), str(src)
-    from huggingface_hub import HfApi, hf_hub_download
+        ref = str(src)
+    else:
+        from huggingface_hub import HfApi, hf_hub_download
 
-    sha = HfApi().model_info(args.warm_start).sha or "main"
-    sub = f"coordinator-artifacts/round-{args.warm_start_round:05d}"
-    header = hf_hub_download(
-        args.warm_start, f"{sub}/header.json", repo_type="model", revision=sha
-    )
-    hf_hub_download(
-        args.warm_start, f"{sub}/weights.safetensors", repo_type="model", revision=sha
-    )
-    weights, _ = load_checkpoint(Path(header).parent)
-    return dict(weights), f"{args.warm_start}@{sha}:{sub}"
+        sha = HfApi().model_info(args.warm_start).sha or "main"
+        sub = f"coordinator-artifacts/round-{args.warm_start_round:05d}"
+        header = hf_hub_download(
+            args.warm_start, f"{sub}/header.json", repo_type="model", revision=sha
+        )
+        hf_hub_download(
+            args.warm_start,
+            f"{sub}/weights.safetensors",
+            repo_type="model",
+            revision=sha,
+        )
+        weights, _ = load_checkpoint(Path(header).parent)
+        ref = f"{args.warm_start}@{sha}:{sub}"
+    weights = dict(weights)
+    if getattr(args, "warm_start_encoder_only", False):
+        # Fresh predictor on the converged frozen encoder (the textbook "federated head on a frozen
+        # backbone"): keep only the encoder weights so the predictor trains from its random init.
+        weights = {k: v for k, v in weights.items() if k.startswith("encoder.")}
+        ref = f"{ref}#encoder-only"
+    return weights, ref
 
 
 def _real_run(
