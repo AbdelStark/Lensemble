@@ -36,6 +36,37 @@ def _silos(angles: dict[str, float]) -> dict[str, torch.Tensor]:
     return {pid: base @ _rot(deg).T for pid, deg in angles.items()}
 
 
+def test_degenerate_safe_records_zero_for_coinciding_frames() -> None:
+    """#262: a strong anchor can pin participants onto a near-identical (rank-deficient) frame. The default
+    diagnostic raises DegenerateProcrustes; ``degenerate_safe=True`` records it as 0° drift (the GOOD case).
+    """
+    from lensemble.errors import DegenerateProcrustes
+
+    # Two participants whose frames share a zeroed latent dimension -> M = T^T S is rank-deficient.
+    torch.manual_seed(0)
+    base = torch.randn(64, _D)
+    base[:, _D - 1] = 0.0
+    embeddings = {"p0": base.clone(), "p1": base @ _rot(0.0).T}
+
+    with pytest.raises(DegenerateProcrustes):
+        frame_drift(embeddings, round_index=0)
+
+    report = frame_drift(embeddings, round_index=0, degenerate_safe=True)
+    assert len(report.pairs) == 1
+    assert report.pairs[0].rotation_angle_deg == 0.0
+    assert report.pairs[0].procrustes_residual == 0.0
+
+
+def test_degenerate_safe_records_zero_drift_from_global() -> None:
+    """``degenerate_safe`` also covers the drift-from-global pass when a frame coincides with ``global``."""
+    torch.manual_seed(1)
+    base = torch.randn(64, _D)
+    base[:, _D - 1] = 0.0
+    embeddings = {"p0": base.clone(), "global": base.clone()}
+    report = frame_drift(embeddings, round_index=0, degenerate_safe=True)
+    assert report.drift_from_global["p0"] == 0.0
+
+
 def test_recovers_pairwise_angle_and_zero_for_unrotated(tol: object) -> None:
     angle_tol: float = tol.ANGLE_TOL_DEG  # type: ignore[attr-defined]
     report = frame_drift(_silos({"p0": 0.0, "p1": 10.0, "p2": 0.0}), round_index=3)

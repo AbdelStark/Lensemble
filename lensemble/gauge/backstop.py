@@ -5,21 +5,22 @@ exceeds the configured threshold, recompute the hard alignment ``Q_c* = procrust
 and apply it to the participant's *released* delta as a **pure linear operation** — so the result stays
 bitwise-deterministic and publicly recomputable (``INV-AGG-DETERMINISM``; RFC-0006 §3 ``recompute_alignment``).
 
-Activation-space realization (the recorded #18 decision). RFC-0002 §5 folds ``Q_c*`` into the encoder's
-terminal linear map and conjugates the predictor I/O (``g_phi -> Q g_phi Q^T``). The encoder here ends in a
-``LayerNorm`` with **no** terminal ``(d, d)`` linear to absorb ``Q`` into, and the maintainer chose **not**
-to add one, so only the *weight-expressible* part — the predictor conjugation — is applied to the committed
-delta. The encoder-frame component is bounded by the Layer-2 anchor (RFC-0002 §4) and lives in *activation
-space*, NOT in the committed weights — which is exactly why ``recompute_alignment`` (#62) measures residual
-encoder drift rather than verifying a weight-fold (the recorded #18/#62 verifiability tradeoff).
+Weight-space realization on BOTH frames (#262). RFC-0002 §5 folds ``Q_c*`` into the encoder's terminal
+linear map AND conjugates the predictor I/O (``g_phi -> Q g_phi Q^T``). The from-scratch MVP encoder ends in
+a terminal ``frame_proj`` ``(d, d)`` linear (``model/encoder.py``, identity-initialized) precisely so the
+*encoder* frame — the surface that collapses under gauge-blind averaging — is realigned in the **committed
+weights**, not only in activation space (the #18 stop-gap). So both gauge-bearing surfaces are folded:
 
-Concretely, the predictor conjugation ``g_phi -> Q g_phi Q^T`` is linear in the predictor delta and rotates
-exactly three params (latent dim ``d``, predictor width ``width``); every other predictor param and the
-whole encoder delta are returned **byte-identical**:
+- ENCODER frame (``encoder.frame_proj.weight`` ``(d, d)``): ``Δ <- Q @ Δ`` — rotate the ``d`` *output* rows of
+  the terminal frame projection by ``Q_c*`` (the gauge-bearing axis of ``f_theta``);
+- PREDICTOR I/O (``g_phi -> Q g_phi Q^T``), linear in the predictor delta, rotating exactly three params:
+  - ``predictor.in_proj.weight`` ``(width, d)``: ``Δ <- Δ @ Q^T`` (rotate the latent *input* axis);
+  - ``predictor.out_proj.weight`` ``(d, width)``: ``Δ <- Q @ Δ`` (rotate the latent *output* axis);
+  - ``predictor.out_proj.bias``  ``(d,)``:        ``Δ <- Q @ Δ``.
 
-- ``predictor.in_proj.weight`` ``(width, d)``: ``Δ <- Δ @ Q^T`` (rotate the latent *input* axis);
-- ``predictor.out_proj.weight`` ``(d, width)``: ``Δ <- Q @ Δ`` (rotate the latent *output* axis);
-- ``predictor.out_proj.bias``  ``(d,)``:        ``Δ <- Q @ Δ``.
+Every OTHER encoder param (``patch_embed``/``pos_embed``/``blocks``/``norm``) and every other predictor param
+is returned **byte-identical** — the gauge is a property of the terminal output frame, so only the terminal
+projection (encoder) and the latent I/O (predictor) carry ``Q``.
 
 Determinism / dtype (``INV-AGG-DETERMINISM``, conventions §9): the rotation is computed in fp32 (fp64 kept)
 exactly like :func:`~lensemble.gauge.procrustes.procrustes_align`, then cast back to the delta's dtype, so a
@@ -48,16 +49,24 @@ if TYPE_CHECKING:
 
     from torch import Tensor
 
-__all__ = ["realign_predictor_delta", "procrustes_backstop"]
+__all__ = [
+    "realign_predictor_delta",
+    "realign_encoder_frame_delta",
+    "procrustes_backstop",
+]
 
 _log = logging.getLogger(__name__)
 
 # The three predictor params the conjugation g_phi -> Q g_phi Q^T touches (the bare state_dict keys with the
-# `predictor.` group prefix, matching build_pseudogradient's `predictor.*` keys). Everything else — the whole
-# encoder delta and predictor.cond_proj/pos_embed/blocks/norm/in_proj.bias — is returned byte-identical.
+# `predictor.` group prefix, matching build_pseudogradient's `predictor.*` keys). Everything else — the rest
+# of the encoder delta and predictor.cond_proj/pos_embed/blocks/norm/in_proj.bias — is returned byte-identical.
 _IN_PROJ_WEIGHT = "predictor.in_proj.weight"  # (width, d): Δ <- Δ @ Q^T
 _OUT_PROJ_WEIGHT = "predictor.out_proj.weight"  # (d, width): Δ <- Q @ Δ
 _OUT_PROJ_BIAS = "predictor.out_proj.bias"  # (d,):       Δ <- Q @ Δ
+# The encoder's terminal gauge surface: the (d, d) frame projection whose OUTPUT rows carry the latent frame
+# (#262). Conjugating it (Δ <- Q @ Δ) realigns the encoder frame in the committed weights — the surface that
+# collapses under gauge-blind averaging. Every other encoder param is returned byte-identical.
+_FRAME_PROJ_WEIGHT = "encoder.frame_proj.weight"  # (d, d): Δ <- Q @ Δ
 
 # The clamp-and-retry singular floor for the degenerate path: one relaxed retry before skipping the backstop
 # for that participant (RFC-0002 §5 "the caller clamps/conditions and re-tries, or skips ... and logs").
@@ -108,6 +117,41 @@ def realign_predictor_delta(
     return out
 
 
+def realign_encoder_frame_delta(
+    encoder_delta: Mapping[str, Tensor], q_star: Tensor
+) -> dict[str, Tensor]:
+    """Conjugate an encoder-group delta's terminal frame by ``Q*`` — the encoder gauge fold-in (#262).
+
+    Rotates ONLY ``encoder.frame_proj.weight`` ``(d, d)`` by ``Δ <- Q @ Δ`` (rotate the ``d`` output rows of
+    the terminal frame projection — the gauge-bearing axis of ``f_theta``). Every other encoder param
+    (``patch_embed``/``pos_embed``/``blocks``/``norm``) is copied through **byte-identical**: the latent gauge
+    lives in the terminal output frame, so only the terminal projection carries ``Q``. Returns a NEW dict;
+    the input is not mutated.
+
+    ``q_star`` is the ``(d, d)`` rotation; the rotation is computed in fp32 (fp64 kept) and cast back to the
+    delta's dtype so the operation is dtype-preserving and bitwise-reproducible (``INV-AGG-DETERMINISM``).
+    ``Q = I`` is a no-op. When ``encoder.frame_proj.weight`` is absent the whole delta passes through
+    unchanged (a delta carrying no terminal frame surface has no encoder gauge to fold).
+    """
+    if q_star.ndim != 2 or q_star.shape[-1] != q_star.shape[-2]:
+        raise ValueError(
+            f"q_star must be a square (d, d) rotation, got {tuple(q_star.shape)}"
+        )
+    work = torch.float64 if q_star.dtype == torch.float64 else torch.float32
+    q = q_star.to(work)
+
+    out: dict[str, Tensor] = {}
+    for name, tensor in encoder_delta.items():
+        if name == _FRAME_PROJ_WEIGHT:
+            # (d, d) @ (d, d) — rotate the d output rows of the terminal frame projection by Q.
+            rotated = q @ tensor.to(work)
+            out[name] = rotated.to(tensor.dtype)
+        else:
+            # Everything else (patch_embed/pos_embed/blocks/norm) is byte-identical (a copy, not a view).
+            out[name] = tensor.clone()
+    return out
+
+
 def procrustes_backstop(
     deltas: Mapping[str, Mapping[str, Tensor]],
     embeddings: Mapping[str, Tensor],
@@ -120,10 +164,10 @@ def procrustes_backstop(
 
     For each participant id in ``deltas``: recompute ``Q_c*, residual = procrustes_align(embeddings[pid],
     e_ref)`` and ``angle = _rotation_angle_deg(Q_c*)``. When ``angle > threshold_deg`` the participant's
-    **predictor** delta is conjugated by ``Q_c*`` (:func:`realign_predictor_delta`); its encoder delta is left
-    UNCHANGED (the activation-space decision — there is no terminal encoder linear to absorb ``Q`` into).
-    When ``angle <= threshold_deg`` the backstop is un-fired and the participant's delta is returned
-    **byte-identical**.
+    **encoder** terminal frame (``encoder.frame_proj.weight``) AND **predictor** I/O are both conjugated by
+    ``Q_c*`` (:func:`realign_encoder_frame_delta` + :func:`realign_predictor_delta`) — the two gauge-bearing
+    surfaces folded in the committed weights (#262). When ``angle <= threshold_deg`` the backstop is un-fired
+    and the participant's delta is returned **byte-identical**.
 
     ``deltas`` maps ``participant_id -> {group.name -> Δ}`` (the un-flattened ``encoder.*``/``predictor.*``
     grouped delta); ``embeddings`` maps ``participant_id -> f_c(P)`` ``(n, d)``; ``e_ref`` is the reference
@@ -170,35 +214,41 @@ def procrustes_backstop(
 
         angle = _rotation_angle_deg(q_star)
         if angle > threshold_deg:
-            # Above threshold: conjugate the predictor delta; the encoder delta passes through byte-identical.
-            aligned[pid] = _apply_predictor_realignment(participant_delta, q_star)
+            # Above threshold: conjugate BOTH gauge surfaces — the encoder terminal frame and the predictor
+            # I/O (#262). Every other param passes through byte-identical.
+            aligned[pid] = _apply_realignment(participant_delta, q_star)
         else:
             # Un-fired: the delta is byte-identical (no realignment).
             aligned[pid] = _copy_grouped_delta(participant_delta)
     return aligned
 
 
-def _apply_predictor_realignment(
+def _apply_realignment(
     participant_delta: Mapping[str, Tensor], q_star: Tensor
 ) -> dict[str, Tensor]:
-    """Realign the ``predictor.*`` sub-delta by ``q_star``; pass the encoder (and any other group) through.
+    """Realign BOTH gauge surfaces of a grouped delta by ``q_star`` (#262): encoder frame + predictor I/O.
 
-    Splits the grouped delta into its predictor params (conjugated by :func:`realign_predictor_delta`) and the
-    encoder params (byte-identical, the activation-space decision), then reassembles the full grouped delta.
+    Splits the grouped delta into its ``encoder.*`` params (the terminal frame ``encoder.frame_proj.weight``
+    conjugated by :func:`realign_encoder_frame_delta`, the rest byte-identical) and its ``predictor.*`` params
+    (the I/O conjugated by :func:`realign_predictor_delta`, the rest byte-identical), then reassembles the
+    full grouped delta. A delta missing either group's gauge surface simply has nothing folded there.
     """
+    encoder_sub = {
+        name: tensor
+        for name, tensor in participant_delta.items()
+        if name.split(".", 1)[0] == "encoder"
+    }
     predictor_sub = {
         name: tensor
         for name, tensor in participant_delta.items()
         if name.split(".", 1)[0] == "predictor"
     }
-    realigned_predictor = realign_predictor_delta(predictor_sub, q_star)
+    realigned = realign_encoder_frame_delta(encoder_sub, q_star)
+    realigned.update(realign_predictor_delta(predictor_sub, q_star))
     out: dict[str, Tensor] = {}
     for name, tensor in participant_delta.items():
-        if name in realigned_predictor:
-            out[name] = realigned_predictor[name]
-        else:
-            # Encoder (and any non-predictor group): byte-identical copy (the encoder frame is NOT folded).
-            out[name] = tensor.clone()
+        # Any group that is neither encoder nor predictor (none today) passes through byte-identical.
+        out[name] = realigned[name] if name in realigned else tensor.clone()
     return out
 
 

@@ -773,6 +773,7 @@ def run_phase3_consortium(
     compute_metrics: bool = True,
     artifact_targets: Phase3ArtifactTargets | None = None,
     eval_budget: str | None = None,
+    enable_backstop: bool = False,
     claim_boundary: str,
 ) -> Phase3LongRunReport:
     """Drive the full Phase 3 consortium runtime and emit a long-run report with per-round metrics.
@@ -782,6 +783,11 @@ def run_phase3_consortium(
     participant configs, and — when ``compute_metrics`` is set — measures ``val_pred``/``val_sigreg``/
     ``effective_rank`` on the held-out eval split plus per-round ``frame_drift_deg`` from released
     pseudo-gradients. No raw participant trajectory ever leaves a participant boundary.
+
+    ``enable_backstop`` (#262) turns the LIVE Layer-3 Procrustes backstop ON in the coordinator: each
+    over-threshold participant's encoder terminal frame + predictor I/O are aligned to the shared round-0
+    reference before the outer step. Default OFF (the measured pass-through); the real anchored-federation
+    run sets it ON.
     """
 
     run_dir = Path(run_dir)
@@ -796,6 +802,7 @@ def run_phase3_consortium(
         transport=transport,
         artifacts_dir=run_dir / "coordinator-artifacts",
         trace_path=run_dir / "phase3_coordinator_trace.jsonl",
+        enable_backstop=enable_backstop,
     )
     coordinator_endpoint = f"in-process://{inputs.manifest.coordinator_id}"
     agents = {

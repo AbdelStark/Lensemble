@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from .anchor import FrameAnchor
-from .backstop import procrustes_backstop, realign_predictor_delta
+from .backstop import (
+    procrustes_backstop,
+    realign_encoder_frame_delta,
+    realign_predictor_delta,
+)
 from .distill import distill_consensus, distill_to_consensus
 from .drift import FrameDriftReport, PairDrift, frame_drift
 from .procrustes import procrustes_align
@@ -15,6 +19,7 @@ __all__ = [
     "procrustes_align",
     "procrustes_backstop",
     "realign_predictor_delta",
+    "realign_encoder_frame_delta",
     "FrameAnchor",
     "distill_consensus",
     "distill_to_consensus",

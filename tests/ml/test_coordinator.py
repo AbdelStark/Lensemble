@@ -363,7 +363,8 @@ def test_committed_refs_fetch_round_trip_through_transport() -> None:
     theta = transport.fetch_params(gs.theta_ref)
     phi = transport.fetch_params(gs.phi_ref)
     assert all(
-        k.startswith(("pos_embed", "patch_embed", "blocks", "norm")) for k in theta
+        k.startswith(("pos_embed", "patch_embed", "blocks", "norm", "frame_proj"))
+        for k in theta
     )
     total = sum(t.numel() for t in theta.values()) + sum(
         t.numel() for t in phi.values()
@@ -495,6 +496,111 @@ def test_backstop_fires_round_closes_reproducibly() -> None:
     assert (
         h_a != coord_p.global_state_hash()
     )  # the predictor-conjugation moved the committed params
+
+
+def _rot_in_plane(angle_deg: float, d: int = _D) -> torch.Tensor:
+    import math
+
+    a = math.radians(angle_deg)
+    c, s = math.cos(a), math.sin(a)
+    q = torch.eye(d)
+    q[0, 0], q[0, 1], q[1, 0], q[1, 1] = c, -s, s, c
+    return q
+
+
+def _frame_rotated_update(
+    cfg: LensembleConfig, *, round_index: int, angle_deg: float
+) -> PseudoGradient:
+    """A PseudoGradient whose ONLY non-zero param is ``encoder.frame_proj.weight`` = (R_angle − I).
+
+    Added to the round-0 global (whose ``frame_proj`` is the identity), the reconstructed encoder's terminal
+    frame becomes ``R_angle`` — so ``f_c(P) = E_ref @ R_angle^T`` drifts ``angle_deg`` from the round-0
+    reference, above the 15-deg threshold. Every other θ/φ param delta is zero, so the live backstop's only
+    effect is the frame conjugation (a clean, controlled live-path probe).
+    """
+    enc = build_encoder(cfg)
+    pred = build_predictor(cfg)
+    param_deltas: dict[str, torch.Tensor] = {}
+    for name, t in enc.state_dict().items():
+        if name == "frame_proj.weight":
+            param_deltas[f"encoder.{name}"] = (
+                _rot_in_plane(angle_deg) - torch.eye(_D)
+            ).to(torch.float32)
+        else:
+            param_deltas[f"encoder.{name}"] = torch.zeros_like(t, dtype=torch.float32)
+    for name, t in pred.state_dict().items():
+        param_deltas[f"predictor.{name}"] = torch.zeros_like(t, dtype=torch.float32)
+    return build_pseudogradient(
+        param_deltas, dataset_root=_ROOT, round_index=round_index, clipped=True
+    )
+
+
+def _pinned_probe_cfg(tmp_path: Path) -> LensembleConfig:
+    """A coordinator cfg with a real k>=d landmark probe pinned at ``cfg.data.probe_path`` (round-0 f_ref)."""
+    from lensemble.data.probe import build_probe
+    from lensemble.model.encoder import snapshot_reference
+
+    cfg = _cfg()
+    torch.manual_seed(cfg.determinism.root_seed)
+    f_ref = snapshot_reference(build_encoder(cfg))
+    points = torch.randn(
+        _D, _T, _C, _H, _W, generator=torch.Generator().manual_seed(4242)
+    )
+    probe = build_probe(points, torch.arange(_D), f_ref, probe_version=1)
+    probe_path = tmp_path / "probe.safetensors"
+    save_probe(probe, probe_path)
+    data = dataclasses.replace(cfg.data, probe_path=str(probe_path))
+    return dataclasses.replace(cfg, data=data)
+
+
+def test_live_backstop_fires_from_reconstructed_encoders(tmp_path: Path) -> None:
+    """#262: the LIVE coordinator (``enable_backstop=True`` + a pinned probe) reconstructs each participant's
+    encoder from its released delta, measures f_c(P) on the probe, and conjugates the over-threshold frames
+    before the outer step — changing the committed θ_{t+1} vs the backstop-off pass-through, reproducibly.
+    """
+    cfg = _pinned_probe_cfg(tmp_path)
+
+    def _commit(enable_backstop: bool) -> str:
+        transport = InProcessTransport()
+        coord = Coordinator(cfg, transport=transport, enable_backstop=enable_backstop)
+        # Two participants whose reconstructed encoders carry a 30/40-deg terminal-frame drift (> threshold).
+        transport.submit_update(
+            participant_id="c0",
+            round_index=0,
+            update=_frame_rotated_update(cfg, round_index=0, angle_deg=30.0),
+        )
+        transport.submit_update(
+            participant_id="c1",
+            round_index=0,
+            update=_frame_rotated_update(cfg, round_index=0, angle_deg=40.0),
+        )
+        coord.run(1)
+        assert coord.round_state() == RoundState.CLOSED
+        return coord.global_state_hash()
+
+    h_on_a = _commit(enable_backstop=True)
+    h_on_b = _commit(enable_backstop=True)
+    h_off = _commit(enable_backstop=False)
+
+    # Bitwise-reproducible despite the per-participant forward passes + Procrustes fold-in.
+    assert h_on_a == h_on_b
+    # The live backstop ACTUALLY fired: the committed θ_{t+1} differs from the un-wired pass-through.
+    assert h_on_a != h_off
+
+
+def test_live_backstop_disabled_without_probe_is_passthrough(tmp_path: Path) -> None:
+    """``enable_backstop=True`` but NO pinned probe leaves the backstop un-wired (no shared frame to align)."""
+    cfg = _cfg()  # no probe_path
+
+    def _commit(enable_backstop: bool) -> str:
+        transport = InProcessTransport()
+        coord = Coordinator(cfg, transport=transport, enable_backstop=enable_backstop)
+        _stage(transport, cfg, round_index=0, participant_ids=["c0", "c1"])
+        coord.run(1)
+        return coord.global_state_hash()
+
+    # With no probe, the enable flag is inert: the committed hash equals the plain pass-through.
+    assert _commit(enable_backstop=True) == _commit(enable_backstop=False)
 
 
 def test_default_coordinator_commits_same_hash_as_before() -> None:

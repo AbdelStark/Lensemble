@@ -198,8 +198,33 @@ def _args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--tubelet", type=int, default=1)
     parser.add_argument("--mlp-ratio", type=float, default=4.0)
     parser.add_argument("--lambda-sig", type=float, default=0.1)
-    parser.add_argument("--lambda-anc", type=float, default=0.01)
+    # #261: the per-round frame leash. The #249 runs used 0.01 (100x below the ObjectiveConfig schema
+    # default of 1.0), too weak to hold each participant near the shared broadcast global through the H
+    # inner steps, so released deltas rotated apart before aggregation and the global collapsed. The
+    # federated regime updates the anchor reference to the new global each round, so the leash can be the
+    # full schema strength without saturating; the tuned real-run default is 1.0, not 0.01.
+    parser.add_argument("--lambda-anc", type=float, default=1.0)
+    parser.add_argument(
+        "--anchor-variant",
+        choices=("landmark", "rotational"),
+        default="landmark",
+        help="Frame-anchor variant (RFC-0002 §4): landmark (Variant A) or rotational (Variant B).",
+    )
     parser.add_argument("--target-stop-gradient", action="store_true")
+    # #263: the DiLoCo outer step θ_{t+1} = θ_t − outer_lr · Nesterov_momentum(mean_c Δ_c). The
+    # FederationConfig schema defaults (outer_lr=0.7, momentum=0.9) are aggressive — they amplify a
+    # partially-aligned averaged delta at the global level each round, compounding the gauge collapse.
+    # The conservative real-run defaults below stop the outer step from fighting the M1 alignment fixes.
+    parser.add_argument("--outer-lr", type=float, default=0.5)
+    parser.add_argument("--outer-momentum", type=float, default=0.0)
+    # #262: the LIVE Layer-3 Procrustes backstop. Default ON for the real anchored-federation run — the
+    # coordinator reconstructs each participant's encoder from its released delta, measures f_c(P) on the
+    # pinned probe, and aligns each over-threshold participant's encoder terminal frame + predictor I/O to
+    # the shared round-0 reference before the outer step (RFC-0002 §5).
+    parser.add_argument(
+        "--backstop", dest="backstop", action="store_true", default=True
+    )
+    parser.add_argument("--no-backstop", dest="backstop", action="store_false")
     parser.add_argument(
         "--encoder-frozen",
         action="store_true",
@@ -301,6 +326,10 @@ def _coordinator_cfg(
         participant_count=participant_count,
         num_rounds=args.num_rounds,
         inner_horizon=args.inner_horizon,
+        # #263: the launcher-exposed DiLoCo outer-step knobs, threaded into the coordinator's
+        # OuterOptimizer (config_hash captures them, so the run is reproducible from the manifest).
+        outer_lr=args.outer_lr,
+        outer_nesterov_momentum=args.outer_momentum,
         fault_tolerance_min_participants=args.min_trainers,
         secure_agg_threshold=_secure_agg_threshold(args),
         aggregation_backend=args.secure_agg_backend,  # type: ignore[arg-type]
@@ -310,6 +339,7 @@ def _coordinator_cfg(
         base.objective,
         lambda_sig=args.lambda_sig,
         lambda_anc=args.lambda_anc,
+        anchor_variant=args.anchor_variant,  # #261: landmark (Variant A) / rotational (Variant B)
         target_stop_gradient=bool(args.target_stop_gradient),
     )
     privacy = dataclasses.replace(
@@ -735,6 +765,9 @@ def _real_run(
         compute_metrics=True,
         artifact_targets=_artifact_targets(args),
         eval_budget=_EVAL_BUDGET,
+        enable_backstop=bool(
+            args.backstop
+        ),  # #262: live Procrustes backstop (default on)
         claim_boundary=_CLAIM_BOUNDARY,
     )
     write_phase3_long_run_report(report, out_dir / "phase3_long_run_smoke_report.json")
@@ -854,6 +887,7 @@ def _local_only_run(
         round_index=0,
         probe=probe,
         expected_probe_hash=probe.content_hash.hex(),
+        degenerate_safe=True,  # a strong anchor can pin isolated frames together (~0° drift), not an error
     )
     frame_drift_deg = mean_frame_drift_deg(drift_report)
 

@@ -197,6 +197,7 @@ class Phase3CoordinatorService:
         transport: "Transport | None" = None,
         artifacts_dir: Path | None = None,
         trace_path: Path | None = None,
+        enable_backstop: bool = False,
     ) -> None:
         self.config = config
         self.manifest = validate_coordinator_run_agreement(manifest)
@@ -207,8 +208,14 @@ class Phase3CoordinatorService:
         )
         self._validate_config_agreement()
         self.transport: Transport = transport or InProcessTransport()
+        # #262: pass the live Layer-3 Procrustes backstop flag through to the round engine. Default OFF so
+        # every existing service test stays the measured pass-through; the consortium launcher turns it ON
+        # for the real anchored-federation run.
         self.coordinator = Coordinator(
-            config, transport=self.transport, artifacts_dir=artifacts_dir
+            config,
+            transport=self.transport,
+            artifacts_dir=artifacts_dir,
+            enable_backstop=enable_backstop,
         )
         self.trace_path = Path(trace_path or Path("coordinator_trace.jsonl"))
         self.trace_path.parent.mkdir(parents=True, exist_ok=True)
