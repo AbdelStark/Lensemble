@@ -621,6 +621,11 @@ def _build_probe(args: argparse.Namespace, cfg: LensembleConfig) -> PublicProbe:
         args.image_size,
         generator=torch.Generator().manual_seed(20260608),
     )
+    # Seed the f_ref snapshot with root_seed so the probe's round-0 reference targets t_i = f_ref(p_i) equal
+    # the coordinator's broadcast θ_0 frame (the coordinator builds θ_0 under torch.manual_seed(root_seed));
+    # the participants then anchor to a fixed reference that is a NO-OP at round 0, not an arbitrary frame
+    # they must first jump to (#264). Matches the ablation ladder's seeded f_ref.
+    torch.manual_seed(int(cfg.determinism.root_seed))
     return build_probe(
         points,
         torch.arange(probe_points),

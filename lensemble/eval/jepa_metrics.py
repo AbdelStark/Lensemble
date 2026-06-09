@@ -57,12 +57,17 @@ class JepaWindowMetrics:
 
 
 def effective_rank(embeddings: torch.Tensor) -> float:
-    """``exp(entropy of the covariance eigenspectrum)`` — the collapse read-out (RFC-0005 §4)."""
+    """``exp(entropy of the covariance eigenspectrum)`` — the collapse read-out (RFC-0005 §4).
+
+    The covariance eigenvalues are computed via the stable SVD path (:func:`covariance_eigenvalues`): a
+    collapsed representation's ``X^T X`` is so ill-conditioned that ``eigvalsh`` diverges on CUDA (#264),
+    and the collapsed regime is exactly what this metric must read out.
+    """
+    from lensemble.eval.metrics import covariance_eigenvalues
 
     x = embeddings.reshape(-1, embeddings.shape[-1]).to(torch.float32)
     x = x - x.mean(dim=0, keepdim=True)
-    cov = (x.T @ x) / max(1, x.shape[0] - 1)
-    ev = torch.linalg.eigvalsh(cov).clamp_min(1e-12)
+    ev = covariance_eigenvalues(x).clamp_min(1e-12)
     p = ev / ev.sum()
     return float(torch.exp(-(p * p.log()).sum()))
 

@@ -33,6 +33,23 @@ _BYTES_INT8 = 1  # int8 wire quantization (08 §4)
 _INT8_SCALE_BYTES = 4  # the fp32 per-tensor scale shipped alongside the int8 codes
 
 
+def covariance_eigenvalues(centered: "Tensor") -> "Tensor":
+    """Eigenvalues of the sample covariance of a CENTERED ``(n, d)`` matrix, computed STABLY (#264).
+
+    Computing ``eigvalsh(X^T X)`` squares the condition number, which makes the accelerated symmetric-eigen
+    solver DIVERGE on a collapsed / ill-conditioned representation (torch raises ``_LinAlgError`` error code
+    26 on CUDA) — exactly the regime the collapse metrics must measure. The SVD of the centered matrix is
+    backward-stable and yields the same eigenvalues ``sigma_i^2 / (n-1)`` without forming ``X^T X``; a CPU
+    fallback covers the rare accelerated-SVD non-convergence. Returns the covariance eigenvalues.
+    """
+    n = max(1, centered.shape[0] - 1)
+    try:
+        sv = torch.linalg.svdvals(centered)
+    except Exception:  # noqa: BLE001 — accelerated SVD non-convergence → robust CPU solver
+        sv = torch.linalg.svdvals(centered.detach().cpu())
+    return (sv.to(torch.float32) ** 2) / n
+
+
 def _fail(message: str, remediation: str) -> EvaluationError:
     return EvaluationError(
         message, code=LensembleErrorCode.EVALUATION_FAILED, remediation=remediation
@@ -93,8 +110,7 @@ def effective_dim(embeddings: Tensor) -> float:
             "pass at least two embeddings so the covariance is defined",
         )
     centered = x - x.mean(dim=0, keepdim=True)
-    cov = (centered.transpose(-2, -1) @ centered) / (x.shape[0] - 1)
-    eigvals = torch.linalg.eigvalsh(cov).clamp_min(0.0)
+    eigvals = covariance_eigenvalues(centered).clamp_min(0.0)
     sum1 = float(eigvals.sum())
     sum2 = float(eigvals.square().sum())
     if sum1 <= 0.0 or sum2 <= 0.0:

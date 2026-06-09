@@ -437,16 +437,18 @@ class Participant:
         o = cfg.objective
         anchor: AnchorTerm | None = None
         if float(o.lambda_anc) > 0.0:
-            f_ref = snapshot_reference(encoder)
-            landmarks = module_input_tensor(f_ref, probe.points[probe.landmark_idx])
-            ref_embeddings = f_ref(landmarks).tokens.detach()
-            anchor_obj = FrameAnchor(
+            # Anchor to the probe's FIXED round-0 reference targets ``t_i = f_ref(p_i)`` (INV-PROBE-PIN),
+            # the SAME stable attractor across ALL rounds that the simulation harness + ablation ladder use
+            # — NOT a re-snapshot of the CURRENT broadcast global. Re-snapshotting θ_t makes the anchor chase
+            # a moving, degrading target (as the federated global drifts the anchor target drifts with it), so
+            # it cannot RESIST collapse; pinning to the fixed round-0 frame holds every silo on one shared
+            # reference and is what lets the aggregated global hold its gauge over many rounds (#264/#261).
+            anchor = FrameAnchor(
                 probe,
-                ref_embeddings,
+                probe.landmark_targets,
                 variant=o.anchor_variant,
                 probe_hash=probe.content_hash.hex(),
-            )
-            anchor = anchor_obj.loss
+            ).loss
         # Derive A once here to assert it is constructible at this (seed, d); the Objective re-derives it
         # lazily at first call from the same seed, so the two agree (INV-SKETCH-CONSISTENCY). The encoder
         # latent dim d is the model's latent_dim (the V-JEPA hidden width).
