@@ -13,6 +13,7 @@
         "planning_samples": 128,
         "success_rate": 0.0
       },
+      "metric_boundary": "Corrected SO-100 proxy audit: skill_vs_identity is gameable; effective_rank is scale-invariant; latent-MPC success_rate=0.0 is a negative result, not a near-static-video success story; held-out magnitude collapse (~7.5e-6 latent variance; thoughts/collapse_fix_probe.py) and the central ceiling probe (thoughts/central_ceiling_probe.py) show this is not downstream usefulness.",
       "model_repo": "abdelstark/lensemble-phase3-converged-checkpoint",
       "multistep_prediction": {
         "effective_rank": 2.208156108856201,
@@ -38,6 +39,7 @@
         "planning_samples": 128,
         "success_rate": 0.0
       },
+      "metric_boundary": "Corrected SO-100 proxy audit: skill_vs_identity is gameable; effective_rank is scale-invariant; latent-MPC success_rate=0.0 is a negative result, not a near-static-video success story; held-out magnitude collapse (~7.5e-6 latent variance; thoughts/collapse_fix_probe.py) and the central ceiling probe (thoughts/central_ceiling_probe.py) show this is not downstream usefulness.",
       "model_repo": "abdelstark/lensemble-phase3-naive-control",
       "multistep_prediction": {
         "effective_rank": 1.009084939956665,
@@ -52,7 +54,7 @@
     }
   ],
   "held_out_data_ref": "abdelstark/lensemble-phase3-so100-silos/phase3-so100-silo4.h5",
-  "honest_boundary": "Latent-space goal-reaching / multi-step prediction on real held-out SO-100 data. Closed-loop physical task-success is NOT claimed here \u2014 it stays gated on the unvendored stable-worldmodel simulator (#96). Not a cryptographic honest-computation proof.",
+  "honest_boundary": "Corrected SO-100 proxy audit on real held-out data: skill_vs_identity is gameable, effective_rank is scale-invariant, and latent-MPC success_rate=0.0 is a negative result, not a near-static-video success story. Held-out magnitude collapse (~7.5e-6 latent variance; thoughts/collapse_fix_probe.py) plus the central ceiling probe (thoughts/central_ceiling_probe.py) show this checkpoint is not downstream-useful. Closed-loop physical task-success is NOT claimed here; it stays gated on the unvendored stable-worldmodel simulator (#96). Not a cryptographic honest-computation proof.",
   "horizon": 8,
   "schema_version": 1,
   "task_env_id": "held-out-so100://phase3-so100-silo4",

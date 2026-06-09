@@ -139,6 +139,24 @@ def test_rule_window_steps_non_positive() -> None:
     assert err.key == "data.window_steps"  # type: ignore[attr-defined]
 
 
+def test_rule_eval_planning_samples_non_positive() -> None:
+    base = load_config()
+    err = _expect(
+        dataclasses.replace(
+            base, eval=dataclasses.replace(base.eval, planning_samples=0)
+        )
+    )
+    assert err.key == "eval.planning_samples"  # type: ignore[attr-defined]
+
+
+def test_rule_eval_horizon_non_positive() -> None:
+    base = load_config()
+    err = _expect(
+        dataclasses.replace(base, eval=dataclasses.replace(base.eval, horizon=0))
+    )
+    assert err.key == "eval.horizon"  # type: ignore[attr-defined]
+
+
 def test_data_source_defaults_none_and_window_steps_one() -> None:
     # The #167 toy-pipeline knobs: no configured source by default; horizon 1.
     cfg = load_config()
@@ -283,6 +301,37 @@ def test_build_encoder_predictor_from_load_config() -> None:
     )
     head = build_action_head(cfg, spec)
     assert head.cond_dim == cfg.model.latent_dim  # cond_dim falls back to latent_dim
+
+
+def test_dynamic_env_small_shape_preset_is_valid() -> None:
+    cfg = load_config(
+        overrides=[
+            "model.encoder=scratch",
+            "model.latent_dim=128",
+            "model.num_tokens=9",
+            "model.num_frames=1",
+            "model.tubelet=1",
+            "model.image_size=48",
+            "model.patch_size=16",
+            "model.depth=4",
+            "model.num_heads=4",
+            "model.predictor_depth=2",
+            "model.predictor_width=128",
+            "objective.sigreg_sketch_dim=64",
+            "data.format=synthetic-dynamic",
+            "data.data_source=synthetic-dynamic://swipe-dot?seed=0&n_episodes=8&steps=64&image_size=48",
+            "data.window_steps=2",
+            "eval.env_id=kinematic://swipe-dot",
+        ]
+    )
+    assert cfg.model.encoder == "scratch"
+    assert cfg.model.latent_dim == 128
+    assert cfg.model.num_tokens == 9
+    assert cfg.model.num_tokens == (1 // 1) * (48 // 16) ** 2
+    assert cfg.model.latent_dim % cfg.model.num_heads == 0
+    assert cfg.objective.sigreg_sketch_dim <= cfg.model.latent_dim
+    assert cfg.gauge.anchor_landmark_count >= cfg.model.latent_dim
+    assert cfg.data.format == "synthetic-dynamic"
 
 
 def test_rule_vit_shape_inconsistency_rejected() -> None:

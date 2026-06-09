@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -198,6 +199,32 @@ def test_evaluate_records_the_alternating_success_rate(tmp_path: Path) -> None:
     assert report.success_rate == 0.5  # half the deterministic seeds are even
 
 
+def test_evaluate_populates_state_probe_r2_when_world_exposes_state(
+    tmp_path: Path,
+) -> None:
+    cfg = _cfg()
+    cfg = dataclasses.replace(
+        cfg,
+        eval=dataclasses.replace(
+            cfg.eval,
+            env_id="kinematic://swipe-dot",
+            planning_samples=4,
+            horizon=2,
+        ),
+    )
+    _save_model_checkpoint(cfg, tmp_path / "ckpt")
+    report = evaluate(
+        tmp_path / "ckpt",
+        "kinematic://swipe-dot",
+        cfg=cfg,
+        planner_iters=1,
+    )
+    assert report.state_probe_r2 is not None
+    assert math.isfinite(report.state_probe_r2)
+    assert report.state_probe_r2 <= 1.0
+    assert report.probe_accuracy is None
+
+
 # --- acceptance: a tampered checkpoint is rejected before any model loads ---
 
 
@@ -230,6 +257,7 @@ def test_parse_eval_report_rejects_too_new_schema() -> None:
         "time_per_action_ms": 1.0,
         "effective_dim": 2.0,
         "probe_accuracy": None,
+        "state_probe_r2": None,
         "run_manifest_hash": "c" * 64,
     }
     with pytest.raises(SchemaVersionMismatch):
@@ -336,6 +364,23 @@ def test_eval_report_rejects_out_of_range_probe_accuracy() -> None:
             time_per_action_ms=1.0,
             effective_dim=1.0,
             probe_accuracy=1.5,  # out of [0, 1]
+            run_manifest_hash="d" * 64,
+        )
+
+
+def test_eval_report_rejects_invalid_state_probe_r2() -> None:
+    with pytest.raises(EvaluationError):
+        EvalReport(
+            schema_version=EVAL_REPORT_SCHEMA_VERSION,
+            checkpoint_hash="a" * 64,
+            env_id="e",
+            planner="cem",
+            success_rate=0.5,
+            planning_samples=1,
+            time_per_action_ms=1.0,
+            effective_dim=1.0,
+            probe_accuracy=None,
+            state_probe_r2=1.1,
             run_manifest_hash="d" * 64,
         )
 

@@ -107,7 +107,7 @@ venv = ".venv"
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["tests"]
-addopts = "-ra --strict-markers --strict-config"
+addopts = "-ra --strict-markers --strict-config --import-mode=importlib"
 # The fixed hypothesis profile (deadline off, derandomized for replay) is registered in
 # tests/conftest.py and loaded there (07 §7); CI exports HYPOTHESIS_PROFILE=lensemble.
 

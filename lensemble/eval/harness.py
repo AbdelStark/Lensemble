@@ -25,7 +25,7 @@ from __future__ import annotations
 import hashlib
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable, cast
 
 import torch
 
@@ -33,10 +33,10 @@ from lensemble.artifacts import load_checkpoint
 from lensemble.config import build_manifest
 from lensemble.contracts import LatentState
 from lensemble.errors import EvaluationError, LensembleErrorCode
-from lensemble.eval.metrics import effective_dim, success_rate
+from lensemble.eval.metrics import effective_dim, state_probe_r2, success_rate
 from lensemble.eval.mpc import Planner
 from lensemble.eval.report import EVAL_REPORT_SCHEMA_VERSION, EvalReport
-from lensemble.eval.world import resolve_env
+from lensemble.eval.world import KINEMATIC_SWIPE_DOT_ENV_ID, resolve_env
 from lensemble.model import build_action_head, build_encoder, build_predictor
 
 if TYPE_CHECKING:
@@ -72,12 +72,13 @@ def evaluate(
     supplies): the typed ``ModelConfig``->architecture bridge is not in the tree yet (the CLI hand-builds
     it), so pass a config whose ``model`` carries those fields.
 
-    Postconditions: returns an :class:`EvalReport` carrying ``success_rate`` (held-out MPC success
-    fraction), ``planning_samples``, ``time_per_action_ms`` (mean planning wall-cost per action),
-    ``effective_dim`` (the collapse guard over the per-episode latents), ``probe_accuracy`` (``None`` — no
-    probe is wired here), ``checkpoint_hash`` (the artifact ``content_hash``), and ``run_manifest_hash``
-    (a deterministic hash over the eval-mode ``RunManifest``, excluding the non-semantic ``created_at``).
-    The report carries no tensor (``INV-RESIDENCY``).
+    Postconditions: returns an :class:`EvalReport` carrying ``success_rate`` (true ``succeeded()`` held-out
+    MPC success fraction; reported but non-binding for RFC-0017 because planning still optimizes latent
+    goal-energy), ``planning_samples``, ``time_per_action_ms`` (mean planning wall-cost per action),
+    ``effective_dim`` (the collapse guard over the per-episode latents), ``state_probe_r2`` when the world
+    exposes resident true state labels, ``checkpoint_hash`` (the artifact ``content_hash``), and
+    ``run_manifest_hash`` (a deterministic hash over the eval-mode ``RunManifest``, excluding the
+    non-semantic ``created_at``). The report carries no tensor (``INV-RESIDENCY``).
 
     Raises: :class:`~lensemble.errors.CheckpointIntegrityError` on a tampered checkpoint and
     :class:`~lensemble.errors.SchemaVersionMismatch` on a too-new artifact (both propagate from
@@ -133,14 +134,22 @@ def evaluate(
 
     successes: list[bool] = []
     episode_latents: list[Tensor] = []
+    state_probe_latents: list[Tensor] = []
+    state_probe_targets: list[Tensor] = []
     per_action_seconds: list[float] = []
 
     with torch.no_grad():
         goal_clip = world.goal()
         initial_clips = [world.reset(seed) for seed in seeds]
-        encoded = encoder(torch.stack([goal_clip, *initial_clips], dim=0)).tokens
-        encoded = encoded.reshape(len(seeds) + 1, -1)
+        encoded_tokens = encoder(torch.stack([goal_clip, *initial_clips], dim=0)).tokens
+        encoded = encoded_tokens.reshape(len(seeds) + 1, -1)
         zg = encoded[:1]
+        state_fn = getattr(world, "state", None)
+        state_reader: Callable[[], torch.Tensor] | None = (
+            cast(Callable[[], torch.Tensor], state_fn)
+            if env_id == KINEMATIC_SWIPE_DOT_ENV_ID and callable(state_fn)
+            else None
+        )
         for idx, seed in enumerate(seeds):
             z0 = encoded[idx + 1 : idx + 2]
             episode_latents.append(z0.reshape(-1))
@@ -158,13 +167,32 @@ def evaluate(
             per_action_seconds.append((time.perf_counter() - start) / cfg.eval.horizon)
 
             world.reset(seed)
+            if state_reader is not None:
+                state_probe_latents.append(encoded_tokens[idx + 1].detach().cpu())
+                state_probe_targets.append(state_reader().detach().cpu())
             for t in range(plan.actions.shape[0]):
-                world.step(plan.actions[t].detach().cpu())
+                next_clip = world.step(plan.actions[t].detach().cpu())
+                if state_reader is not None:
+                    next_tokens = encoder(next_clip.unsqueeze(0)).tokens[0]
+                    state_probe_latents.append(next_tokens.detach().cpu())
+                    state_probe_targets.append(state_reader().detach().cpu())
             successes.append(bool(world.succeeded()))
 
     # 6. Metrics (consume lensemble.eval.metrics); probe is unwired here -> None.
     rate = success_rate(successes)
     eff_dim = effective_dim(torch.stack(episode_latents))
+    probe_r2 = None
+    if len(state_probe_latents) >= 4:
+        latents = torch.stack(state_probe_latents)
+        targets = torch.stack(state_probe_targets)
+        split = max(2, int(0.7 * latents.shape[0]))
+        if latents.shape[0] - split >= 2:
+            probe_r2 = state_probe_r2(
+                latents[:split],
+                targets[:split],
+                latents[split:],
+                targets[split:],
+            )
     time_per_action_ms = (sum(per_action_seconds) / len(per_action_seconds)) * 1000.0
 
     # 7. Bind the report to a deterministic eval-mode RunManifest hash (created_at is non-semantic).
@@ -184,5 +212,6 @@ def evaluate(
         time_per_action_ms=time_per_action_ms,
         effective_dim=eff_dim,
         probe_accuracy=None,
+        state_probe_r2=probe_r2,
         run_manifest_hash=run_manifest_hash,
     )

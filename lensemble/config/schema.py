@@ -28,7 +28,9 @@ ENCODER_DIM: dict[str, int] = {
 
 @dataclass(frozen=True)
 class ModelConfig:
-    encoder: Literal["vjepa2-vit-l", "vjepa2-vit-h", "vjepa2-vit-g"] = "vjepa2-vit-l"
+    encoder: Literal["vjepa2-vit-l", "vjepa2-vit-h", "vjepa2-vit-g", "scratch"] = (
+        "vjepa2-vit-l"
+    )
     warm_start_release: str = "vjepa2-2.0"
     latent_dim: int = (
         1024  # d — the ViT hidden dim build_encoder/build_predictor read (#166)
@@ -118,7 +120,9 @@ class PrivacyConfig:
 
 @dataclass(frozen=True)
 class DataConfig:
-    format: Literal["lance", "hdf5", "lerobot", "lerobot-h5"] = "lance"
+    format: Literal["lance", "hdf5", "lerobot", "lerobot-h5", "synthetic-dynamic"] = (
+        "lance"
+    )
     residency_enforced: bool = (
         True  # INV-RESIDENCY (fail-closed; never disabled in Stage C)
     )
@@ -315,7 +319,7 @@ def validate_config(cfg: LensembleConfig) -> None:
     """
     _validate_literals(cfg)
     m, o, g, fed = cfg.model, cfg.objective, cfg.gauge, cfg.federation
-    p, d, det = cfg.privacy, cfg.data, cfg.determinism
+    p, d, e, det = cfg.privacy, cfg.data, cfg.eval, cfg.determinism
 
     # Latent dimension positive and consistent with the warm-start release's emitted dimension.
     if m.latent_dim <= 0 or m.num_tokens <= 0:
@@ -447,6 +451,21 @@ def validate_config(cfg: LensembleConfig) -> None:
             d.window_steps,
             "> 0",
             "set data.window_steps to a positive training-window horizon",
+        )
+
+    if e.planning_samples <= 0:
+        raise _fail(
+            "eval.planning_samples",
+            e.planning_samples,
+            "> 0",
+            "set eval.planning_samples to a positive planner sample count",
+        )
+    if e.horizon <= 0:
+        raise _fail(
+            "eval.horizon",
+            e.horizon,
+            "> 0",
+            "set eval.horizon to a positive planning horizon",
         )
 
     # Residency across a network boundary (INV-RESIDENCY).

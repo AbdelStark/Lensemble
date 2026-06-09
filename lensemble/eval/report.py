@@ -17,6 +17,7 @@ never a best-effort parse — mirroring ``parse_frame_drift_record``.
 
 from __future__ import annotations
 
+import math
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
@@ -55,6 +56,9 @@ class EvalReport(BaseModel):
     probe_accuracy: (
         float | None
     )  # supporting linear-probe accuracy in [0, 1], or None if unwired
+    state_probe_r2: float | None = (
+        None  # binding RFC-0017 ground-truth state probe R2, or None if unavailable
+    )
     run_manifest_hash: str  # binds the report to its RunManifest
 
     @model_validator(mode="after")
@@ -77,6 +81,14 @@ class EvalReport(BaseModel):
                 f"probe_accuracy must be in [0, 1] when present, got {self.probe_accuracy}",
                 code=LensembleErrorCode.EVALUATION_FAILED,
                 remediation="probe_accuracy is a held-out accuracy fraction; fix the probe metric",
+            )
+        if self.state_probe_r2 is not None and (
+            not math.isfinite(self.state_probe_r2) or self.state_probe_r2 > 1.0
+        ):
+            raise EvaluationError(
+                f"state_probe_r2 must be finite and <= 1 when present, got {self.state_probe_r2}",
+                code=LensembleErrorCode.EVALUATION_FAILED,
+                remediation="state_probe_r2 is the held-out ground-truth state R2; fix the probe computation",
             )
         return self
 

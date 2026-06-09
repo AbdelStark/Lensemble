@@ -52,10 +52,11 @@ nav:
       - Implementation: roadmap/IMPLEMENTATION.md
       - Phase 2 Empirical Evidence: roadmap/PHASE2.md
       - Phase 3 Consortium Training: roadmap/PHASE3.md
+      - Dynamic Env Evidence: roadmap/DYNAMIC_ENV.md
   - Evidence:
       - Phase 2 Model Card: evidence/phase2_model_card.md
       - Phase 3 Model Card: evidence/phase3_model_card.md
-      - MVP Model Card (converged): evidence/phase3_mvp_model_card.md
+      - MVP Model Card (corrected SO-100): evidence/phase3_mvp_model_card.md
   - Specification:
       - Overview: spec/00-overview.md
       - Architecture: spec/01-architecture.md
@@ -86,3 +87,4 @@ nav:
       - RFC-0014 Provenance Commitments: rfcs/RFC-0014-provenance-commitments.md
       - RFC-0015 Observability: rfcs/RFC-0015-observability-diagnostics.md
       - RFC-0016 Deployment & Vendoring: rfcs/RFC-0016-deployment-vendoring-topology.md
+      - RFC-0017 Dynamic Env & Ground Truth Metrics: rfcs/RFC-0017-dynamic-env-ungameable-metrics.md

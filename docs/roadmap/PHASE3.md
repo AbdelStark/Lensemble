@@ -528,12 +528,15 @@ paper-scale SO-100 task performance or cryptographic honest-computation proof.
 The downstream eval report at
 [`docs/evidence/phase3_downstream_eval_report.json`](../evidence/phase3_downstream_eval_report.json)
 (also published to the checkpoint repo) records real held-out SO-100 latent
-metrics beyond the `synthetic://toy` boundary — final-round `effective_rank`
-≈35.8/256 with a non-toy planner budget. Closed-loop physical task-success
+metrics, but it is corrected as a non-usefulness surface: `effective_rank`
+≈35.8/256 is scale-invariant and blind to held-out magnitude collapse
+(`~7.5e-6` latent variance; `thoughts/collapse_fix_probe.py`). The central
+ceiling probe (`thoughts/central_ceiling_probe.py`) shows the SO-100 checkpoint
+does not clear a downstream usefulness ceiling. Closed-loop physical task-success
 stays `blocked` with two specific blockers: stable-worldmodel is unvendored
-([#96](https://github.com/AbdelStark/Lensemble/issues/96), maintainer-gated) and
-latent-MPC is uninformative on the collapsed DP-off control checkpoints
-([#244](https://github.com/AbdelStark/Lensemble/issues/244)).
+([#96](https://github.com/AbdelStark/Lensemble/issues/96), maintainer-gated), and
+the checkpoint is not downstream-useful despite its proxy `val_pred`/`effective_rank`
+scalars ([#244](https://github.com/AbdelStark/Lensemble/issues/244)).
 
 The generated model card, evidence bundle, Phase 3 reports, run manifest, and
 final checkpoint header/weights are published to the target model repository at
@@ -555,7 +558,7 @@ non-collapsing federated training; see the Final Claim Boundary).
 | Residency | Redaction tests and reports show no raw observations, raw actions, latents, embeddings, private action-head weights, tokens, or secrets cross boundaries. | Met. Redaction contract enforced across the regenerated observability report (11 round summaries, one induced dropout). |
 | Aggregation/privacy | Secure aggregation and DP accounting are exercised, or fallback/blockers are recorded in report and model card. | Met. Per-round `secure_sum` + DP `(ε≈5.30, δ=1e-5, rdp, noise_multiplier=1.0, clip_norm=0.5)`. |
 | Training | At least ten closed rounds, or an explicit blocker with the maximum completed closed-round evidence. | Met. Ten closed rounds at `latent_dim=256`, `num_tokens=196`; final global hash `bb31c092…`, run-manifest SHA-256 `21819c9b…`; per-round `effective_rank` ≈36–47/256. |
-| Evaluation | A downstream eval report goes beyond the Phase 2 toy boundary where feasible, with blocked rows for unavailable controls. | Met beyond `synthetic://toy` (real held-out SO-100 latent metrics, final-round `effective_rank` ≈35.8/256), with four completed controls and zero blocked controls; closed-loop task-success stays an explicit blocker ([#96](https://github.com/AbdelStark/Lensemble/issues/96), [#244](https://github.com/AbdelStark/Lensemble/issues/244)). |
+| Evaluation | A downstream eval report goes beyond the Phase 2 toy boundary where feasible, with blocked rows for unavailable controls. | Corrected. The SO-100 report records real held-out proxy metrics, but `effective_rank` is scale-invariant, `skill_vs_identity` is gameable, and held-out magnitude collapse (`~7.5e-6`; `thoughts/collapse_fix_probe.py`) plus the central ceiling probe (`thoughts/central_ceiling_probe.py`) prevent a usefulness claim; closed-loop task-success stays an explicit blocker ([#96](https://github.com/AbdelStark/Lensemble/issues/96), [#244](https://github.com/AbdelStark/Lensemble/issues/244)). |
 | Observability | Participant lifecycle, dropout/retry, timing, communication, and artifact-publication status are reported. | Met. One induced dropout closes with `effective_quorum=3` of 4 and no retry consumed. |
 | Release | Checkpoint repo publishes final checkpoint, reports, evidence bundle, and model card at immutable revisions. | Met. [`abdelstark/lensemble-phase3-consortium-checkpoint`](https://huggingface.co/abdelstark/lensemble-phase3-consortium-checkpoint) @ `828e210c` (`publication.status: hf_jobs_release`); bundle `published` with nine artifact checks `exists:true`. |
 | Claims | Public text says this is consortium-engineering evidence, not paper-scale performance or cryptographic honest-computation proof. | Met. See the Final Claim Boundary below. |
@@ -583,23 +586,25 @@ claim. The following limitations are stated as-is and must not be softened:
   gradient-noise-dominated — `val_pred` grows and `frame_drift` saturates over
   rounds — so the gauge contrast rests on the round-0 measurement and the DP-off
   control probes rather than the full DP trajectory.
-- **Federated collapse — CLOSED by the #259 MVP**: at the default outer step
+- **Federated gauge failure — narrowed by the #259 MVP, not a usefulness closeout**: at the default outer step
   (`outer_lr=0.7`) with the #249 weak anchor (`lambda_anc=0.01` re-snapshotting
   the drifting global) the federated global representation collapsed over rounds
   (`effective_rank`→1, `val_pred`→2×10⁵, drift 180°). The MVP M1 fixes
   ([#259](https://github.com/AbdelStark/Lensemble/issues/259): anchor pinned to
   the **fixed** round-0 reference, live Procrustes backstop on the encoder
-  terminal frame + predictor, tamed outer step) **achieve sustained
-  non-collapsing federated training** — the anchored run holds and grows
-  `effective_rank` (2.6→14.8 over 12 rounds, no collapse) with controlled drift,
-  4 orders of magnitude better `val_pred` than naive-FedAvg. See the MVP
+  terminal frame + predictor, tamed outer step) reduce the naive-FedAvg gauge
+  failure — the anchored run holds and grows `effective_rank` (2.6→14.8 over 12
+  rounds) with controlled drift and 4 orders of magnitude better proxy `val_pred`
+  than naive-FedAvg. This does not prove downstream usefulness: the held-out
+  representation has magnitude collapse (`~7.5e-6` latent variance;
+  `thoughts/collapse_fix_probe.py`), the central ceiling probe
+  (`thoughts/central_ceiling_probe.py`) does not clear, `skill_vs_identity` is
+  gameable, and `effective_rank` is scale-invariant. In plain text:
+  skill_vs_identity is gameable; effective_rank is scale-invariant. See the corrected MVP
   Benchmarks / Results section in the README and
   `docs/evidence/phase3_mvp_benchmark_report.json`
-  (`abdelstark/lensemble-phase3-converged-checkpoint` @ `a6f5a961…`). Remaining
-  limitation: the aggregated global's prediction quality does not yet match the
-  single-silo local-only baseline (`val_pred` ~0.025) — under DiLoCo
-  separate-averaging over heterogeneous silos, rank and predictability trade off
-  (not a collapse).
+  (`abdelstark/lensemble-phase3-converged-checkpoint` @ `a6f5a961…`). The
+  dynamic-env RFC-0017 pivot is the binding ground-truth usefulness path.
 - **Downstream**: closed-loop physical SO-100 task-success remains blocked
   pending stable-worldmodel
   ([#96](https://github.com/AbdelStark/Lensemble/issues/96)).

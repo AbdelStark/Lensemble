@@ -53,6 +53,7 @@ _LEROBOT_SCHEME = "lerobot://"
 # which the suffix table maps to the lensemble `hdf5` store, so it MUST be selected by an explicit scheme
 # (or fmt=) rather than the suffix.
 _LEROBOT_H5_SCHEME = "lerobot-h5://"
+_SYNTHETIC_DYNAMIC_SCHEME = "synthetic-dynamic://"
 
 
 def register_adapter(
@@ -104,6 +105,8 @@ def _resolve_fmt(source: "str | Path", fmt: "Format | None") -> str:
     if fmt is not None:
         return fmt
     text = str(source)
+    if text.startswith(_SYNTHETIC_DYNAMIC_SCHEME):
+        return "synthetic-dynamic"
     if text.startswith(_LEROBOT_H5_SCHEME):
         return "lerobot-h5"
     if text.startswith(_LEROBOT_SCHEME):

@@ -23,7 +23,7 @@ PHASE3_CONSORTIUM_PROTOCOL_VERSION = "phase3-consortium-v1"
 
 ParticipantRole = Literal["trainer", "evaluator", "observer"]
 ActionKindName = Literal["continuous", "discrete"]
-DataFormatName = Literal["lance", "hdf5", "lerobot", "lerobot-h5"]
+DataFormatName = Literal["lance", "hdf5", "lerobot", "lerobot-h5", "synthetic-dynamic"]
 TransportMode = Literal["in_process", "network"]
 SecureAggregationBackendName = Literal["simulated", "masking", "tee"]
 DPAccountantName = Literal["rdp", "prv"]
