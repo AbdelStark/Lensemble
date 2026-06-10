@@ -120,11 +120,17 @@ check("isValidRunId rejects junk", () => {
   assert(!isValidRunId(""), "accepted empty id");
 });
 
-check("auto refresh defers while hidden, unfocused, or editing form fields", () => {
-  assert(shouldDeferAutoRefresh({ documentHidden: true }), "hidden document must defer");
+check("auto refresh keeps background tabs live but defers focused form edits", () => {
   assert(
-    shouldDeferAutoRefresh({ documentHasFocus: false }),
-    "unfocused document must defer",
+    !shouldDeferAutoRefresh({ documentHidden: true, documentHasFocus: false }),
+    "hidden background documents must keep refreshing data",
+  );
+  assert(
+    !shouldDeferAutoRefresh({
+      documentHasFocus: false,
+      activeElement: { tagName: "INPUT" },
+    }),
+    "unfocused documents must keep refreshing even if their last active element was an input",
   );
   assert(
     activeElementBlocksAutoRefresh({ tagName: "INPUT" }),
@@ -143,6 +149,13 @@ check("auto refresh defers while hidden, unfocused, or editing form fields", () 
     "contenteditable focus must block DOM replacement",
   );
   assert(!activeElementBlocksAutoRefresh({ tagName: "BUTTON" }), "buttons should not freeze refreshes");
+  assert(
+    shouldDeferAutoRefresh({
+      documentHasFocus: true,
+      activeElement: { tagName: "INPUT" },
+    }),
+    "focused input must block DOM replacement",
+  );
   assert(
     !shouldDeferAutoRefresh({
       documentHidden: false,

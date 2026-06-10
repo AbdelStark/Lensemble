@@ -8,22 +8,16 @@ export function activeElementBlocksAutoRefresh(activeElement) {
 }
 
 export function shouldDeferAutoRefresh({
-  documentHidden = false,
   documentHasFocus = true,
   activeElement = null,
 } = {}) {
-  return (
-    Boolean(documentHidden)
-    || !documentHasFocus
-    || activeElementBlocksAutoRefresh(activeElement)
-  );
+  return Boolean(documentHasFocus) && activeElementBlocksAutoRefresh(activeElement);
 }
 
 export function shouldDeferAutoRefreshForDocument(doc = globalThis.document) {
   if (!doc) return false;
   const documentHasFocus = typeof doc.hasFocus === "function" ? doc.hasFocus() : true;
   return shouldDeferAutoRefresh({
-    documentHidden: Boolean(doc.hidden),
     documentHasFocus,
     activeElement: doc.activeElement,
   });
