@@ -47,6 +47,11 @@ comments as public claim surfaces, not scratch notes.
 - `deploy/hfjobs/` contains launchers and HF Jobs run documentation.
 - `web/dynamic-env-demo/` is an ONNX inference and JS/Canvas environment demo
   only.
+- `web/federated-demo/` is the browser federated demo. It has a frontend-only
+  simulator plus a local backend path served by
+  `uv run lensemble demo federated --port 8765`. The backend accepts
+  metadata-only browser-surrogate update artifacts; do not describe this as
+  production browser training.
 
 ## Useful Validation Commands
 
@@ -54,5 +59,6 @@ comments as public claim surfaces, not scratch notes.
 uv run python scripts/check_docs_links.py docs SPEC.md README.md
 uv run python -m mkdocs build --strict
 uv run pytest tests/ml/test_dynamic_env_browser_demo.py tests/ml/test_dynamic_env_evidence_bundle.py
+uv run pytest tests/ml/test_federated_demo_app.py
 git diff --check
 ```

@@ -52,6 +52,7 @@ SO-100 and not paper-scale robotics evidence.
 | Observability/privacy report | `scripts/dynamic_env_observability_report.py` | Per-round DP epsilon, secure-sum status, communication bytes, run-manifest hash binding. |
 | Benchmark/card/bundle | `scripts/dynamic_env_benchmark.py` | Requires the full artifact-kind set and rejects a failed R2 gate or model-card drift. |
 | Browser north-star | `scripts/dynamic_env_onnx_export.py` + `web/dynamic-env-demo/` | ONNX inference and JS/Canvas env-sim only; browser training is not claimed. |
+| Browser federated demo | `uv run lensemble demo federated --port 8765` + `web/federated-demo/` | QR joins, backend lifecycle, browser-surrogate update metadata, aggregation, inference attachment, and evidence export; educational systems demo only. |
 
 ## Launch Shape
 
@@ -96,7 +97,8 @@ hf jobs uv run --flavor a10g-large --timeout 2h --secrets HF_TOKEN \
 | The HF launcher records a true scratch architecture. | `--encoder scratch`, `tests/ml/test_phase3_consortium_launcher.py` | Implemented locally. |
 | The published checkpoint clears the binding gate. | `dynamic_env_benchmark_report.json`: federated `state_probe_r2 >= 0.5` and margin over random / naive-FedAvg / local-only, DP-on | Blocked: federated R2 is `0.8885337114`, local-only is `0.8838405609`, margin is `0.0046931505 < 0.05`. |
 | The final model card is integrity chained. | `dynamic_env_evidence_bundle.json` with required artifact kinds and byte-identical card embedding | Producer implemented; no success bundle/model card published while the binding margin fails. |
-| Browser demo is scoped correctly. | `web/dynamic-env-demo/`, `scripts/dynamic_env_onnx_export.py`, `tests/ml/test_dynamic_env_browser_demo.py` | Implemented as ONNX inference + JS/Canvas env-sim; browser training is not claimed. |
+| Browser inference demo is scoped correctly. | `web/dynamic-env-demo/`, `scripts/dynamic_env_onnx_export.py`, `tests/ml/test_dynamic_env_browser_demo.py` | Implemented as ONNX inference + JS/Canvas env-sim; browser training is not claimed. |
+| Browser federated demo is scoped correctly. | `web/federated-demo/`, `lensemble/demo/`, `tests/ml/test_federated_demo_app.py`, `docs/roadmap/BROWSER_FEDERATED_DEMO.md` | Implemented as a local educational run-orchestration demo with metadata-only browser-surrogate updates, not production browser training. |
 
 ## Non-Claims
 

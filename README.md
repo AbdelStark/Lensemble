@@ -204,6 +204,32 @@ not published as a success artifact; the code path correctly rejects the
 overclaim. Continue to frame this slice as a clean concept/demo path, not as
 evidence that federated training materially outperforms local-only.
 
+## Browser Federated Demo App (#294)
+
+The browser federated demo app is now implemented as an educational systems
+surface for the same dynamic-env framing. Run it locally with:
+
+```bash
+uv run lensemble demo federated --port 8765
+```
+
+The app supports a frontend-only simulator plus a local backend API mode. In
+backend mode a host can create a run, configure max participants/quorum/rounds,
+share a QR join URL, watch participant lifecycle state, start/abort/drop timed
+out participants, collect browser-surrogate update metadata, close a
+coordinator-style round, attach checkpoint-like and inference artifact metadata,
+run the swipe-dot browser inference panel, and export a residency-safe evidence
+JSON bundle.
+
+The browser-local learner is deliberately a Web Worker surrogate over resident
+synthetic swipe-dot samples. It submits only a versioned `browser-update/1`
+metadata artifact: shape, sample count, norm, hash, runtime, source, run id,
+participant id, and round. It does not upload raw observations, actions, state
+labels, latents, tensors, or model weights. This proves the orchestration and
+artifact contract, not production-grade browser training and not a benchmark
+win. Full usage and architecture notes are in
+[`docs/roadmap/BROWSER_FEDERATED_DEMO.md`](docs/roadmap/BROWSER_FEDERATED_DEMO.md).
+
 ## MVP Benchmarks / Results (#259)
 
 The MVP ([#259](https://github.com/AbdelStark/Lensemble/issues/259)) is now corrected as a gauge-only

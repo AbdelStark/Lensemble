@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Lensemble Federated Run Demo</title>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.webgpu.min.js"></script>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main>
+      <header class="panel">
+        <h1>Lensemble Federated Run Demo</h1>
+        <p class="banner">
+          <strong>Simulated demo.</strong>
+          Includes a frontend-only run simulator and a local backend mode for QR joins,
+          browser-surrogate update metadata, aggregation, evidence export, and inference.
+          No backend, no real browser training, and no benchmark success is claimed for
+          the simulator slice; the dynamic-env result is an educational systems demo and
+          does not materially beat local-only training.
+        </p>
+      </header>
+      <div id="app" aria-live="polite"></div>
+    </main>
+    <script type="module" src="./app.mjs"></script>
+  </body>
+</html>

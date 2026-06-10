@@ -183,6 +183,38 @@ federate_app = typer.Typer(
 )
 app.add_typer(federate_app, name="federate")
 
+demo_app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    help="Run local educational demo surfaces.",
+)
+app.add_typer(demo_app, name="demo")
+
+
+@demo_app.command("federated")
+def demo_federated(
+    host: str = typer.Option(
+        "127.0.0.1", "--host", help="local interface for the demo HTTP server"
+    ),
+    port: int = typer.Option(
+        8765, "--port", min=0, help="local port for the demo HTTP server"
+    ),
+    open_browser: bool = typer.Option(
+        False, "--open", help="open the browser once the demo server starts"
+    ),
+) -> None:
+    """Serve the browser federated demo app (#294).
+
+    The demo exposes a local HTTP API plus the static browser app:
+    create/join/status/events, participant browser-surrogate update submission,
+    coordinator-style aggregation, inference artifact metadata, and
+    residency-safe evidence export. It is an educational systems demo, not a
+    benchmark win or production browser-training claim.
+    """
+    from lensemble.demo.server import serve
+
+    serve(host=host, port=port, open_browser=open_browser)
+
 
 @federate_app.command("coordinator")
 def federate_coordinator(
