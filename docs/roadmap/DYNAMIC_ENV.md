@@ -28,6 +28,24 @@ surface complete; material federated-over-local usefulness still blocked. The
 final benchmark bundle/model card should not be published as a success artifact
 until the local-only margin clears.
 
+The CPU/CI de-risking gate is now positive, but narrower than the publication
+bar. `tests/ml/test_dynamic_env_cpu_gate.py` trains the real tiny scratch
+objective on smooth swipe-dot data, checks both unanchored and pinned-anchor
+regimes against held-out `state_probe_r2 >= 0.5`, and closes a two-silo local
+federated round whose committed aggregate clears the same ground-truth gate. That
+test proves the local recipe can learn a resident state representation and that
+the anchored path does not re-collapse it; it is **not** a substitute for the
+published DP-on benchmark.
+
+A local DP-on replay of the two-silo CPU-gate updates found the remaining
+publication risk. Under the RDP accountant at `epsilon=8`, one full-participation
+round needs roughly `noise_multiplier >= 0.7`; budget-valid settings in the
+tested neighborhood sometimes cleared the absolute R2 floor (for example,
+`noise_multiplier=0.7`, `clip_norm=0.2`, `state_probe_r2 ~= 0.553`) but all
+tested budget-valid settings reported `frame_drift_deg=180.0`, and the required
+local-only margin was not proven. So the next claim-grade run must tune the
+DP/anchor/aggregation recipe, not merely rerun the CPU proof on HF Jobs.
+
 ## Environment
 
 - Dataset adapter: `synthetic-dynamic://swipe-dot?...`
@@ -93,9 +111,9 @@ hf jobs uv run --flavor a10g-large --timeout 2h --secrets HF_TOKEN \
 |---|---|---|
 | Dynamic env data is resident and deterministic. | `tests/ml/test_synthetic_dynamic_backend.py`, `tests/ml/test_dynamic_env_silos.py`, `docs/evidence/dynamic_env_silo_plan.json` | Implemented locally; placeholder/reproducible-from-seed registry metadata is published at HF dataset revision `abdelstark/lensemble-dynamic-env-silos@6b61bdc10ee3ce22b3239f7b8c9dbbc5062d7b0d`. |
 | The eval report exposes binding `state_probe_r2`. | `lensemble.eval.report.EvalReport.state_probe_r2`, `tests/ml/test_harness.py` | Implemented locally. |
-| The CPU gate distinguishes binding R2 from scale-invariant collapse. | `tests/ml/test_dynamic_env_cpu_gate.py` | Implemented locally. |
+| The CPU gate distinguishes binding R2 from scale-invariant collapse. | `tests/ml/test_dynamic_env_cpu_gate.py` | Implemented locally: the real tiny objective passes held-out `state_probe_r2 >= 0.5` in unanchored and pinned-anchor modes, and a two-silo local aggregate clears the same ground-truth gate while collapsed/random controls fail. |
 | The HF launcher records a true scratch architecture. | `--encoder scratch`, `tests/ml/test_phase3_consortium_launcher.py` | Implemented locally. |
-| The published checkpoint clears the binding gate. | `dynamic_env_benchmark_report.json`: federated `state_probe_r2 >= 0.5` and margin over random / naive-FedAvg / local-only, DP-on | Blocked: federated R2 is `0.8885337114`, local-only is `0.8838405609`, margin is `0.0046931505 < 0.05`. |
+| The published checkpoint clears the binding gate. | `dynamic_env_benchmark_report.json`: federated `state_probe_r2 >= 0.5` and margin over random / naive-FedAvg / local-only, DP-on | Blocked: published federated R2 is `0.8885337114`, local-only is `0.8838405609`, margin is `0.0046931505 < 0.05`; local budget-valid DP replays still fail the frame-drift/margin bar. |
 | The final model card is integrity chained. | `dynamic_env_evidence_bundle.json` with required artifact kinds and byte-identical card embedding | Producer implemented; no success bundle/model card published while the binding margin fails. |
 | Browser inference demo is scoped correctly. | `web/dynamic-env-demo/`, `scripts/dynamic_env_onnx_export.py`, `tests/ml/test_dynamic_env_browser_demo.py` | Implemented as ONNX inference + JS/Canvas env-sim; browser training is not claimed. |
 | Browser federated demo is scoped correctly. | `web/federated-demo/`, `lensemble/demo/`, `tests/ml/test_federated_demo_app.py`, `docs/roadmap/BROWSER_FEDERATED_DEMO.md` | Implemented as a local educational run-orchestration demo with metadata-only browser-surrogate updates, not production browser training. |
