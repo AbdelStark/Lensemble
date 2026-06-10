@@ -12,6 +12,10 @@ import {
   canTransitionParticipant,
   canTransitionRun,
 } from "./lifecycle.mjs";
+import {
+  activeElementBlocksAutoRefresh,
+  shouldDeferAutoRefresh,
+} from "./auto_refresh.mjs";
 import { buildJoinUrl, isValidRunId, parseRoute } from "./join_url.mjs";
 import { BackendClient } from "./api_client.mjs";
 import {
@@ -114,6 +118,39 @@ check("route parser handles host/admin/home/unknown", () => {
 check("isValidRunId rejects junk", () => {
   assert(!isValidRunId("run-UPPER!!"), "accepted invalid id");
   assert(!isValidRunId(""), "accepted empty id");
+});
+
+check("auto refresh defers while hidden, unfocused, or editing form fields", () => {
+  assert(shouldDeferAutoRefresh({ documentHidden: true }), "hidden document must defer");
+  assert(
+    shouldDeferAutoRefresh({ documentHasFocus: false }),
+    "unfocused document must defer",
+  );
+  assert(
+    activeElementBlocksAutoRefresh({ tagName: "INPUT" }),
+    "input focus must block DOM replacement",
+  );
+  assert(
+    activeElementBlocksAutoRefresh({ tagName: "textarea" }),
+    "textarea focus must block DOM replacement",
+  );
+  assert(
+    activeElementBlocksAutoRefresh({ tagName: "select" }),
+    "select focus must block DOM replacement",
+  );
+  assert(
+    activeElementBlocksAutoRefresh({ tagName: "div", isContentEditable: true }),
+    "contenteditable focus must block DOM replacement",
+  );
+  assert(!activeElementBlocksAutoRefresh({ tagName: "BUTTON" }), "buttons should not freeze refreshes");
+  assert(
+    !shouldDeferAutoRefresh({
+      documentHidden: false,
+      documentHasFocus: true,
+      activeElement: { tagName: "BODY" },
+    }),
+    "focused non-editing document should refresh",
+  );
 });
 
 // --- lifecycle vocabulary ---

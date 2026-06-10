@@ -8,6 +8,7 @@
 // visible. Backend mode accepts only metadata-only browser update artifacts.
 
 import { backendClient } from "./api_client.mjs";
+import { shouldDeferAutoRefreshForDocument } from "./auto_refresh.mjs";
 import { runBrowserLearner } from "./browser_learner.mjs";
 import { buildJoinUrl, parseRoute } from "./join_url.mjs";
 import {
@@ -157,6 +158,29 @@ function currentRouteStill(view, runId) {
   return route.view === view && route.runId === runId;
 }
 
+async function refreshBackendRoute(view, runId) {
+  if (!currentRouteStill(view, runId)) {
+    clearBackendPoll();
+    return;
+  }
+  const poll = backendPoll;
+  if (poll?.refreshing) return;
+  if (shouldDeferAutoRefreshForDocument()) return;
+  if (poll) poll.refreshing = true;
+  try {
+    const run = await backendClient.getRun(runId);
+    if (!currentRouteStill(view, runId) || shouldDeferAutoRefreshForDocument()) return;
+    app.replaceChildren();
+    ensureBackendPoll(view, runId);
+    if (view === "host") renderBackendHostSnapshot(run);
+    else if (view === "join") renderBackendJoinSnapshot(parseRoute(window.location.hash), run);
+  } catch {
+    if (currentRouteStill(view, runId) && !shouldDeferAutoRefreshForDocument()) render();
+  } finally {
+    if (backendPoll === poll && poll) poll.refreshing = false;
+  }
+}
+
 function clearBackendPoll() {
   if (backendPoll) {
     clearInterval(backendPoll.timer);
@@ -170,9 +194,9 @@ function ensureBackendPoll(view, runId) {
   backendPoll = {
     view,
     runId,
+    refreshing: false,
     timer: setInterval(() => {
-      if (currentRouteStill(view, runId)) render();
-      else clearBackendPoll();
+      void refreshBackendRoute(view, runId);
     }, 1000),
   };
 }
@@ -311,7 +335,12 @@ function applyHostIntent(run, intent) {
 
 function scheduleHostRefresh() {
   setTimeout(() => {
-    if (parseRoute(window.location.hash).view === "host") render();
+    if (
+      parseRoute(window.location.hash).view === "host"
+      && !shouldDeferAutoRefreshForDocument()
+    ) {
+      render();
+    }
   }, 0);
 }
 
@@ -330,7 +359,12 @@ function ensureHostTicker() {
     if (["running_round", "aggregating", "checkpoint_ready", "inference_ready"].includes(run.state)) {
       simTick(run);
       bus.publish();
-      if (parseRoute(window.location.hash).view === "host") render();
+      if (
+        parseRoute(window.location.hash).view === "host"
+        && !shouldDeferAutoRefreshForDocument()
+      ) {
+        render();
+      }
     }
   }, 700);
 }
@@ -626,7 +660,12 @@ function renderLocalJoin(route) {
       runId,
       (snapshot) => {
         participantSession.snapshot = snapshot;
-        if (parseRoute(window.location.hash).view === "join") render();
+        if (
+          parseRoute(window.location.hash).view === "join"
+          && !shouldDeferAutoRefreshForDocument()
+        ) {
+          render();
+        }
       },
       adapters,
     );
@@ -916,6 +955,12 @@ function renderInferencePanel(run) {
 }
 
 window.addEventListener("hashchange", render);
+window.addEventListener("focus", () => {
+  if (!shouldDeferAutoRefreshForDocument()) render();
+});
+window.addEventListener("visibilitychange", () => {
+  if (!shouldDeferAutoRefreshForDocument()) render();
+});
 window.addEventListener("pagehide", () => {
   if (participantSession?.participantId) {
     try {
