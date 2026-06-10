@@ -7,16 +7,35 @@ and an anchored-vs-naive frame-drift contrast. The expensive GPU proof remains a
 
 from __future__ import annotations
 
+import dataclasses
 import math
+from pathlib import Path
 
 import torch
 from torch import Tensor, nn
 
+from lensemble.config.schema import (
+    DataConfig,
+    FederationConfig,
+    GaugeConfig,
+    LensembleConfig,
+    ModelConfig,
+    ObjectiveConfig,
+    PrivacyConfig,
+)
 from lensemble.contracts import WMCP_VERSION, LatentState
 from lensemble.data import load_episodes
+from lensemble.data.probe import PublicProbe, probe_content_hash, save_probe
 from lensemble.eval import state_probe_r2
 from lensemble.eval.jepa_metrics import effective_rank
+from lensemble.federation import (
+    Coordinator,
+    InProcessTransport,
+    Participant,
+    RoundState,
+)
 from lensemble.gauge import frame_drift
+from lensemble.model import build_encoder
 from lensemble.model.objective import AnchorTerm, Objective
 
 _URI = "synthetic-dynamic://swipe-dot?seed=7&n_episodes=8&steps=24&image_size=48"
@@ -96,6 +115,89 @@ def _probe_from_encoder(encoder: _StateEncoder) -> float:
     y = torch.cat(states, dim=0)
     split = int(0.7 * x.shape[0])
     return state_probe_r2(x[:split], y[:split], x[split:], y[split:])
+
+
+def _federated_smoke_cfg(
+    *, probe_path: Path, source: str, run_mode: str
+) -> LensembleConfig:
+    base = LensembleConfig()
+    return dataclasses.replace(
+        base,
+        model=ModelConfig(
+            encoder="scratch",
+            latent_dim=12,
+            num_tokens=9,
+            predictor_depth=1,
+            predictor_width=12,
+            num_frames=1,
+            tubelet=1,
+            image_size=48,
+            patch_size=16,
+            depth=1,
+            num_heads=3,
+            in_channels=3,
+            mlp_ratio=2.0,
+            wmcp_version=base.model.wmcp_version,
+        ),
+        objective=ObjectiveConfig(
+            lambda_pred=1.0,
+            lambda_sig=0.0,
+            lambda_anc=0.05,
+            target_stop_gradient=False,
+            sigreg_sketch_dim=4,
+            sigreg_knots=5,
+        ),
+        gauge=GaugeConfig(
+            frame_drift_threshold_deg=15.0,
+            anchor_landmark_count=12,
+        ),
+        federation=FederationConfig(
+            participant_count=3,
+            inner_horizon=4,
+            inner_lr=0.01,
+            num_rounds=1,
+            outer_lr=1.0,
+            outer_nesterov_momentum=0.0,
+            fault_tolerance_min_participants=3,
+            secure_agg_threshold=2,
+            collect_timeout_s=5.0,
+            aggregation_backend="simulated",
+        ),
+        privacy=PrivacyConfig(
+            enabled=False,
+            clip_norm=10.0,
+            noise_multiplier=0.0,
+            epsilon=8.0,
+            delta=1e-5,
+        ),
+        data=DataConfig(
+            format="synthetic-dynamic",
+            probe_path=str(probe_path),
+            data_source=source,
+            window_steps=1,
+        ),
+        determinism=dataclasses.replace(base.determinism, root_seed=123),
+        run_mode=run_mode,  # type: ignore[arg-type]
+    )
+
+
+def _write_federated_smoke_probe(path: Path, cfg: LensembleConfig) -> None:
+    gen = torch.Generator().manual_seed(0)
+    points = torch.rand(12, 1, 3, 48, 48, generator=gen)
+    landmark_idx = torch.arange(12)
+    encoder = build_encoder(cfg)
+    with torch.no_grad():
+        targets = encoder(points[landmark_idx]).tokens.detach()
+    save_probe(
+        PublicProbe(
+            points=points,
+            landmark_idx=landmark_idx,
+            landmark_targets=targets,
+            content_hash=probe_content_hash(points, landmark_idx),
+            probe_version=1,
+        ),
+        path,
+    )
 
 
 def test_dynamic_env_objective_path_holds_state_probe_r2_and_beats_random() -> None:
@@ -192,3 +294,76 @@ def test_dynamic_env_cpu_gate_pins_scale_invariance_gap_and_drift() -> None:
         frame_drift({"p0": base, "p1": base @ rot(2.0).T}).pairs[0].rotation_angle_deg
     )
     assert anchored < naive - 20.0
+
+
+def test_dynamic_env_non_iid_federated_smoke_uses_default_synthetic_hooks(
+    tmp_path: Path,
+) -> None:
+    """Exercise the real Participant/Coordinator path without turning this into the GPU proof.
+
+    The hard state-probe threshold is pinned above on the deterministic resident-state encoder. This
+    smoke covers the separate systems risk in #282: a local multi-silo round must resolve
+    ``synthetic-dynamic://`` through the default participant hooks, commit distinct resident datasets,
+    pass the probe pin, close the coordinator round, and measure frame drift without a backstop abort.
+    """
+
+    probe_path = tmp_path / "probe.safetensors"
+    seed_sources = {
+        "p0": "synthetic-dynamic://swipe-dot?seed=11&n_episodes=3&steps=8&image_size=48&step_scale=0.18",
+        "p1": "synthetic-dynamic://swipe-dot?seed=22&n_episodes=3&steps=8&image_size=48&step_scale=0.18",
+        "p2": "synthetic-dynamic://swipe-dot?seed=33&n_episodes=3&steps=8&image_size=48&step_scale=0.18",
+    }
+    coordinator_cfg = _federated_smoke_cfg(
+        probe_path=probe_path, source=seed_sources["p0"], run_mode="coordinator"
+    )
+    _write_federated_smoke_probe(probe_path, coordinator_cfg)
+
+    transport = InProcessTransport()
+    with Coordinator(
+        coordinator_cfg,
+        transport=transport,
+        artifacts_dir=tmp_path / "coordinator-artifacts",
+        enable_backstop=True,
+    ) as coordinator:
+        initial_hash = coordinator.global_state_hash()
+        global_state = coordinator.global_state()
+        roots: set[bytes] = set()
+
+        for participant_id, source in seed_sources.items():
+            participant_cfg = dataclasses.replace(
+                coordinator_cfg,
+                data=dataclasses.replace(coordinator_cfg.data, data_source=source),
+                run_mode="participant",
+            )
+            participant = Participant(
+                participant_cfg,
+                participant_id=participant_id,
+                transport=transport,
+            )
+            windows = participant._local_windows_for_horizon(2)
+            assert windows and all(window.state is not None for window in windows)
+
+            update = participant.local_round(
+                global_state, round_seed=global_state.sketch_seed
+            )
+            assert update.delta.numel() > 0
+            assert torch.isfinite(update.delta).all()
+            assert len(update.dataset_root) == 32
+            roots.add(update.dataset_root)
+            transport.submit_update(
+                participant_id=participant_id,
+                round_index=global_state.round_index,
+                update=update,
+            )
+
+        assert len(roots) == len(seed_sources)
+        assert coordinator.try_round() is RoundState.CLOSED
+        assert coordinator.global_state_hash() != initial_hash
+
+        (record,) = coordinator.ledger_records()
+        assert record.participants == tuple(sorted(seed_sources))
+        assert set(record.dataset_roots) == set(seed_sources)
+
+        drift = coordinator.frame_drift_report()
+        assert drift is not None
+        assert all(0.0 <= pair.rotation_angle_deg <= 180.0 for pair in drift.pairs)
