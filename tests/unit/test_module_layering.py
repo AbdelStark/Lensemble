@@ -20,7 +20,7 @@ The band-to-module mapping enforced here:
 | L6 | ``eval`` |
 | L7 | ``federation`` |
 | L8 | ``verify`` |
-| L9 | ``cli`` |
+| L9 | ``cli``, ``demo`` |
 
 The graph is built statically with ``ast`` so no heavy optional dependency is imported. Edges inside
 an ``if TYPE_CHECKING:`` block are excluded: they are type-checker-only annotations that impose no
@@ -54,6 +54,7 @@ _BAND: dict[str, int] = {
     "federation": 7,
     "verify": 8,
     "cli": 9,
+    "demo": 9,
 }
 
 # An edge into the cross-cutting band is never "upward" (RFC-0001 §3 note).

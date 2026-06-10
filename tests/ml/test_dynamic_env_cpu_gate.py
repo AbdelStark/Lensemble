@@ -164,9 +164,9 @@ def _federated_smoke_cfg(
             aggregation_backend="simulated",
         ),
         privacy=PrivacyConfig(
-            enabled=False,
-            clip_norm=10.0,
-            noise_multiplier=0.0,
+            enabled=True,
+            clip_norm=0.05,
+            noise_multiplier=0.01,
             epsilon=8.0,
             delta=1e-5,
         ),
@@ -348,6 +348,7 @@ def test_dynamic_env_non_iid_federated_smoke_uses_default_synthetic_hooks(
             )
             assert update.delta.numel() > 0
             assert torch.isfinite(update.delta).all()
+            assert update.clipped is True
             assert len(update.dataset_root) == 32
             roots.add(update.dataset_root)
             transport.submit_update(

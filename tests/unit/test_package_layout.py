@@ -20,6 +20,7 @@ SUBPACKAGES = [
     "artifacts",
     "observability",
     "verify",
+    "demo",
 ]
 
 MODULES = [
@@ -63,6 +64,8 @@ MODULES = [
     "lensemble.observability.redaction",
     "lensemble.verify.recompute",
     "lensemble.verify.stark",
+    "lensemble.demo.federated",
+    "lensemble.demo.server",
 ]
 
 
