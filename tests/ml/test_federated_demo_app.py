@@ -288,8 +288,9 @@ def test_demo_http_api_create_join_events_and_export() -> None:
 
 
 def test_demo_cli_exposes_one_command_server_help() -> None:
+    command = shutil.which("lensemble") or "lensemble"
     result = subprocess.run(
-        ["uv", "run", "lensemble", "demo", "federated", "--help"],
+        [command, "demo", "federated", "--help"],
         capture_output=True,
         env={**os.environ, "COLUMNS": "120"},
         text=True,
