@@ -34,15 +34,26 @@ from lensemble.federation import (
     Participant,
     RoundState,
 )
-from lensemble.gauge import frame_drift
+from lensemble.gauge import FrameAnchor, frame_drift
 from lensemble.model import build_encoder
+from lensemble.model.action_head import build_action_head
 from lensemble.model.objective import AnchorTerm, Objective
+from lensemble.model.predictor import build_predictor
 
 _URI = "synthetic-dynamic://swipe-dot?seed=7&n_episodes=8&steps=24&image_size=48"
+_REAL_WINDOW_STEPS = 8
 
 
 def _windows():
     return list(load_episodes(_URI).windows(1))
+
+
+def _real_dynamic_source(seed: int, *, n_episodes: int = 24) -> str:
+    return (
+        "synthetic-dynamic://swipe-dot?"
+        f"seed={seed}&n_episodes={n_episodes}&steps=16&image_size=48"
+        "&step_scale=0.7&sigma=0.06"
+    )
 
 
 class _StateEncoder(nn.Module):
@@ -200,6 +211,166 @@ def _write_federated_smoke_probe(path: Path, cfg: LensembleConfig) -> None:
     )
 
 
+def _real_dynamic_cfg(
+    *, probe_path: Path | None = None, source: str | None = None, run_mode: str
+) -> LensembleConfig:
+    base = LensembleConfig()
+    return dataclasses.replace(
+        base,
+        model=ModelConfig(
+            encoder="scratch",
+            latent_dim=128,
+            num_tokens=9,
+            predictor_depth=3,
+            predictor_width=128,
+            num_frames=1,
+            tubelet=1,
+            image_size=48,
+            patch_size=16,
+            depth=4,
+            num_heads=4,
+            in_channels=3,
+            mlp_ratio=4.0,
+            wmcp_version=base.model.wmcp_version,
+        ),
+        objective=ObjectiveConfig(
+            lambda_pred=1.0,
+            lambda_sig=0.3,
+            lambda_anc=0.05,
+            target_stop_gradient=False,
+            sigreg_sketch_dim=64,
+            sigreg_knots=17,
+        ),
+        gauge=GaugeConfig(
+            frame_drift_threshold_deg=35.0,
+            anchor_landmark_count=128,
+        ),
+        federation=FederationConfig(
+            participant_count=2,
+            inner_horizon=200,
+            inner_lr=1e-3,
+            num_rounds=1,
+            outer_lr=1.0,
+            outer_nesterov_momentum=0.0,
+            fault_tolerance_min_participants=2,
+            secure_agg_threshold=2,
+            collect_timeout_s=5.0,
+            aggregation_backend="simulated",
+        ),
+        privacy=PrivacyConfig(
+            enabled=False,
+            clip_norm=10.0,
+            noise_multiplier=0.0,
+            epsilon=8.0,
+            delta=1e-5,
+        ),
+        data=DataConfig(
+            format="synthetic-dynamic",
+            probe_path=None if probe_path is None else str(probe_path),
+            data_source=source,
+            window_steps=_REAL_WINDOW_STEPS,
+        ),
+        determinism=dataclasses.replace(base.determinism, root_seed=123),
+        run_mode=run_mode,  # type: ignore[arg-type]
+    )
+
+
+def _state_probe_metrics(
+    encoder: nn.Module, windows: list
+) -> tuple[float, float, Tensor, Tensor]:
+    latents = []
+    states = []
+    encoder.eval()
+    with torch.no_grad():
+        for window in windows:
+            assert window.state is not None
+            latents.append(encoder(window.obs).tokens.float())
+            states.append(window.state.float())
+    encoder.train()
+    x = torch.cat(latents, dim=0)
+    y = torch.cat(states, dim=0)
+    split = int(0.7 * x.shape[0])
+    return (
+        state_probe_r2(x[:split], y[:split], x[split:], y[split:]),
+        effective_rank(x.reshape(-1, x.shape[-1])),
+        x,
+        y,
+    )
+
+
+def _real_dynamic_anchor(encoder: nn.Module, train_windows: list) -> AnchorTerm:
+    points = torch.cat([window.obs[:1] for window in train_windows[:160]], dim=0)
+    landmark_idx = torch.arange(128)
+    with torch.no_grad():
+        targets = encoder(points[landmark_idx]).tokens.detach()
+    probe = PublicProbe(
+        points=points,
+        landmark_idx=landmark_idx,
+        landmark_targets=targets,
+        content_hash=probe_content_hash(points, landmark_idx),
+        probe_version=1,
+    )
+    return FrameAnchor(
+        probe,
+        targets,
+        variant="landmark",
+        probe_hash=probe.content_hash.hex(),
+    ).loss
+
+
+def _train_real_dynamic_encoder(*, anchored: bool) -> nn.Module:
+    torch.manual_seed(0)
+    train_ds = load_episodes(_real_dynamic_source(7))
+    train_windows = list(train_ds.windows(_REAL_WINDOW_STEPS))
+    cfg = _real_dynamic_cfg(source=_real_dynamic_source(7), run_mode="participant")
+    encoder = build_encoder(cfg)
+    predictor = build_predictor(cfg)
+    action_head = build_action_head(cfg, train_ds.episodes[0].action_spec)
+    anchor = _real_dynamic_anchor(encoder, train_windows) if anchored else None
+    objective = Objective(
+        lambda_pred=1.0,
+        lambda_sig=0.3,
+        lambda_anc=0.05 if anchored else 0.0,
+        sketch_seed=0,
+        sketch_dim=64,
+        ep_knots=17,
+        anchor=anchor,
+        target_stop_gradient=False,
+    )
+    opt = torch.optim.AdamW(
+        list(encoder.parameters())
+        + list(predictor.parameters())
+        + list(action_head.parameters()),
+        lr=1e-3,
+    )
+    for step in range(300):
+        window = train_windows[step % len(train_windows)]
+        loss = objective(encoder, predictor, window, action_head.encode(window.actions))
+        opt.zero_grad()
+        loss.total.backward()
+        opt.step()
+    return encoder
+
+
+def _write_real_dynamic_probe(path: Path, cfg: LensembleConfig) -> None:
+    gen = torch.Generator().manual_seed(0)
+    points = torch.rand(160, 1, 3, 48, 48, generator=gen)
+    landmark_idx = torch.arange(128)
+    encoder = build_encoder(cfg)
+    with torch.no_grad():
+        targets = encoder(points[landmark_idx]).tokens.detach()
+    save_probe(
+        PublicProbe(
+            points=points,
+            landmark_idx=landmark_idx,
+            landmark_targets=targets,
+            content_hash=probe_content_hash(points, landmark_idx),
+            probe_version=1,
+        ),
+        path,
+    )
+
+
 def test_dynamic_env_objective_path_holds_state_probe_r2_and_beats_random() -> None:
     encoder = _StateEncoder()
     predictor = _ActionPredictor()
@@ -258,6 +429,25 @@ def test_dynamic_env_anchored_variant_still_holds_r2() -> None:
     loss = objective(encoder, predictor, window, window.actions)
     assert torch.isfinite(loss.total)
     assert _probe_from_encoder(encoder) >= 0.5
+
+
+def test_dynamic_env_real_objective_trains_grounded_state_probe() -> None:
+    heldout_windows = list(load_episodes(_real_dynamic_source(99, n_episodes=8)).windows(8))
+    for anchored in (False, True):
+        encoder = _train_real_dynamic_encoder(anchored=anchored)
+        trained_r2, rank, latents, states = _state_probe_metrics(
+            encoder, heldout_windows
+        )
+        random = torch.randn(
+            latents.shape, generator=torch.Generator().manual_seed(17)
+        )
+        split = int(0.7 * random.shape[0])
+        random_r2 = state_probe_r2(
+            random[:split], states[:split], random[split:], states[split:]
+        )
+        assert trained_r2 >= 0.5, f"anchored={anchored} r2={trained_r2:.4f}"
+        assert rank > 8.0, f"anchored={anchored} effective_rank={rank:.4f}"
+        assert trained_r2 - random_r2 >= 0.4
 
 
 def test_dynamic_env_cpu_gate_pins_scale_invariance_gap_and_drift() -> None:
@@ -368,3 +558,70 @@ def test_dynamic_env_non_iid_federated_smoke_uses_default_synthetic_hooks(
         drift = coordinator.frame_drift_report()
         assert drift is not None
         assert all(0.0 <= pair.rotation_angle_deg <= 180.0 for pair in drift.pairs)
+
+
+def test_dynamic_env_two_silo_aggregate_holds_grounded_r2(tmp_path: Path) -> None:
+    probe_path = tmp_path / "real-probe.safetensors"
+    sources = {
+        "p0": _real_dynamic_source(11),
+        "p1": _real_dynamic_source(22),
+    }
+    coordinator_cfg = _real_dynamic_cfg(
+        probe_path=probe_path, source=sources["p0"], run_mode="coordinator"
+    )
+    _write_real_dynamic_probe(probe_path, coordinator_cfg)
+
+    heldout_windows = list(load_episodes(_real_dynamic_source(99, n_episodes=8)).windows(8))
+    transport = InProcessTransport()
+    with Coordinator(
+        coordinator_cfg,
+        transport=transport,
+        artifacts_dir=tmp_path / "real-coordinator-artifacts",
+        enable_backstop=True,
+    ) as coordinator:
+        global_state = coordinator.global_state()
+        for participant_id, source in sources.items():
+            participant_cfg = dataclasses.replace(
+                coordinator_cfg,
+                data=dataclasses.replace(coordinator_cfg.data, data_source=source),
+                run_mode="participant",
+            )
+            participant = Participant(
+                participant_cfg,
+                participant_id=participant_id,
+                transport=transport,
+            )
+            update = participant.local_round(
+                global_state, round_seed=global_state.sketch_seed
+            )
+            assert update.delta.numel() > 0
+            assert torch.isfinite(update.delta).all()
+            transport.submit_update(
+                participant_id=participant_id,
+                round_index=global_state.round_index,
+                update=update,
+            )
+
+        assert coordinator.try_round() is RoundState.CLOSED
+        drift = coordinator.frame_drift_report()
+        assert drift is not None
+        assert max(pair.rotation_angle_deg for pair in drift.pairs) < 35.0
+
+        aggregate = build_encoder(coordinator_cfg)
+        aggregate.load_state_dict(
+            transport.fetch_params(coordinator.global_state().theta_ref), strict=True
+        )
+        aggregate_r2, _rank, latents, states = _state_probe_metrics(
+            aggregate, heldout_windows
+        )
+        collapsed = 1e-6 * torch.randn(
+            latents.shape, generator=torch.Generator().manual_seed(23)
+        )
+        split = int(0.7 * collapsed.shape[0])
+        collapsed_r2 = state_probe_r2(
+            collapsed[:split], states[:split], collapsed[split:], states[split:]
+        )
+        assert effective_rank(collapsed.reshape(-1, collapsed.shape[-1])) > 8.0
+        assert collapsed_r2 <= 0.1
+        assert aggregate_r2 >= 0.5
+        assert aggregate_r2 - collapsed_r2 >= 0.4
