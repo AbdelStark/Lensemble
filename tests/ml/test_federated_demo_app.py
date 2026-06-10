@@ -8,8 +8,8 @@ when node is unavailable) so they gate CI alongside the Python suite.
 
 from __future__ import annotations
 
+import inspect
 import json
-import os
 import shutil
 import subprocess
 import threading
@@ -20,7 +20,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from typer.models import OptionInfo
 
+from lensemble.cli import demo_federated
 from lensemble.demo import FederatedDemoError, FederatedDemoService
 from lensemble.demo.server import make_handler
 
@@ -292,12 +294,19 @@ def test_demo_cli_exposes_one_command_server_help() -> None:
     result = subprocess.run(
         [command, "demo", "federated", "--help"],
         capture_output=True,
-        env={**os.environ, "COLUMNS": "120"},
         text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "--port" in result.stdout
-    assert "Serve the browser federated demo app" in result.stdout
+
+    signature = inspect.signature(demo_federated)
+    port_option = signature.parameters["port"].default
+    assert isinstance(port_option, OptionInfo)
+    assert port_option.param_decls == ("--port",)
+    assert port_option.default == 8765
+    assert port_option.help == "local port for the demo HTTP server"
+    assert "Serve the browser federated demo app" in (
+        inspect.getdoc(demo_federated) or ""
+    )
 
 
 def _post_json(url: str, payload: dict[str, object]) -> dict[str, Any]:
