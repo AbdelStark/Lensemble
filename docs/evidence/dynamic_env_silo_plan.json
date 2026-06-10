@@ -1,0 +1,19 @@
+{
+  "heldout_source": "synthetic-dynamic://swipe-dot?seed=11000&n_episodes=8&steps=64&image_size=48&step_scale=0.12000",
+  "honest_boundary": "Registry is placeholder/reproducible-from-seed metadata, not published raw dataset bytes.",
+  "manifest": "docs/evidence/dynamic_env_consortium_manifest.json",
+  "publication": {
+    "pushed": true,
+    "repo_id": "abdelstark/lensemble-dynamic-env-silos",
+    "repo_type": "dataset",
+    "revision": "6b61bdc10ee3ce22b3239f7b8c9dbbc5062d7b0d"
+  },
+  "registry": "docs/evidence/dynamic_env_dataset_registry.json",
+  "schema_version": 1,
+  "silo_sources": [
+    "synthetic-dynamic://swipe-dot?seed=1000&n_episodes=8&steps=64&image_size=48&step_scale=0.10000",
+    "synthetic-dynamic://swipe-dot?seed=1001&n_episodes=8&steps=64&image_size=48&step_scale=0.11000",
+    "synthetic-dynamic://swipe-dot?seed=1002&n_episodes=8&steps=64&image_size=48&step_scale=0.12000",
+    "synthetic-dynamic://swipe-dot?seed=1003&n_episodes=8&steps=64&image_size=48&step_scale=0.13000"
+  ]
+}

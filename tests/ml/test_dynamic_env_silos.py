@@ -76,3 +76,60 @@ def test_dynamic_env_silos_script_writes_valid_outputs(tmp_path: Path) -> None:
     assert plan["manifest"] == str(manifest_path)
     assert plan["registry"] == str(registry_path)
     assert len(plan["silo_sources"]) == 2
+
+
+def test_dynamic_env_silos_push_requires_repo_and_records_missing_token(
+    tmp_path: Path, monkeypatch
+) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    registry_path = tmp_path / "registry.json"
+    plan_path = tmp_path / "plan.json"
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/dynamic_env_silos.py",
+            "--num-silos",
+            "2",
+            "--steps",
+            "8",
+            "--window-steps",
+            "4",
+            "--manifest-output",
+            str(manifest_path),
+            "--registry-output",
+            str(registry_path),
+            "--plan-output",
+            str(plan_path),
+            "--push",
+            "--out-repo",
+            "example/dynamic-env-silos",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "skipped dynamic-env metadata push" in result.stdout
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    assert plan["publication"]["pushed"] is False
+    assert "HF_TOKEN" in plan["publication"]["blocker"]
+
+    missing_repo = subprocess.run(
+        [
+            sys.executable,
+            "scripts/dynamic_env_silos.py",
+            "--manifest-output",
+            str(tmp_path / "missing-manifest.json"),
+            "--registry-output",
+            str(tmp_path / "missing-registry.json"),
+            "--plan-output",
+            str(tmp_path / "missing-plan.json"),
+            "--push",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert missing_repo.returncode != 0
+    assert "--out-repo is required" in missing_repo.stderr

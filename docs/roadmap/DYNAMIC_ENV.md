@@ -46,7 +46,7 @@ SO-100 and not paper-scale robotics evidence.
 
 | Artifact | Producer | Gate |
 |---|---|---|
-| Consortium manifest + dataset registry | `scripts/dynamic_env_silos.py` | Synthetic participant and held-out refs are deterministic, non-IID, and disjoint. |
+| Consortium manifest + dataset registry | `scripts/dynamic_env_silos.py` | Synthetic participant and held-out refs are deterministic, non-IID, disjoint, and published as placeholder/reproducible-from-seed metadata at HF dataset revision `abdelstark/lensemble-dynamic-env-silos@6b61bdc10ee3ce22b3239f7b8c9dbbc5062d7b0d`. |
 | Long-run checkpoint/report | `deploy/hfjobs/train_phase3_consortium.py --data-format synthetic-dynamic --encoder scratch` | Published run manifest records `scratch`, not `vjepa2-vit-l`. |
 | Dynamic downstream report | `scripts/phase3_inference_demo.py --dynamic-env` | Per-control `state_probe_r2` plus non-binding `success_rate`. |
 | Observability/privacy report | `scripts/dynamic_env_observability_report.py` | Per-round DP epsilon, secure-sum status, communication bytes, run-manifest hash binding. |
@@ -91,7 +91,7 @@ hf jobs uv run --flavor a10g-large --timeout 2h --secrets HF_TOKEN \
 
 | Claim | Required evidence | Status |
 |---|---|---|
-| Dynamic env data is resident and deterministic. | `tests/ml/test_synthetic_dynamic_backend.py`, `tests/ml/test_dynamic_env_silos.py` | Implemented locally. |
+| Dynamic env data is resident and deterministic. | `tests/ml/test_synthetic_dynamic_backend.py`, `tests/ml/test_dynamic_env_silos.py`, `docs/evidence/dynamic_env_silo_plan.json` | Implemented locally; placeholder/reproducible-from-seed registry metadata is published at HF dataset revision `abdelstark/lensemble-dynamic-env-silos@6b61bdc10ee3ce22b3239f7b8c9dbbc5062d7b0d`. |
 | The eval report exposes binding `state_probe_r2`. | `lensemble.eval.report.EvalReport.state_probe_r2`, `tests/ml/test_harness.py` | Implemented locally. |
 | The CPU gate distinguishes binding R2 from scale-invariant collapse. | `tests/ml/test_dynamic_env_cpu_gate.py` | Implemented locally. |
 | The HF launcher records a true scratch architecture. | `--encoder scratch`, `tests/ml/test_phase3_consortium_launcher.py` | Implemented locally. |

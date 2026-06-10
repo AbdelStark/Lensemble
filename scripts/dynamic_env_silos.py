@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -228,7 +229,57 @@ def _args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument(
         "--plan-output", default="docs/evidence/dynamic_env_silo_plan.json"
     )
+    parser.add_argument(
+        "--push",
+        action="store_true",
+        help="Upload the generated manifest/registry/plan JSONs to a Hugging Face dataset repo.",
+    )
+    parser.add_argument(
+        "--out-repo",
+        default=None,
+        help="Hugging Face dataset repo id for --push, e.g. user/lensemble-dynamic-env-silos.",
+    )
+    parser.add_argument(
+        "--public",
+        action="store_true",
+        help="Create/update the HF dataset repo as public. Default is private.",
+    )
     return parser.parse_args(argv)
+
+
+def _push_metadata(
+    *,
+    repo_id: str,
+    public: bool,
+    manifest_path: Path,
+    registry_path: Path,
+    plan_path: Path,
+) -> dict[str, str | bool]:
+    token = os.environ.get("HF_TOKEN")
+    if not token:
+        return {
+            "pushed": False,
+            "blocker": "HF_TOKEN is not set; skipped dynamic-env metadata push",
+        }
+    from huggingface_hub import HfApi
+
+    api = HfApi(token=token)
+    api.create_repo(repo_id, repo_type="dataset", private=not public, exist_ok=True)
+    paths = (manifest_path, registry_path, plan_path)
+    commit = api.upload_folder(
+        folder_path=str(plan_path.parent),
+        repo_id=repo_id,
+        repo_type="dataset",
+        allow_patterns=[path.name for path in paths],
+        commit_message="Publish dynamic-env seeded silo registry metadata",
+    )
+    info = api.dataset_info(repo_id, revision=commit.oid)
+    return {
+        "pushed": True,
+        "repo_id": repo_id,
+        "repo_type": "dataset",
+        "revision": info.sha or commit.oid,
+    }
 
 
 def main(argv: list[str] | None = None) -> dict[str, object]:
@@ -244,7 +295,7 @@ def main(argv: list[str] | None = None) -> dict[str, object]:
     registry = build_dynamic_env_registry(manifest)
     manifest_path = write_consortium_manifest(manifest, Path(args.manifest_output))
     registry_path = write_phase3_dataset_registry(registry, Path(args.registry_output))
-    plan = {
+    plan: dict[str, object] = {
         "schema_version": 1,
         "manifest": str(manifest_path),
         "registry": str(registry_path),
@@ -260,6 +311,19 @@ def main(argv: list[str] | None = None) -> dict[str, object]:
     }
     plan_path = Path(args.plan_output)
     plan_path.parent.mkdir(parents=True, exist_ok=True)
+    plan_path.write_text(
+        json.dumps(plan, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    if args.push:
+        if args.out_repo is None:
+            raise ValueError("--out-repo is required when --push is set")
+        plan["publication"] = _push_metadata(
+            repo_id=args.out_repo,
+            public=bool(args.public),
+            manifest_path=manifest_path,
+            registry_path=registry_path,
+            plan_path=plan_path,
+        )
     plan_path.write_text(
         json.dumps(plan, sort_keys=True, indent=2) + "\n", encoding="utf-8"
     )
