@@ -94,6 +94,8 @@ The project treats results as artifact-bound. The important public evidence surf
 
 The short read: Lensemble has credible systems and gauge-control evidence. It does not yet have a claim-grade result that federated training materially beats local-only on the binding dynamic-env metric.
 
+SO-100 is not a downstream-useful world model: held-out latent magnitude collapse (`~7.5e-6`; `thoughts/collapse_fix_probe.py`), the central ceiling probe (`thoughts/central_ceiling_probe.py`), `skill_vs_identity is gameable`, and `effective_rank is scale-invariant`.
+
 ## Development
 
 Useful local gates:

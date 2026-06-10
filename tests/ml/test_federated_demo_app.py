@@ -9,6 +9,7 @@ when node is unavailable) so they gate CI alongside the Python suite.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import threading
@@ -290,6 +291,7 @@ def test_demo_cli_exposes_one_command_server_help() -> None:
     result = subprocess.run(
         ["uv", "run", "lensemble", "demo", "federated", "--help"],
         capture_output=True,
+        env={**os.environ, "COLUMNS": "120"},
         text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
