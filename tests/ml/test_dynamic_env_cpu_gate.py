@@ -432,15 +432,15 @@ def test_dynamic_env_anchored_variant_still_holds_r2() -> None:
 
 
 def test_dynamic_env_real_objective_trains_grounded_state_probe() -> None:
-    heldout_windows = list(load_episodes(_real_dynamic_source(99, n_episodes=8)).windows(8))
+    heldout_windows = list(
+        load_episodes(_real_dynamic_source(99, n_episodes=8)).windows(8)
+    )
     for anchored in (False, True):
         encoder = _train_real_dynamic_encoder(anchored=anchored)
         trained_r2, rank, latents, states = _state_probe_metrics(
             encoder, heldout_windows
         )
-        random = torch.randn(
-            latents.shape, generator=torch.Generator().manual_seed(17)
-        )
+        random = torch.randn(latents.shape, generator=torch.Generator().manual_seed(17))
         split = int(0.7 * random.shape[0])
         random_r2 = state_probe_r2(
             random[:split], states[:split], random[split:], states[split:]
@@ -571,7 +571,9 @@ def test_dynamic_env_two_silo_aggregate_holds_grounded_r2(tmp_path: Path) -> Non
     )
     _write_real_dynamic_probe(probe_path, coordinator_cfg)
 
-    heldout_windows = list(load_episodes(_real_dynamic_source(99, n_episodes=8)).windows(8))
+    heldout_windows = list(
+        load_episodes(_real_dynamic_source(99, n_episodes=8)).windows(8)
+    )
     transport = InProcessTransport()
     with Coordinator(
         coordinator_cfg,
