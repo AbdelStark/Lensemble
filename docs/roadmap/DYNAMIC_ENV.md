@@ -6,6 +6,28 @@ RFC-0017 pivots the usefulness claim away from SO-100 proxy metrics and onto a
 small synthetic control env with resident ground truth. The only binding
 usefulness gate is held-out `state_probe_r2` on `kinematic://swipe-dot`.
 
+## Current Status (June 2026)
+
+The dynamic-env slice is good enough to continue as an educational end-to-end
+demo of the federated JEPA world-model paradigm, but it does **not** clear the
+binding benchmark gate.
+
+The current published/control family records:
+
+| control | `state_probe_r2` | role |
+|---|---:|---|
+| federated scratch | `0.8885337114` | headline demo row |
+| local-only | `0.8838405609` | no-aggregation lower bound |
+| random encoder | `0.8082002401` | representation sanity baseline |
+| naive-FedAvg | `0.5502954721` | unanchored federation control |
+
+The federated row clears the absolute R2 floor and beats random/naive-FedAvg, but
+it beats local-only by only `0.0046931505`, below the RFC-0017 required margin
+of `0.05`. The correct public framing is therefore: systems concept and demo
+surface complete; material federated-over-local usefulness still blocked. The
+final benchmark bundle/model card should not be published as a success artifact
+until the local-only margin clears.
+
 ## Environment
 
 - Dataset adapter: `synthetic-dynamic://swipe-dot?...`
@@ -33,7 +55,7 @@ SO-100 and not paper-scale robotics evidence.
 
 ## Launch Shape
 
-The intended C11 job shape is:
+Representative federated launcher shape:
 
 ```bash
 hf jobs uv run --flavor a10g-large --timeout 2h --secrets HF_TOKEN \
@@ -72,9 +94,9 @@ hf jobs uv run --flavor a10g-large --timeout 2h --secrets HF_TOKEN \
 | The eval report exposes binding `state_probe_r2`. | `lensemble.eval.report.EvalReport.state_probe_r2`, `tests/ml/test_harness.py` | Implemented locally. |
 | The CPU gate distinguishes binding R2 from scale-invariant collapse. | `tests/ml/test_dynamic_env_cpu_gate.py` | Implemented locally. |
 | The HF launcher records a true scratch architecture. | `--encoder scratch`, `tests/ml/test_phase3_consortium_launcher.py` | Implemented locally. |
-| The published checkpoint clears the binding gate. | `dynamic_env_benchmark_report.json`: federated `state_probe_r2 >= 0.5` and margin over random / naive-FedAvg / local-only, DP-on | Pending the C11 GPU run. |
-| The final model card is integrity chained. | `dynamic_env_evidence_bundle.json` with required artifact kinds and byte-identical card embedding | Producer implemented; final artifact pending C11. |
-| Browser demo is scoped correctly. | `web/dynamic-env-demo/`, `scripts/dynamic_env_onnx_export.py`, `tests/ml/test_dynamic_env_browser_demo.py` | Implemented locally; exported ONNX artifact pending C11 checkpoint. |
+| The published checkpoint clears the binding gate. | `dynamic_env_benchmark_report.json`: federated `state_probe_r2 >= 0.5` and margin over random / naive-FedAvg / local-only, DP-on | Blocked: federated R2 is `0.8885337114`, local-only is `0.8838405609`, margin is `0.0046931505 < 0.05`. |
+| The final model card is integrity chained. | `dynamic_env_evidence_bundle.json` with required artifact kinds and byte-identical card embedding | Producer implemented; no success bundle/model card published while the binding margin fails. |
+| Browser demo is scoped correctly. | `web/dynamic-env-demo/`, `scripts/dynamic_env_onnx_export.py`, `tests/ml/test_dynamic_env_browser_demo.py` | Implemented as ONNX inference + JS/Canvas env-sim; browser training is not claimed. |
 
 ## Non-Claims
 
@@ -83,3 +105,5 @@ hf jobs uv run --flavor a10g-large --timeout 2h --secrets HF_TOKEN \
 - No provenance ledger implementation.
 - No cryptographic proof of honest participant computation.
 - No browser training claim.
+- No claim that the current federated dynamic-env checkpoint materially beats
+  local-only.

@@ -52,8 +52,9 @@ The normative spec sections live in [`docs/spec/`](docs/spec/) and the decision 
 | [0014](docs/rfcs/RFC-0014-provenance-commitments.md) | Provenance Commitments & Merkle Scheme | Accepted | Episode hashing, Merkle roots, contribution ledger |
 | [0015](docs/rfcs/RFC-0015-observability-diagnostics.md) | Observability, Diagnostics & Telemetry | Accepted | Logging, metrics, the frame-drift diagnostic, redaction |
 | [0016](docs/rfcs/RFC-0016-deployment-vendoring-topology.md) | Deployment, Vendoring & Topology | Accepted | Python-first stack, third_party vendoring, IaC (Compose/Kubernetes) |
+| [0017](docs/rfcs/RFC-0017-dynamic-env-ungameable-metrics.md) | Dynamic Env & Ungameable Ground-Truth Metrics | Draft | Synthetic control env and binding `state_probe_r2` usefulness gate |
 
-Read order for the paper: 0002 → 0005 → 0001. Read order to build: 0001 → 0003 → 0004 → 0002 → 0005, then the subsystem RFCs 0007–0016, then 0006.
+Read order for the paper: 0002 → 0005 → 0001. Read order to build: 0001 → 0003 → 0004 → 0002 → 0005, then the subsystem RFCs 0007–0017, then 0006.
 
 ## Where it sits in the ecosystem
 
@@ -184,6 +185,25 @@ closed-loop physical SO-100 task-success remains blocked pending stable-worldmod
 ([#96](https://github.com/AbdelStark/Lensemble/issues/96)). Full detail is in
 [`docs/roadmap/PHASE3.md`](docs/roadmap/PHASE3.md).
 
+## Dynamic-Env Demo Status (#273)
+
+RFC-0017 replaces the SO-100 proxy-usefulness story with a resident
+ground-truth synthetic control env, `kinematic://swipe-dot`, and a single
+binding metric: held-out `state_probe_r2`. The current dynamic-env run is a
+useful educational systems demo of the Tapestry-like idea applied to JEPA world
+models: sovereign synthetic participants, federated scratch training, control
+baselines, DP/secure-aggregation observability, artifact contracts, and a
+browser ONNX inference surface.
+
+It is **not** a binding benchmark win. The federated checkpoint reaches
+`state_probe_r2=0.8885337114`, beating random (`0.8082002401`) and naive-FedAvg
+(`0.5502954721`), but local-only reaches `0.8838405609`. The federated margin
+over local-only is only `0.0046931505`, below RFC-0017's required absolute
+margin of `0.05`. The final dynamic-env benchmark bundle/model card is therefore
+not published as a success artifact; the code path correctly rejects the
+overclaim. Continue to frame this slice as a clean concept/demo path, not as
+evidence that federated training materially outperforms local-only.
+
 ## MVP Benchmarks / Results (#259)
 
 The MVP ([#259](https://github.com/AbdelStark/Lensemble/issues/259)) is now corrected as a gauge-only
@@ -216,9 +236,10 @@ at immutable revision `a6f5a961…` (anchored run `3c2258ce…`).
 Honest boundary: convergence is demonstrated in the **gauge sense** only. Held-out magnitude collapse
 (`~7.5e-6`; `thoughts/collapse_fix_probe.py`), the central ceiling probe
 (`thoughts/central_ceiling_probe.py`), gameable `skill_vs_identity`, and scale-invariant `effective_rank`
-make the SO-100 downstream usefulness claim invalid. The dynamic-env RFC-0017 pivot carries the binding
-ground-truth `state_probe_r2` usefulness gate. Latent-space only; closed-loop physical task-success stays
-gated on [#96](https://github.com/AbdelStark/Lensemble/issues/96).
+make the SO-100 downstream usefulness claim invalid. The dynamic-env RFC-0017 pivot now provides the
+right ground-truth `state_probe_r2` demo path, but the current published run still misses the local-only
+margin gate. Latent-space only; closed-loop physical task-success stays gated on
+[#96](https://github.com/AbdelStark/Lensemble/issues/96).
 
 ## Working assumptions
 
@@ -244,13 +265,14 @@ Assumptions, all overridable:
 
 ```
 Lensemble/
+├── AGENTS.md                          # coding-agent context and claim discipline
 ├── README.md                          # this file
 ├── SPEC.md                            # corpus entry point: index + executive summary
 └── docs/
     ├── spec/                          # normative spec sections
     │   ├── 00-overview.md … 10-glossary.md
     │   └── conventions.md             # notation, invariants, shared contracts
-    ├── rfcs/                          # RFC-0001 … RFC-0016 (decision records)
+    ├── rfcs/                          # RFC-0001 … RFC-0017 (decision records)
     └── roadmap/                       # implementation tracker (filed alongside issues)
 ```
 

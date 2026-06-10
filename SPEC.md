@@ -9,8 +9,8 @@ Federated, end-to-end JEPA world models — trained across sovereign data, verif
 
 This is the entry point to the Lensemble specification. It is an index and executive summary; the
 normative detail lives in [`docs/spec/`](docs/spec/) (the stable contract) and [`docs/rfcs/`](docs/rfcs/)
-(the decision records). The reference implementation has not been written; this corpus is the single
-source of truth that drives it.
+(the decision records). The reference implementation now lives in [`lensemble/`](lensemble/), with
+claim-gated evidence and roadmap status tracked alongside the spec corpus.
 
 ## Executive summary
 
@@ -42,7 +42,7 @@ Full statement of thesis, goals, non-goals, and success criteria: [00-overview.m
   [RFC-0003](docs/rfcs/RFC-0003-federated-protocol.md) →
   [RFC-0004](docs/rfcs/RFC-0004-data-provenance.md) →
   [RFC-0002](docs/rfcs/RFC-0002-gauge-and-aggregation.md) →
-  [RFC-0005](docs/rfcs/RFC-0005-evaluation.md), then the subsystem RFCs (0007–0016), then
+  [RFC-0005](docs/rfcs/RFC-0005-evaluation.md), then the subsystem RFCs (0007–0017), then
   [RFC-0006](docs/rfcs/RFC-0006-verifiable-contribution.md).
 - For conventions, notation, named invariants, and the type/API/error contracts shared across the
   corpus: [conventions.md](docs/spec/conventions.md).
@@ -84,6 +84,7 @@ Full statement of thesis, goals, non-goals, and success criteria: [00-overview.m
 | [0014](docs/rfcs/RFC-0014-provenance-commitments.md) | Provenance Commitments & Merkle Scheme | Accepted | provenance |
 | [0015](docs/rfcs/RFC-0015-observability-diagnostics.md) | Observability, Diagnostics & Telemetry | Accepted | observability |
 | [0016](docs/rfcs/RFC-0016-deployment-vendoring-topology.md) | Deployment, Vendoring & Topology | Accepted | core |
+| [0017](docs/rfcs/RFC-0017-dynamic-env-ungameable-metrics.md) | Dynamic Env & Ungameable Ground-Truth Metrics | Draft | eval |
 
 ## Scope and status
 

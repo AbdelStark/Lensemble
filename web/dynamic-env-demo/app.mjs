@@ -6,7 +6,13 @@ import {
 } from "./swipe_dot_core.mjs";
 
 const canvas = document.querySelector("#env");
+if (!(canvas instanceof HTMLCanvasElement)) {
+  throw new Error("Missing #env canvas");
+}
 const ctx = canvas.getContext("2d", { alpha: false });
+if (!ctx) {
+  throw new Error("2D canvas context is unavailable");
+}
 const statusEl = document.querySelector("#status");
 const modelInput = document.querySelector("#modelFile");
 const actionX = document.querySelector("#actionX");
@@ -38,11 +44,17 @@ async function loadModel(file) {
     setStatus("ONNX Runtime Web failed to load.");
     return;
   }
-  const buffer = await file.arrayBuffer();
-  session = await ort.InferenceSession.create(buffer, {
-    executionProviders: ["webgpu", "wasm"],
-  });
-  setStatus(`Loaded ${file.name}`);
+  try {
+    const buffer = await file.arrayBuffer();
+    session = await ort.InferenceSession.create(buffer, {
+      executionProviders: ["webgpu", "wasm"],
+    });
+    setStatus(`Loaded ${file.name}`);
+  } catch (error) {
+    session = null;
+    const message = error instanceof Error ? error.message : String(error);
+    setStatus(`Model load failed: ${message}`);
+  }
 }
 
 async function runStep() {
@@ -51,6 +63,7 @@ async function runStep() {
   draw();
   if (!session) {
     metrics.textContent = `state=(${state.x.toFixed(3)}, ${state.y.toFixed(3)})`;
+    setStatus("Environment step only; no ONNX model is loaded.");
     return;
   }
 
@@ -87,4 +100,4 @@ resetButton.addEventListener("click", () => {
 });
 
 draw();
-setStatus("Load dynamic_env_world_model.onnx to run client-side inference.");
+setStatus("Ready for exported dynamic_env_world_model.onnx inference.");
