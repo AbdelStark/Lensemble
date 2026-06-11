@@ -96,11 +96,13 @@ Full statement of thesis, goals, non-goals, and success criteria: [00-overview.m
   the predictor only) is the documented safe-degrade fallback
   ([RFC-0002](docs/rfcs/RFC-0002-gauge-and-aggregation.md)).
 - **Browser federated demo** ([#294](https://github.com/AbdelStark/Lensemble/issues/294),
-  [BROWSER_FEDERATED_DEMO.md](docs/roadmap/BROWSER_FEDERATED_DEMO.md)) is a local educational
-  orchestration surface: QR joins, backend lifecycle API, browser-surrogate update metadata,
-  coordinator-style aggregation, inference artifact attachment, and residency-safe evidence export. It
-  is not a production browser-training claim and not evidence that the current dynamic-env federation
-  materially beats local-only.
+  [#303](https://github.com/AbdelStark/Lensemble/issues/303),
+  [BROWSER_FEDERATED_DEMO.md](docs/roadmap/BROWSER_FEDERATED_DEMO.md)) is an educational
+  orchestration surface: QR joins, WebSocket primary transport, REST polling fallback, participant
+  liveness, bounded tiny browser update vectors, coordinator-style aggregation, model revision
+  publication, inference artifact attachment, and residency-safe evidence export. It is not a
+  production browser-training claim and not evidence that the current dynamic-env federation materially
+  beats local-only.
 - Milestones map to the staged plan A–E:
   [conventions §12](docs/spec/conventions.md#12-milestones-and-stages). Stage E (own foundation-scale
   federated pretraining) and the Stage-D proofs are out of the v1.0 scope and tracked as future work.

@@ -1,9 +1,9 @@
-// Backend API adapter for the federated browser demo (#296/#297/#299/#301).
+// Backend API adapter for the federated browser demo (#296/#297/#299/#301/#305).
 //
 // The static simulator remains the offline fallback. When served by
-// `lensemble demo federated`, this adapter calls the local metadata-only API:
+// `lensemble demo federated`, this adapter calls the local demo API:
 // create/join/status/events, participant progress, update submission, controls,
-// and evidence export.
+// WebSocket event fanout, and evidence export.
 
 async function requestJson(path, { method = "GET", body = null } = {}) {
   if (typeof fetch !== "function") {
@@ -107,6 +107,44 @@ export class BackendClient {
       .split(/\n+/)
       .filter(Boolean)
       .map((line) => JSON.parse(line));
+  }
+
+  modelRevision(runId, revisionId) {
+    return requestJson(
+      `${this.basePath}/runs/${encodeURIComponent(runId)}/model-revisions/${encodeURIComponent(revisionId)}`,
+    );
+  }
+
+  webSocketUrl(runId, { role = "host", participantId = null, participantToken = null, after = -1 } = {}) {
+    const origin =
+      typeof window !== "undefined" && window.location
+        ? window.location.origin
+        : "http://127.0.0.1";
+    const wsOrigin = origin.startsWith("https://")
+      ? `wss://${origin.slice("https://".length)}`
+      : `ws://${origin.replace(/^http:\/\//, "")}`;
+    const params = new URLSearchParams({ role, after: String(after) });
+    if (participantId) params.set("participantId", participantId);
+    return `${wsOrigin}${this.basePath}/runs/${encodeURIComponent(runId)}/ws?${params.toString()}`;
+  }
+
+  connectRun(runId, options = {}) {
+    if (typeof WebSocket !== "function") {
+      return null;
+    }
+    const protocols = options.participantToken ? [`ptok.${options.participantToken}`] : undefined;
+    const socket = new WebSocket(this.webSocketUrl(runId, options), protocols);
+    socket.addEventListener("message", (event) => {
+      try {
+        options.onMessage?.(JSON.parse(event.data));
+      } catch (error) {
+        options.onError?.(error);
+      }
+    });
+    socket.addEventListener("open", () => options.onOpen?.());
+    socket.addEventListener("close", () => options.onClose?.());
+    socket.addEventListener("error", () => options.onError?.(new Error("WebSocket connection failed")));
+    return socket;
   }
 
   exportEvidence(runId) {

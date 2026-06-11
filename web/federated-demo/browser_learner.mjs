@@ -1,16 +1,29 @@
-// Browser-local surrogate learner contract (#298).
+// Browser-local tiny learner contract (#298/#307).
 //
 // The first implementation path is deliberately a Web Worker JavaScript
-// surrogate over resident synthetic swipe-dot samples. It does not train a
-// production model. It produces only versioned update metadata that the backend
-// can aggregate: shape, sample count, hash, norm, and runtime labels. No raw
-// observations/actions/state labels leave the browser.
+// learner over resident synthetic swipe-dot samples. It does not train a
+// production model. It produces only a versioned, clipped, derived update
+// vector plus metadata that the backend can aggregate. No raw observations,
+// actions, state labels, latents, tensors, participant tokens, or model weights
+// leave the browser.
 
 import { stepSwipeDot } from "../dynamic-env-demo/swipe_dot_core.mjs";
 import { mulberry32 } from "./rng.mjs";
 
 export const UPDATE_SCHEMA = "browser-update/1";
-export const LEARNER_RUNTIME = "js-worker-surrogate-v1";
+export const LEARNER_RUNTIME = "js-worker-tiny-jepa-v1";
+export const DEFAULT_CLIP_NORM = 1.0;
+
+function l2Norm(vector) {
+  return Math.sqrt(vector.reduce((total, value) => total + value * value, 0));
+}
+
+function clipVector(vector, clipNorm = DEFAULT_CLIP_NORM) {
+  const norm = l2Norm(vector);
+  if (norm <= clipNorm || norm === 0) return vector;
+  const scale = clipNorm / norm;
+  return vector.map((value) => value * scale);
+}
 
 function hashString(text) {
   let h0 = 0x811c9dc5;
@@ -35,11 +48,17 @@ export function computeSurrogateUpdate({
   runId,
   participantId,
   round,
+  roundId = `${runId}:round-${round}`,
+  modelRevisionId = "initial",
   seed = 1,
   sampleCount = 16,
+  localSteps = 8,
+  clipNorm = DEFAULT_CLIP_NORM,
 }) {
+  const started = typeof performance !== "undefined" ? performance.now() : Date.now();
   const rng = mulberry32((seed + round * 1009 + participantId.length * 9173) >>> 0);
   const accumulator = [0, 0, 0, 0];
+  let predictionError = 0;
   let state = { x: 0.2 + 0.6 * rng(), y: 0.2 + 0.6 * rng() };
   for (let i = 0; i < sampleCount; i += 1) {
     const action = [rng() * 2 - 1, rng() * 2 - 1];
@@ -48,11 +67,19 @@ export function computeSurrogateUpdate({
     accumulator[1] += action[1];
     accumulator[2] += next.x - state.x;
     accumulator[3] += next.y - state.y;
+    predictionError += Math.abs(next.x - state.x - action[0] * 0.08);
+    predictionError += Math.abs(next.y - state.y - action[1] * 0.08);
     state = next;
   }
-  const vector = accumulator.map((value) => Number((value / sampleCount).toFixed(8)));
-  const l2Norm = Math.sqrt(vector.reduce((total, value) => total + value * value, 0));
-  const hash = hashString(JSON.stringify({ runId, participantId, round, vector, sampleCount }));
+  const unclipped = accumulator.map((value) => value / sampleCount);
+  const vector = clipVector(unclipped, clipNorm).map((value) => Number(value.toFixed(8)));
+  const norm = l2Norm(vector);
+  const loss = predictionError / Math.max(1, sampleCount * 2);
+  const probe = Math.max(0, 1 - loss);
+  const runtimeMs = Math.max(1, (typeof performance !== "undefined" ? performance.now() : Date.now()) - started);
+  const hash = hashString(
+    JSON.stringify({ runId, participantId, round, roundId, modelRevisionId, vector, sampleCount, localSteps }),
+  );
   return {
     schema: UPDATE_SCHEMA,
     source: "browser-local-surrogate",
@@ -60,10 +87,20 @@ export function computeSurrogateUpdate({
     runId,
     participantId,
     round,
+    roundId,
+    modelRevisionId,
     shape: [vector.length],
+    parameterCount: vector.length,
+    vector,
     sampleCount,
+    localSteps,
     hash,
-    l2Norm: Number(l2Norm.toFixed(8)),
+    l2Norm: Number(norm.toFixed(8)),
+    clipNorm,
+    loss: Number(loss.toFixed(8)),
+    probe: Number(probe.toFixed(8)),
+    runtimeMs: Number(runtimeMs.toFixed(1)),
+    seed,
     simulated: false,
   };
 }

@@ -5,7 +5,7 @@
 //   backend-api         local API served by `lensemble demo federated`
 //
 // Both modes render the same lifecycle vocabulary and keep claim boundaries
-// visible. Backend mode accepts only metadata-only browser update artifacts.
+// visible. Backend mode accepts only bounded derived browser update artifacts.
 
 import { backendClient } from "./api_client.mjs";
 import { shouldDeferAutoRefreshForDocument } from "./auto_refresh.mjs";
@@ -18,6 +18,8 @@ import {
   modelIdentity,
   modelLoadFailureMessage,
   noModelMetrics,
+  canRunTinyRevision,
+  runTinyRevisionStep,
   runOnnxStep,
   selectRunInferenceArtifact,
   stepEnvironment,
@@ -47,7 +49,7 @@ const adapters = defaultAdapters();
 
 let hostSession = null; // { run, bus, timer }
 let participantSession = null; // frontend-simulator participant session
-let backendPoll = null; // { view, runId, timer }
+let backendPoll = null; // { view, runId, timer, socket, transport }
 const inferenceByRun = new Map();
 
 // ---------------------------------------------------------------- utilities
@@ -107,7 +109,7 @@ function timelineList(events) {
       el("li", { class: event.severity }, [
         el("span", { text: `#${event.seq ?? event.at}` }),
         el("span", { class: "kind", text: event.kind }),
-        el("span", { text: event.message }),
+        el("span", { text: `${event.actor ?? "system"} r${event.round ?? 0}: ${event.message}` }),
       ]),
     );
   return el("ul", { class: "timeline" }, items);
@@ -123,6 +125,7 @@ function participantSlots(run) {
         el("div", { class: "slot filled" }, [
           el("span", { class: "mono", text: participant.displayName || participant.id }),
           stateBadge(participant.state),
+          el("span", { class: "muted", text: participant.connectionState ?? "connected" }),
           participant.state === "training"
             ? el("progress", { max: "1", value: String(participant.progress ?? 0) })
             : null,
@@ -147,9 +150,33 @@ function artifactList(run) {
       el("li", {}, [
         `${artifact.label ?? artifact.kind} - `,
         el("span", { class: "mono", text: `${String(artifact.sha256).slice(0, 16)}...` }),
-        artifact.simulated ? " (simulated)" : " (metadata-only)",
+        artifact.simulated
+          ? " (simulated)"
+          : artifact.containsTinyDerivedVector
+            ? " (tiny derived vector)"
+            : " (metadata)",
       ]),
     ),
+  );
+}
+
+function metricsList(run) {
+  const metrics = run.roundMetrics ?? [];
+  if (metrics.length === 0) {
+    return note("Round metrics appear after the first aggregation closes.");
+  }
+  return el(
+    "ul",
+    { class: "artifact-list" },
+    metrics
+      .slice(-4)
+      .reverse()
+      .map((metric) =>
+        el("li", {}, [
+          `round ${metric.round}: submitted ${metric.submitted}/${metric.quorum}, aggregate norm ${metric.aggregateNorm}, revision `,
+          el("span", { class: "mono", text: metric.modelRevisionId }),
+        ]),
+      ),
   );
 }
 
@@ -164,6 +191,7 @@ async function refreshBackendRoute(view, runId) {
     return;
   }
   const poll = backendPoll;
+  if (poll?.transport === "websocket") return;
   if (poll?.refreshing) return;
   if (shouldDeferAutoRefreshForDocument()) return;
   if (poll) poll.refreshing = true;
@@ -184,21 +212,61 @@ async function refreshBackendRoute(view, runId) {
 function clearBackendPoll() {
   if (backendPoll) {
     clearInterval(backendPoll.timer);
+    backendPoll.socket?.close();
     backendPoll = null;
   }
 }
 
-function ensureBackendPoll(view, runId) {
-  if (backendPoll?.view === view && backendPoll.runId === runId) return;
+function ensureBackendPoll(view, runId, streamOptions = {}) {
+  const streamKey = JSON.stringify({
+    view,
+    runId,
+    role: streamOptions.role ?? "host",
+    participantId: streamOptions.participantId ?? null,
+  });
+  if (backendPoll?.streamKey === streamKey) return;
   clearBackendPoll();
   backendPoll = {
     view,
     runId,
+    streamKey,
+    transport: "polling",
+    lastSeq: -1,
     refreshing: false,
+    socket: null,
     timer: setInterval(() => {
       void refreshBackendRoute(view, runId);
     }, 1000),
   };
+  const poll = backendPoll;
+  poll.socket = backendClient.connectRun(runId, {
+    role: streamOptions.role ?? "host",
+    participantId: streamOptions.participantId ?? null,
+    participantToken: streamOptions.participantToken ?? null,
+    after: poll.lastSeq,
+    onOpen: () => {
+      poll.transport = "websocket";
+    },
+    onClose: () => {
+      if (backendPoll === poll) poll.transport = "polling";
+    },
+    onMessage: (message) => {
+      if (backendPoll !== poll || !currentRouteStill(view, runId)) return;
+      const events = message.events ?? [];
+      if (events.length > 0) {
+        poll.lastSeq = Math.max(poll.lastSeq, ...events.map((event) => event.seq ?? -1));
+      }
+      const run = message.run;
+      if (run && !shouldDeferAutoRefreshForDocument()) {
+        app.replaceChildren();
+        if (view === "host") renderBackendHostSnapshot(run);
+        else if (view === "join") renderBackendJoinSnapshot(parseRoute(window.location.hash), run);
+      }
+    },
+    onError: () => {
+      if (backendPoll === poll) poll.transport = "polling";
+    },
+  });
 }
 
 function downloadJson(filename, value) {
@@ -280,7 +348,7 @@ function renderHome() {
     el("section", { class: "panel" }, [
       el("h2", { text: "Host a federated browser demo run" }),
       note(
-        "Choose the local backend for real browser sessions, metadata-only update submission, aggregation, inference attachment, and evidence export. The simulator keeps the first slice available without a server.",
+        "Choose the backend for real browser sessions, WebSocket orchestration, bounded tiny update submission, aggregation, inference attachment, and evidence export. The simulator keeps the first slice available without a server.",
       ),
       el("div", { class: "columns" }, [
         el("div", { class: "panel" }, [
@@ -483,7 +551,7 @@ async function renderBackendHost(runId) {
     const run = await backendClient.getRun(runId);
     if (!currentRouteStill("host", runId)) return;
     app.replaceChildren();
-    ensureBackendPoll("host", runId);
+    ensureBackendPoll("host", runId, { role: "host" });
     renderBackendHostSnapshot(run);
   } catch (error) {
     if (!currentRouteStill("host", runId)) return;
@@ -499,7 +567,8 @@ async function renderBackendHost(runId) {
 }
 
 function renderBackendHostSnapshot(run) {
-  const joinUrl = buildJoinUrl(window.location.href, run.id, run.joinToken);
+  ensureBackendPoll("host", run.id, { role: "host" });
+  const joinUrl = run.joinUrl || buildJoinUrl(window.location.href, run.id, run.joinToken);
   const qrCanvas = el("canvas", { id: "qr", "aria-label": "Join URL QR code" });
   const urlInput = el("input", { type: "text", readonly: "readonly", value: joinUrl });
   const statusNote = el("p", { class: "note" });
@@ -561,7 +630,7 @@ function renderBackendHostSnapshot(run) {
     el("section", { class: "panel" }, [
       el("h2", {}, [`Host dashboard - ${run.id} `, stateBadge(run.state)]),
       note(
-        `Mode: ${run.mode}; aggregation: ${run.aggregationMode}; learner: ${run.learnerRuntime}. Quorum ${run.config.quorum}, max ${run.config.maxParticipants}, rounds ${run.config.rounds}.`,
+        `Mode: ${run.mode}; transport: ${backendPoll?.transport ?? run.deployment?.transportMode ?? "polling"}; aggregation: ${run.aggregationMode}; learner: ${run.learnerRuntime}. Quorum ${run.config.quorum}, max ${run.config.maxParticipants}, rounds ${run.config.rounds}.`,
       ),
       el("div", { class: "columns" }, [
         el("div", { class: "panel" }, [
@@ -571,7 +640,7 @@ function renderBackendHostSnapshot(run) {
             urlInput,
             el("button", { class: "secondary", text: "Copy", onclick: () => navigator.clipboard?.writeText(joinUrl) }),
           ]),
-          note("Backend mode coordinates browser sessions through the local API; QR joins work across browser profiles on the same host."),
+          note("Backend mode coordinates browser sessions through the coordinator API and WebSocket stream, with REST polling retained as fallback."),
           startButton,
           abortButton,
           timeoutButton,
@@ -582,6 +651,8 @@ function renderBackendHostSnapshot(run) {
         el("div", { class: "panel" }, [
           el("h2", { text: run.round > 0 ? `Round ${run.round} of ${run.config.rounds}` : "Waiting for participants" }),
           participantSlots(run),
+          el("h2", { text: "Round metrics" }),
+          metricsList(run),
           el("h2", { text: "Artifacts" }),
           artifactList(run),
           el("h2", { text: "Event timeline" }),
@@ -737,7 +808,6 @@ async function renderBackendJoin(route) {
     const run = await backendClient.getRun(route.runId);
     if (!currentRouteStill("join", route.runId)) return;
     app.replaceChildren();
-    ensureBackendPoll("join", route.runId);
     renderBackendJoinSnapshot(route, run);
   } catch (error) {
     if (!currentRouteStill("join", route.runId)) return;
@@ -748,12 +818,21 @@ async function renderBackendJoin(route) {
 function renderBackendJoinSnapshot(route, run) {
   const stored = readBackendParticipant(run.id);
   const me = stored ? run.participants.find((p) => p.id === stored.participantId) : null;
+  if (stored && me) {
+    ensureBackendPoll("join", run.id, {
+      role: "participant",
+      participantId: stored.participantId,
+      participantToken: stored.participantToken,
+    });
+  } else {
+    ensureBackendPoll("join", run.id, { role: "host" });
+  }
   const panel = el("section", { class: "panel participant-stage" }, [
     el("h2", { text: `Participant room - ${run.id}` }),
     el("p", { class: "note" }, [
       "Run state: ",
       stateBadge(run.state),
-      ` · round ${run.round}/${run.config.rounds} · backend API mode`,
+      ` · round ${run.round}/${run.config.rounds} · ${backendPoll?.transport ?? "polling"}`,
     ]),
   ]);
 
@@ -803,9 +882,9 @@ function renderParticipantState(run, me, simulated, participantToken = null) {
     ready: "Ready. Waiting for the host to start the run.",
     assigned: simulated
       ? `Assigned round ${me.round}. Preparing simulated local work.`
-      : `Assigned round ${me.round}. Ready to run the browser-local surrogate learner.`,
-    training: simulated ? `Simulating local work for round ${me.round}.` : `Browser-local surrogate work in progress for round ${me.round}.`,
-    submitted: "Update metadata submitted. Waiting for aggregation.",
+      : `Assigned round ${me.round}. Ready to run the browser-local tiny learner.`,
+    training: simulated ? `Simulating local work for round ${me.round}.` : `Browser-local tiny learner work in progress for round ${me.round}.`,
+    submitted: "Bounded update artifact submitted. Waiting for aggregation.",
     completed: "Run complete. Thanks for participating.",
     dropped: "You were dropped from this run.",
     error: `Run failed: ${run.failureReason ?? me.error ?? "demo error"}`,
@@ -825,14 +904,23 @@ function renderParticipantState(run, me, simulated, participantToken = null) {
         try {
           await backendClient.progress(run.id, me.id, participantToken, 0.1);
           const artifact = await runBrowserLearner(
-            { runId: run.id, participantId: me.id, round: run.round, seed: randomSeed() },
+            {
+              runId: run.id,
+              participantId: me.id,
+              round: run.round,
+              roundId: `${run.id}:round-${run.round}`,
+              modelRevisionId: run.currentModelRevisionId ?? "initial",
+              seed: randomSeed(),
+              sampleCount: 24,
+              localSteps: 8,
+            },
             (progress) => {
               learnerStatus.textContent = `local learner progress ${Math.round(progress * 100)}%`;
               void backendClient.progress(run.id, me.id, participantToken, progress).catch(() => {});
             },
           );
           await backendClient.submitUpdate(run.id, me.id, participantToken, artifact);
-          learnerStatus.textContent = "update metadata submitted";
+          learnerStatus.textContent = "bounded update artifact submitted";
           render();
         } catch (error) {
           learnerStatus.textContent = error.message;
@@ -849,7 +937,7 @@ function renderParticipantState(run, me, simulated, participantToken = null) {
     note(
       simulated
         ? "Local work in this slice is simulated; no data leaves your browser and no real training happens."
-        : "This browser computes a surrogate update from resident synthetic samples in a worker and submits only shape/hash/norm metadata. No raw observations, actions, labels, latents, or model weights are uploaded.",
+        : "This browser computes a tiny clipped update vector from resident synthetic samples in a worker. Only the derived vector and shape/hash/norm metadata are submitted; raw observations, actions, labels, latents, tensors, participant tokens, and model weights are not uploaded.",
     ),
   );
   return el("div", {}, children);
@@ -861,7 +949,7 @@ function renderInferencePanel(run) {
   const state = inferenceByRun.get(run.id) ?? {
     env: initialInferenceState(),
     session: null,
-    status: "Ready. Step the env without a model, load an ONNX file, or inspect the run artifact.",
+    status: "Ready. Step the env, load the tiny run revision, or load an ONNX file explicitly.",
     metrics: "state=(0.250, 0.550)",
   };
   inferenceByRun.set(run.id, state);
@@ -892,7 +980,16 @@ function renderInferencePanel(run) {
     text: "Step env / run inference",
     onclick: async () => {
       const action = [Number(actionX.value), Number(actionY.value)];
-      if (!state.session) {
+      if (canRunTinyRevision(artifact) && !state.session) {
+        const result = runTinyRevisionStep(artifact, state.env, action);
+        state.env = result.state;
+        state.status = result.metrics.status;
+        state.metrics = [
+          result.metrics.stateText,
+          result.metrics.predicted,
+          `latency=${result.metrics.latencyMs}ms`,
+        ].join(" · ");
+      } else if (!state.session) {
         state.env = stepEnvironment(state.env, action);
         const metrics = noModelMetrics(state.env);
         state.status = metrics.status;
@@ -926,7 +1023,7 @@ function renderInferencePanel(run) {
   });
   const panel = el("section", { class: "panel inference-panel" }, [
     el("h2", { text: "Inference panel" }),
-    note("Browser inference/env-sim is supported. A completed run can attach checkpoint-like metadata; loading a real ONNX export remains explicit."),
+    note("Browser inference/env-sim is supported. A completed run loads the tiny JS model revision directly; loading a separate ONNX export remains explicit."),
     el("div", { class: "inference-grid" }, [
       canvas,
       el("div", { class: "panel compact" }, [
@@ -937,6 +1034,8 @@ function renderInferencePanel(run) {
           el("dd", { text: identity.revision }),
           el("dt", { text: "Schema" }),
           el("dd", { text: identity.schema }),
+          el("dt", { text: "Runtime" }),
+          el("dd", { text: identity.runtime }),
           el("dt", { text: "Source" }),
           el("dd", { text: identity.source ?? "none" }),
         ]),

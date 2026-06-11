@@ -21,6 +21,7 @@ export function modelIdentity(artifact) {
       modelId: "none",
       revision: "none",
       schema: "none",
+      runtime: "none",
       source: "no run artifact selected",
     };
   }
@@ -28,6 +29,7 @@ export function modelIdentity(artifact) {
     modelId: artifact.modelId ?? artifact.label ?? "unknown",
     revision: artifact.revision ?? String(artifact.sha256 ?? "").slice(0, 12),
     schema: artifact.schema ?? "unknown",
+    runtime: artifact.runtime ?? "metadata",
     source: artifact.sourceCheckpoint ? `checkpoint ${artifact.sourceCheckpoint.slice(0, 12)}` : artifact.source,
   };
 }
@@ -39,9 +41,37 @@ export function stepEnvironment(state, action) {
 export function noModelMetrics(state) {
   return {
     stateText: `state=(${state.x.toFixed(3)}, ${state.y.toFixed(3)})`,
-    status: "Environment step only; no ONNX model is loaded.",
+    status: "Environment step only; no tiny JS or ONNX model is loaded.",
     predicted: null,
     latencyMs: null,
+  };
+}
+
+export function canRunTinyRevision(artifact) {
+  return (
+    artifact?.kind === "inference-model" &&
+    artifact.runtime === "tiny-js-vector-v1" &&
+    Array.isArray(artifact.vector) &&
+    artifact.vector.length >= 4
+  );
+}
+
+export function runTinyRevisionStep(artifact, state, action, now = () => performance.now()) {
+  const started = now();
+  const vector = artifact.vector;
+  const adjusted = [
+    Math.max(-1, Math.min(1, action[0] + vector[0] * 0.5 + vector[2])),
+    Math.max(-1, Math.min(1, action[1] + vector[1] * 0.5 + vector[3])),
+  ];
+  const nextState = stepSwipeDot(state, adjusted);
+  return {
+    state: nextState,
+    metrics: {
+      stateText: `state=(${nextState.x.toFixed(3)}, ${nextState.y.toFixed(3)})`,
+      status: "Tiny JS model revision inference completed.",
+      predicted: `adjusted_action=(${adjusted[0].toFixed(3)}, ${adjusted[1].toFixed(3)})`,
+      latencyMs: Number((now() - started).toFixed(1)),
+    },
   };
 }
 

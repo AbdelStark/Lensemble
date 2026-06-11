@@ -199,21 +199,43 @@ def demo_federated(
     port: int = typer.Option(
         8765, "--port", min=0, help="local port for the demo HTTP server"
     ),
+    public_base_url: str | None = typer.Option(
+        None,
+        "--public-base-url",
+        help="external HTTPS base URL used in QR joins and WSS URLs",
+    ),
+    public_demo: bool = typer.Option(
+        False,
+        "--public-demo",
+        help="enforce short-event public-demo safety limits",
+    ),
+    deployment_target: str = typer.Option(
+        "local",
+        "--deployment-target",
+        help="deployment label for startup output and evidence exports",
+    ),
     open_browser: bool = typer.Option(
         False, "--open", help="open the browser once the demo server starts"
     ),
 ) -> None:
-    """Serve the browser federated demo app (#294).
+    """Serve the browser federated demo app (#294/#303).
 
-    The demo exposes a local HTTP API plus the static browser app:
-    create/join/status/events, participant browser-surrogate update submission,
-    coordinator-style aggregation, inference artifact metadata, and
-    residency-safe evidence export. It is an educational systems demo, not a
-    benchmark win or production browser-training claim.
+    The demo exposes an HTTP API, WebSocket event stream, static browser app,
+    QR joins, participant tiny-learner update submission, coordinator-style
+    aggregation, browser inference artifact metadata, and residency-safe
+    evidence export. It is an educational systems demo, not a benchmark win or
+    production browser-training claim.
     """
     from lensemble.demo.server import serve
 
-    serve(host=host, port=port, open_browser=open_browser)
+    serve(
+        host=host,
+        port=port,
+        open_browser=open_browser,
+        public_base_url=public_base_url,
+        public_demo=public_demo,
+        deployment_target=deployment_target,
+    )
 
 
 @federate_app.command("coordinator")

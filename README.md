@@ -20,7 +20,7 @@ The central problem is the JEPA latent gauge. In self-supervised representation 
 - Secure aggregation and differential-privacy plumbing for the release path.
 - Hash-bound checkpoints, manifests, dataset provenance, and evidence bundles.
 - CPU-oriented tests for contracts, determinism, residency, aggregation, DP, and dynamic-env evaluation.
-- A local browser federated demo for run orchestration, QR joins, metadata-only browser updates, and evidence export.
+- A browser federated demo for QR joins, WebSocket orchestration, bounded tiny browser updates, aggregation, inference, and evidence export.
 
 ## Status
 
@@ -28,7 +28,7 @@ The central problem is the JEPA latent gauge. In self-supervised representation 
 |---|---|
 | SO-100 federation | Gauge-only result. Anchored federation controls the latent frame where naive FedAvg fails. It does not prove downstream robotics usefulness. |
 | Dynamic env | Educational systems demo. Federated scratch reaches `state_probe_r2=0.8885337114`, but local-only reaches `0.8838405609`; the `0.0046931505` margin misses the required `0.05`. |
-| Browser demo | Implemented as local orchestration and inference UI. Browser updates are metadata-only surrogate artifacts, not production browser training. |
+| Browser demo | Implemented as local/public-demo orchestration with WebSocket primary transport, REST polling fallback, bounded tiny browser update vectors, aggregation, inference UI, and evidence export. This is not production browser training. |
 | Proof layer | Artifact and provenance contracts exist. There is no cryptographic proof of honest participant computation yet. |
 | Clinical, safety, or deployment claim | None. This is a research codebase. |
 
@@ -59,6 +59,17 @@ Open the printed URL, usually:
 
 ```text
 http://127.0.0.1:8765/web/federated-demo/
+```
+
+For tunnel or LAN rehearsal, bind the coordinator and provide the external base
+URL used in QR codes and WSS URLs:
+
+```bash
+uv run lensemble demo federated \
+  --host 0.0.0.0 \
+  --public-base-url https://YOUR-TUNNEL.trycloudflare.com/web/federated-demo \
+  --public-demo \
+  --deployment-target cloudflare-tunnel
 ```
 
 ## Architecture

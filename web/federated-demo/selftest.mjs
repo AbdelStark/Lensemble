@@ -26,9 +26,11 @@ import {
 } from "./browser_learner.mjs";
 import {
   initialInferenceState,
+  canRunTinyRevision,
   modelIdentity,
   modelLoadFailureMessage,
   noModelMetrics,
+  runTinyRevisionStep,
   selectRunInferenceArtifact,
   stepEnvironment,
   summarizeInference,
@@ -106,6 +108,15 @@ check("join URL round-trips through the route parser", () => {
 check("backend client keeps the documented local API base path", () => {
   const client = new BackendClient("/demo-api/");
   assertEqual(client.basePath, "/demo-api");
+  const wsUrl = client.webSocketUrl("run-abc123de", { role: "host", after: 3 });
+  assert(wsUrl.includes("/demo-api/runs/run-abc123de/ws"), "WebSocket URL path missing");
+  assert(wsUrl.includes("role=host"), "WebSocket URL role missing");
+  const participantWs = client.webSocketUrl("run-abc123de", {
+    role: "participant",
+    participantId: "browser-abc123",
+    participantToken: "ptok-secret",
+  });
+  assert(!participantWs.includes("ptok-secret"), "participant token leaked into WebSocket URL");
 });
 
 check("route parser handles host/admin/home/unknown", () => {
@@ -186,6 +197,8 @@ check("lifecycle states cover the #295 acceptance set", () => {
     assert(PARTICIPANT_STATES.includes(state), `missing participant state ${state}`);
   }
   assert(EVENT_KINDS.includes("round.closed"), "missing round.closed event kind");
+  assert(EVENT_KINDS.includes("connection.opened"), "missing connection.opened event kind");
+  assert(EVENT_KINDS.includes("participant.stale"), "missing participant.stale event kind");
 });
 
 check("invalid transitions are rejected", () => {
@@ -327,11 +340,13 @@ check("dropped participants stop counting toward active set", () => {
 
 // --- browser learner contract ---
 
-check("browser surrogate update contains only metadata", () => {
+check("browser tiny update contains bounded derived vector and no raw keys", () => {
   const artifact = computeSurrogateUpdate({
     runId: "run-abc123de",
     participantId: "browser-abc123",
     round: 1,
+    roundId: "run-abc123de:round-1",
+    modelRevisionId: "initial",
     seed: 123,
   });
   assertEqual(artifact.schema, UPDATE_SCHEMA);
@@ -339,9 +354,13 @@ check("browser surrogate update contains only metadata", () => {
   assertEqual(artifact.source, "browser-local-surrogate");
   assertEqual(artifact.simulated, false);
   assertEqual(artifact.shape.length, 1);
+  assertEqual(artifact.shape[0], artifact.vector.length);
+  assertEqual(artifact.parameterCount, artifact.vector.length);
+  assert(artifact.l2Norm <= artifact.clipNorm, "artifact was not clipped to norm bound");
+  assertEqual(artifact.modelRevisionId, "initial");
   assertEqual(artifact.hash.length, 64);
   const encoded = JSON.stringify(artifact);
-  for (const forbidden of ["observations", "actions", "latents", "weights"]) {
+  for (const forbidden of ["observations", "actions", "latents", "weights", "tokens"]) {
     assert(!encoded.includes(forbidden), `artifact leaked ${forbidden}`);
   }
 });
@@ -370,13 +389,19 @@ check("inference panel selects run-produced inference artifacts", () => {
     schema: "demo-inference-artifact/1",
     modelId: "lensemble-demo/run-abc123de",
     revision: "abc123",
+    runtime: "tiny-js-vector-v1",
+    vector: [0.1, -0.1, 0.01, -0.01],
     sourceCheckpoint: "f".repeat(64),
   };
   const selected = selectRunInferenceArtifact({ artifacts: [{ kind: "checkpoint" }, artifact] });
   assertEqual(selected, artifact);
   const identity = modelIdentity(selected);
   assertEqual(identity.schema, "demo-inference-artifact/1");
+  assertEqual(identity.runtime, "tiny-js-vector-v1");
   assert(identity.source.includes("checkpoint"), "identity should name checkpoint source");
+  assert(canRunTinyRevision(selected), "tiny revision should be runnable");
+  const result = runTinyRevisionStep(selected, initialInferenceState(), [0.2, -0.1], () => 10);
+  assert(result.metrics.predicted.includes("adjusted_action"), "tiny revision prediction missing");
 });
 
 check("inference panel supports no-model environment stepping", () => {
@@ -385,7 +410,7 @@ check("inference panel supports no-model environment stepping", () => {
   assert(next.x > state.x, "x did not move");
   assert(next.y < state.y, "y did not move");
   const metrics = noModelMetrics(next);
-  assert(metrics.status.includes("no ONNX model"), "no-model status missing");
+  assert(metrics.status.includes("no tiny JS or ONNX model"), "no-model status missing");
 });
 
 check("inference summaries expose prediction dimensions and load errors", () => {
