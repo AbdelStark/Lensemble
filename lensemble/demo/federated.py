@@ -45,6 +45,7 @@ PARTICIPANT_STATES = (
     "dropped",
     "error",
 )
+AUTOMATION_MODES = frozenset({"auto", "manual"})
 CONNECTION_STATES = (
     "connected",
     "reconnecting",
@@ -120,8 +121,13 @@ _REDACTED_UPDATE_FIELDS = frozenset(
         "hash",
         "l2Norm",
         "clipNorm",
+        "unclippedNorm",
+        "clipSaturation",
         "loss",
         "probe",
+        "effectiveDim",
+        "effectiveDimRatio",
+        "collapseRisk",
         "runtimeMs",
         "seed",
         "simulated",
@@ -295,6 +301,7 @@ class ParticipantState:
     token: str
     session_id: str | None = None
     display_name: str | None = None
+    automation_mode: str = "auto"
     state: str = "joined"
     connection_state: str = "connected"
     joined_at: int = 0
@@ -326,6 +333,7 @@ class ParticipantState:
         return {
             "id": self.id,
             "displayName": self.display_name,
+            "automationMode": self.automation_mode,
             "state": self.state,
             "connectionState": self.connection_state,
             "joinedAt": self.joined_at,
@@ -493,9 +501,13 @@ class FederatedDemoService:
         join_token: str,
         display_name: str | None = None,
         session_id: str | None = None,
+        automation_mode: str | None = None,
     ) -> dict[str, Any]:
         run = self._get_run(run_id)
         self._require_join_token(run, join_token)
+        selected_automation_mode = self._automation_mode(
+            automation_mode if automation_mode is not None else "auto"
+        )
         if run.state in TERMINAL_RUN_STATES:
             raise FederatedDemoError("run_closed", f"run is {run.state}", status=409)
         if run.state not in {"created", "joining", "ready"}:
@@ -510,13 +522,18 @@ class FederatedDemoService:
                 if participant.connection_state in {"reconnecting", "stale"}:
                     participant.reconnect_count += 1
                 participant.connection_state = "connected"
+                if automation_mode is not None:
+                    participant.automation_mode = selected_automation_mode
                 self._emit(
                     run,
                     "participant.resumed",
                     f"participant {participant.id} resumed existing browser slot",
                     participant_id=participant.id,
                     actor="participant",
-                    payload={"state": participant.state},
+                    payload={
+                        "state": participant.state,
+                        "automationMode": participant.automation_mode,
+                    },
                 )
                 return {
                     "participantId": participant.id,
@@ -538,6 +555,7 @@ class FederatedDemoService:
             token=_token("ptok-", 18),
             session_id=session_id,
             display_name=display_name or None,
+            automation_mode=selected_automation_mode,
             joined_at=_now_ms(),
             last_heartbeat_at=_now_ms(),
             last_connection_at=_now_ms(),
@@ -550,7 +568,11 @@ class FederatedDemoService:
             f"participant {participant.id} joined",
             participant_id=participant.id,
             actor="participant",
-            payload={"slot": len(run.participants), "of": run.config.max_participants},
+            payload={
+                "slot": len(run.participants),
+                "of": run.config.max_participants,
+                "automationMode": participant.automation_mode,
+            },
         )
         self._transition_run(run, "joining", "first participant joined")
         self._set_participant_state(run, participant, "ready")
@@ -818,6 +840,12 @@ class FederatedDemoService:
                 "hash": metadata["hash"],
                 "l2Norm": metadata["l2Norm"],
                 "clipNorm": metadata["clipNorm"],
+                "clipSaturation": metadata["clipSaturation"],
+                "loss": metadata["loss"],
+                "probe": metadata["probe"],
+                "effectiveDim": metadata["effectiveDim"],
+                "effectiveDimRatio": metadata["effectiveDimRatio"],
+                "collapseRisk": metadata["collapseRisk"],
                 "source": metadata["source"],
                 "simulated": metadata["simulated"],
             },
@@ -966,6 +994,16 @@ class FederatedDemoService:
                 "invalid_config",
                 f"public demo rounds must be <= {self.safety.max_public_rounds}",
             )
+
+    @staticmethod
+    def _automation_mode(value: object) -> str:
+        mode = str(value or "auto").strip().lower()
+        if mode not in AUTOMATION_MODES:
+            raise FederatedDemoError(
+                "invalid_automation_mode",
+                "automationMode must be auto or manual",
+            )
+        return mode
 
     def refresh_liveness(self, run_id: str, *, now_ms: int | None = None) -> None:
         run = self._get_run(run_id)
@@ -1181,6 +1219,10 @@ class FederatedDemoService:
             [metadata["vector"] for metadata in update_metadata]
         )
         aggregate_norm = self._vector_norm(aggregate_vector)
+        aggregate_effective_dim = self._effective_dimension(aggregate_vector)
+        aggregate_effective_dim_ratio = self._effective_dimension_ratio(
+            aggregate_vector
+        )
         parent_revision = run.current_model_revision_id
         revision_hash = _hash_json(
             {
@@ -1232,6 +1274,9 @@ class FederatedDemoService:
             "parameterCount": len(aggregate_vector),
             "vector": aggregate_vector,
             "aggregateNorm": round(aggregate_norm, 8),
+            "aggregateEffectiveDim": round(aggregate_effective_dim, 8),
+            "aggregateEffectiveDimRatio": round(aggregate_effective_dim_ratio, 8),
+            "collapseRisk": self._collapse_risk(aggregate_effective_dim_ratio),
             "sourceUpdateHashes": sorted(update_hashes),
             "contributingParticipants": [p.id for p in submitted],
             "aggregationMode": run.aggregation_mode,
@@ -1254,6 +1299,9 @@ class FederatedDemoService:
                 "quorum": run.config.quorum,
                 "participantCount": len(self._assigned_participants(run)),
                 "aggregateNorm": round(aggregate_norm, 8),
+                "aggregateEffectiveDim": round(aggregate_effective_dim, 8),
+                "aggregateEffectiveDimRatio": round(aggregate_effective_dim_ratio, 8),
+                "collapseRisk": self._collapse_risk(aggregate_effective_dim_ratio),
                 "modelRevisionId": model_revision_id,
                 "sourceUpdateHashes": sorted(update_hashes),
                 "elapsedMs": elapsed_ms,
@@ -1262,6 +1310,18 @@ class FederatedDemoService:
                 ),
                 "probeMean": self._mean_optional(
                     [metadata.get("probe") for metadata in update_metadata]
+                ),
+                "effectiveDimMean": self._mean_optional(
+                    [metadata.get("effectiveDim") for metadata in update_metadata]
+                ),
+                "effectiveDimRatioMean": self._mean_optional(
+                    [metadata.get("effectiveDimRatio") for metadata in update_metadata]
+                ),
+                "clipSaturationRate": self._mean_optional(
+                    [metadata.get("clipSaturation") for metadata in update_metadata]
+                ),
+                "runtimeMsMean": self._mean_optional(
+                    [metadata.get("runtimeMs") for metadata in update_metadata]
                 ),
             }
         )
@@ -1275,6 +1335,9 @@ class FederatedDemoService:
                 "revisionHash": revision_hash,
                 "contributing": len(submitted),
                 "aggregateNorm": round(aggregate_norm, 8),
+                "aggregateEffectiveDim": round(aggregate_effective_dim, 8),
+                "aggregateEffectiveDimRatio": round(aggregate_effective_dim_ratio, 8),
+                "collapseRisk": self._collapse_risk(aggregate_effective_dim_ratio),
                 "simulated": False,
             },
         )
@@ -1315,6 +1378,9 @@ class FederatedDemoService:
                 "parameterCount": len(aggregate_vector),
                 "vector": aggregate_vector,
                 "aggregateNorm": round(aggregate_norm, 8),
+                "aggregateEffectiveDim": round(aggregate_effective_dim, 8),
+                "aggregateEffectiveDimRatio": round(aggregate_effective_dim_ratio, 8),
+                "collapseRisk": self._collapse_risk(aggregate_effective_dim_ratio),
                 "preset": run.config.preset,
                 "simulated": False,
                 "containsModelWeights": False,
@@ -1440,6 +1506,43 @@ class FederatedDemoService:
                 "norm_bound_exceeded",
                 "artifact vector exceeds the configured norm bound",
             )
+        unclipped_norm = self._optional_float(artifact.get("unclippedNorm"))
+        if unclipped_norm is None:
+            unclipped_norm = computed_norm
+        if unclipped_norm is not None and unclipped_norm < 0:
+            raise FederatedDemoError(
+                "invalid_artifact", "unclippedNorm must be non-negative"
+            )
+        clip_saturation = self._optional_float(artifact.get("clipSaturation"))
+        if clip_saturation is None:
+            clip_saturation = 1.0 if unclipped_norm > clip_norm else 0.0
+        if clip_saturation is not None and not 0.0 <= clip_saturation <= 1.0:
+            raise FederatedDemoError(
+                "invalid_artifact", "clipSaturation must be in [0, 1]"
+            )
+        effective_dim = self._optional_float(artifact.get("effectiveDim"))
+        if effective_dim is not None and effective_dim < 0:
+            raise FederatedDemoError(
+                "invalid_artifact", "effectiveDim must be non-negative"
+            )
+        effective_dim_ratio = self._optional_float(artifact.get("effectiveDimRatio"))
+        if effective_dim_ratio is not None and not 0.0 <= effective_dim_ratio <= 1.0:
+            raise FederatedDemoError(
+                "invalid_artifact", "effectiveDimRatio must be in [0, 1]"
+            )
+        if effective_dim is None:
+            effective_dim = self._effective_dimension(update_vector)
+        if effective_dim_ratio is None:
+            effective_dim_ratio = (
+                effective_dim / len(update_vector) if update_vector else 0.0
+            )
+        collapse_risk = str(
+            artifact.get("collapseRisk") or self._collapse_risk(effective_dim_ratio)
+        )
+        if collapse_risk not in {"low", "watch", "high"}:
+            raise FederatedDemoError(
+                "invalid_artifact", "collapseRisk must be low, watch, or high"
+            )
         source = str(artifact.get("source", ""))
         if source not in {"browser-local-surrogate", "simulator"}:
             raise FederatedDemoError(
@@ -1467,8 +1570,13 @@ class FederatedDemoService:
             "hash": update_hash,
             "l2Norm": round(computed_norm, 8),
             "clipNorm": clip_norm,
+            "unclippedNorm": unclipped_norm,
+            "clipSaturation": clip_saturation,
             "loss": self._optional_float(artifact.get("loss")),
             "probe": self._optional_float(artifact.get("probe")),
+            "effectiveDim": round(effective_dim, 8),
+            "effectiveDimRatio": round(effective_dim_ratio, 8),
+            "collapseRisk": collapse_risk,
             "runtimeMs": self._optional_float(artifact.get("runtimeMs")),
             "seed": int(artifact.get("seed", 0)),
             "simulated": bool(artifact.get("simulated", source == "simulator")),
@@ -1480,6 +1588,31 @@ class FederatedDemoService:
     @staticmethod
     def _vector_norm(vector: list[float]) -> float:
         return sum(value * value for value in vector) ** 0.5
+
+    @classmethod
+    def _effective_dimension_ratio(cls, vector: list[float]) -> float:
+        if not vector:
+            return 0.0
+        return cls._effective_dimension(vector) / len(vector)
+
+    @staticmethod
+    def _effective_dimension(vector: list[float]) -> float:
+        energy = [value * value for value in vector]
+        total = sum(energy)
+        squared = sum(value * value for value in energy)
+        if total <= 0 or squared <= 0:
+            return 0.0
+        return (total * total) / squared
+
+    @staticmethod
+    def _collapse_risk(effective_dim_ratio: float | None) -> str:
+        if effective_dim_ratio is None:
+            return "watch"
+        if effective_dim_ratio < 0.35:
+            return "high"
+        if effective_dim_ratio < 0.6:
+            return "watch"
+        return "low"
 
     @staticmethod
     def _mean_vector(vectors: list[list[float]]) -> list[float]:

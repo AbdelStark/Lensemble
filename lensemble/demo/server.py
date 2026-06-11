@@ -194,6 +194,7 @@ def make_handler(service: FederatedDemoService) -> type[BaseHTTPRequestHandler]:
                         ),
                         display_name=payload.get("displayName"),
                         session_id=payload.get("sessionId"),
+                        automation_mode=payload.get("automationMode"),
                     )
                 )
                 return

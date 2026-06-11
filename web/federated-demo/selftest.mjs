@@ -21,7 +21,9 @@ import { BackendClient } from "./api_client.mjs";
 import {
   LEARNER_RUNTIME,
   UPDATE_SCHEMA,
+  collapseRisk,
   computeSurrogateUpdate,
+  effectiveDimension,
   simulatorUpdateArtifact,
 } from "./browser_learner.mjs";
 import {
@@ -360,12 +362,22 @@ check("browser tiny update contains bounded derived vector and no raw keys", () 
   assertEqual(artifact.shape[0], artifact.vector.length);
   assertEqual(artifact.parameterCount, artifact.vector.length);
   assert(artifact.l2Norm <= artifact.clipNorm, "artifact was not clipped to norm bound");
+  assert(artifact.effectiveDim >= 0, "effectiveDim must be non-negative");
+  assert(artifact.effectiveDimRatio >= 0 && artifact.effectiveDimRatio <= 1, "effectiveDimRatio must be bounded");
+  assert(["low", "watch", "high"].includes(artifact.collapseRisk), "collapseRisk must be a known label");
   assertEqual(artifact.modelRevisionId, "initial");
   assertEqual(artifact.hash.length, 64);
   const encoded = JSON.stringify(artifact);
   for (const forbidden of ["observations", "actions", "latents", "weights", "tokens"]) {
     assert(!encoded.includes(forbidden), `artifact leaked ${forbidden}`);
   }
+});
+
+check("anti-collapse proxy distinguishes spread from rank-one tiny updates", () => {
+  assert(effectiveDimension([1, 1, 1, 1]) > effectiveDimension([2, 0, 0, 0]), "spread vector should have higher effective dimension");
+  assertEqual(collapseRisk(0.25), "high");
+  assertEqual(collapseRisk(0.5), "watch");
+  assertEqual(collapseRisk(0.75), "low");
 });
 
 check("browser surrogate update is deterministic for a fixed task", () => {

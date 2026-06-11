@@ -51,10 +51,10 @@ export class BackendClient {
     return requestJson(`${this.basePath}/runs/${encodeURIComponent(runId)}`);
   }
 
-  joinRun(runId, { joinToken, displayName, sessionId }) {
+  joinRun(runId, { joinToken, displayName, sessionId, automationMode = "auto" }) {
     return requestJson(`${this.basePath}/runs/${encodeURIComponent(runId)}/join`, {
       method: "POST",
-      body: { joinToken, displayName, sessionId },
+      body: { joinToken, displayName, sessionId, automationMode },
     });
   }
 

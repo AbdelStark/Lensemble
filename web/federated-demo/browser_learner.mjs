@@ -18,6 +18,20 @@ function l2Norm(vector) {
   return Math.sqrt(vector.reduce((total, value) => total + value * value, 0));
 }
 
+export function effectiveDimension(vector) {
+  const energy = vector.map((value) => value * value);
+  const total = energy.reduce((sum, value) => sum + value, 0);
+  const squared = energy.reduce((sum, value) => sum + value * value, 0);
+  if (total === 0 || squared === 0) return 0;
+  return (total * total) / squared;
+}
+
+export function collapseRisk(effectiveDimRatio) {
+  if (effectiveDimRatio < 0.35) return "high";
+  if (effectiveDimRatio < 0.6) return "watch";
+  return "low";
+}
+
 function clipVector(vector, clipNorm = DEFAULT_CLIP_NORM) {
   const norm = l2Norm(vector);
   if (norm <= clipNorm || norm === 0) return vector;
@@ -72,10 +86,13 @@ export function computeSurrogateUpdate({
     state = next;
   }
   const unclipped = accumulator.map((value) => value / sampleCount);
+  const unclippedNorm = l2Norm(unclipped);
   const vector = clipVector(unclipped, clipNorm).map((value) => Number(value.toFixed(8)));
   const norm = l2Norm(vector);
   const loss = predictionError / Math.max(1, sampleCount * 2);
   const probe = Math.max(0, 1 - loss);
+  const effDim = effectiveDimension(vector);
+  const effectiveDimRatio = vector.length > 0 ? effDim / vector.length : 0;
   const runtimeMs = Math.max(1, (typeof performance !== "undefined" ? performance.now() : Date.now()) - started);
   const hash = hashString(
     JSON.stringify({ runId, participantId, round, roundId, modelRevisionId, vector, sampleCount, localSteps }),
@@ -97,8 +114,13 @@ export function computeSurrogateUpdate({
     hash,
     l2Norm: Number(norm.toFixed(8)),
     clipNorm,
+    unclippedNorm: Number(unclippedNorm.toFixed(8)),
+    clipSaturation: unclippedNorm > clipNorm ? 1 : 0,
     loss: Number(loss.toFixed(8)),
     probe: Number(probe.toFixed(8)),
+    effectiveDim: Number(effDim.toFixed(8)),
+    effectiveDimRatio: Number(effectiveDimRatio.toFixed(8)),
+    collapseRisk: collapseRisk(effectiveDimRatio),
     runtimeMs: Number(runtimeMs.toFixed(1)),
     seed,
     simulated: false,
@@ -121,9 +143,10 @@ export function runBrowserLearner(task, onProgress = () => {}) {
       const worker = new Worker(new URL("./learner_worker.mjs", import.meta.url), { type: "module" });
       worker.onmessage = (event) => {
         const msg = event.data;
-        if (msg.type === "progress") onProgress(msg.progress);
+        if (msg.type === "progress") onProgress(msg.progress, msg.telemetry ?? null);
         if (msg.type === "result") {
           worker.terminate();
+          onProgress(1, msg.artifact);
           resolve(msg.artifact);
         }
         if (msg.type === "error") {
@@ -139,11 +162,11 @@ export function runBrowserLearner(task, onProgress = () => {}) {
     });
   }
   return new Promise((resolve) => {
-    onProgress(0.25);
+    onProgress(0.25, { phase: "sampling" });
     setTimeout(() => {
-      onProgress(0.75);
+      onProgress(0.75, { phase: "fitting" });
       const artifact = computeSurrogateUpdate(task);
-      onProgress(1);
+      onProgress(1, artifact);
       resolve(artifact);
     }, 40);
   });

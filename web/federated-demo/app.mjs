@@ -51,6 +51,8 @@ let hostSession = null; // { run, bus, timer }
 let participantSession = null; // frontend-simulator participant session
 let backendPoll = null; // { view, runId, timer, socket, transport }
 const inferenceByRun = new Map();
+const backendLearnerJobs = new Map();
+const backendLearnerTelemetry = new Map();
 
 // ---------------------------------------------------------------- utilities
 
@@ -79,6 +81,56 @@ function note(text) {
 
 function errorBox(text) {
   return el("p", { class: "error-box", text });
+}
+
+function formatMetric(value, digits = 3) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return "n/a";
+  return Number(value).toFixed(digits).replace(/\.?0+$/, "");
+}
+
+function latestUpdateMetadata(participant, preferredRound = null) {
+  const updates = participant?.updateMetadata ?? {};
+  if (preferredRound !== null && updates[String(preferredRound)]) return updates[String(preferredRound)];
+  const latestRound = Object.keys(updates)
+    .map((round) => Number(round))
+    .filter((round) => Number.isFinite(round))
+    .sort((a, b) => b - a)[0];
+  return latestRound === undefined ? null : updates[String(latestRound)];
+}
+
+function learnerJobKey(run, participant) {
+  return [
+    run.id,
+    participant.id,
+    participant.round ?? run.round,
+    run.currentModelRevisionId ?? "initial",
+  ].join(":");
+}
+
+function learnerTelemetryPayload(progress, telemetry) {
+  const payload = {
+    progress,
+    phase: telemetry?.phase ?? null,
+    loss: telemetry?.loss ?? null,
+    probe: telemetry?.probe ?? null,
+    l2Norm: telemetry?.l2Norm ?? null,
+    clipNorm: telemetry?.clipNorm ?? null,
+    clipSaturation: telemetry?.clipSaturation ?? null,
+    effectiveDim: telemetry?.effectiveDim ?? null,
+    effectiveDimRatio: telemetry?.effectiveDimRatio ?? null,
+    collapseRisk: telemetry?.collapseRisk ?? null,
+    runtimeMs: telemetry?.runtimeMs ?? null,
+    error: telemetry?.error ?? null,
+  };
+  return payload;
+}
+
+function metricTile(label, value, detail = null) {
+  return el("div", { class: "metric-tile" }, [
+    el("span", { class: "metric-label", text: label }),
+    el("strong", { text: value }),
+    detail ? el("span", { class: "muted", text: detail }) : null,
+  ]);
 }
 
 function drawQr(canvas, text) {
@@ -125,7 +177,15 @@ function participantSlots(run) {
         el("div", { class: "slot filled" }, [
           el("span", { class: "mono", text: participant.displayName || participant.id }),
           stateBadge(participant.state),
-          el("span", { class: "muted", text: participant.connectionState ?? "connected" }),
+          el("span", {
+            class: "muted",
+            text: [
+              participant.connectionState ?? "connected",
+              participant.automationMode ? `${participant.automationMode} mode` : null,
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          }),
           participant.state === "training"
             ? el("progress", { max: "1", value: String(participant.progress ?? 0) })
             : null,
@@ -166,17 +226,51 @@ function metricsList(run) {
     return note("Round metrics appear after the first aggregation closes.");
   }
   return el(
-    "ul",
-    { class: "artifact-list" },
+    "div",
+    { class: "metrics-grid" },
     metrics
       .slice(-4)
       .reverse()
       .map((metric) =>
-        el("li", {}, [
-          `round ${metric.round}: submitted ${metric.submitted}/${metric.quorum}, aggregate norm ${metric.aggregateNorm}, revision `,
-          el("span", { class: "mono", text: metric.modelRevisionId }),
+        el("div", { class: "metric-card" }, [
+          el("div", { class: "metric-card-head" }, [
+            el("strong", { text: `round ${metric.round}` }),
+            stateBadge(metric.collapseRisk ?? "watch"),
+          ]),
+          el("div", { class: "metric-tiles" }, [
+            metricTile("loss", formatMetric(metric.localLossMean, 4)),
+            metricTile("probe", formatMetric(metric.probeMean, 4)),
+            metricTile("eff dim", formatMetric(metric.aggregateEffectiveDim, 2), `${formatMetric((metric.aggregateEffectiveDimRatio ?? 0) * 100, 0)}%`),
+            metricTile("clip sat", `${formatMetric((metric.clipSaturationRate ?? 0) * 100, 0)}%`),
+            metricTile("runtime", metric.runtimeMsMean === null || metric.runtimeMsMean === undefined ? "n/a" : `${formatMetric(metric.runtimeMsMean, 1)} ms`),
+            metricTile("agg norm", formatMetric(metric.aggregateNorm, 4)),
+          ]),
+          el("span", { class: "mono muted", text: metric.modelRevisionId }),
         ]),
       ),
+  );
+}
+
+function trainingDiagnostics(run) {
+  const rows = (run.participants ?? [])
+    .map((participant) => ({ participant, metadata: latestUpdateMetadata(participant, run.round) }))
+    .filter(({ metadata }) => metadata);
+  if (rows.length === 0) {
+    return note("Training diagnostics appear after bounded updates are submitted.");
+  }
+  return el(
+    "div",
+    { class: "diagnostic-table" },
+    rows.map(({ participant, metadata }) =>
+      el("div", { class: "diagnostic-row" }, [
+        el("span", { class: "mono", text: participant.displayName || participant.id }),
+        el("span", { text: `loss ${formatMetric(metadata.loss, 4)}` }),
+        el("span", { text: `probe ${formatMetric(metadata.probe, 4)}` }),
+        el("span", { text: `eff-dim ${formatMetric(metadata.effectiveDim, 2)}` }),
+        el("span", { text: `clip ${formatMetric((metadata.clipSaturation ?? 0) * 100, 0)}%` }),
+        stateBadge(metadata.collapseRisk ?? "watch"),
+      ]),
+    ),
   );
 }
 
@@ -674,6 +768,8 @@ function renderBackendHostSnapshot(run) {
         el("div", { class: "panel" }, [
           el("h2", { text: run.round > 0 ? `Round ${run.round} of ${run.config.rounds}` : "Waiting for participants" }),
           participantSlots(run),
+          el("h2", { text: "Training diagnostics" }),
+          trainingDiagnostics(run),
           el("h2", { text: "Round metrics" }),
           metricsList(run),
           el("h2", { text: "Artifacts" }),
@@ -719,7 +815,11 @@ function readBackendParticipant(runId) {
   const raw = window.sessionStorage.getItem(backendParticipantStorageKey(runId));
   if (!raw) return null;
   try {
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    return {
+      ...parsed,
+      automationMode: parsed.automationMode === "manual" ? "manual" : "auto",
+    };
   } catch {
     return null;
   }
@@ -727,6 +827,61 @@ function readBackendParticipant(runId) {
 
 function writeBackendParticipant(runId, participant) {
   window.sessionStorage.setItem(backendParticipantStorageKey(runId), JSON.stringify(participant));
+}
+
+function renderModeControl(runId) {
+  const name = `automation-${runId}`;
+  const auto = el("input", { type: "radio", name, value: "auto", checked: "checked" });
+  const manual = el("input", { type: "radio", name, value: "manual" });
+  return el("div", { class: "segmented", role: "radiogroup", "aria-label": "Run mode" }, [
+    el("label", {}, [auto, el("span", { text: "Auto" })]),
+    el("label", {}, [manual, el("span", { text: "Manual" })]),
+  ]);
+}
+
+function selectedMode(control) {
+  return control.querySelector("input:checked")?.value === "manual" ? "manual" : "auto";
+}
+
+function startBackendLearner(run, me, participantToken, { force = false } = {}) {
+  const key = learnerJobKey(run, me);
+  const existing = backendLearnerJobs.get(key);
+  if (!force && existing) return;
+  backendLearnerJobs.set(key, { status: "running" });
+  backendLearnerTelemetry.set(key, learnerTelemetryPayload(me.progress ?? 0, { phase: "queued" }));
+
+  void (async () => {
+    try {
+      await backendClient.progress(run.id, me.id, participantToken, 0.1);
+      const artifact = await runBrowserLearner(
+        {
+          runId: run.id,
+          participantId: me.id,
+          round: run.round,
+          roundId: `${run.id}:round-${run.round}`,
+          modelRevisionId: run.currentModelRevisionId ?? "initial",
+          seed: randomSeed(),
+          sampleCount: 24,
+          localSteps: 8,
+        },
+        (progress, telemetry) => {
+          backendLearnerTelemetry.set(key, learnerTelemetryPayload(progress, telemetry));
+          void backendClient.progress(run.id, me.id, participantToken, progress).catch(() => {});
+        },
+      );
+      backendLearnerTelemetry.set(key, learnerTelemetryPayload(1, artifact));
+      await backendClient.submitUpdate(run.id, me.id, participantToken, artifact);
+      backendLearnerJobs.set(key, { status: "submitted" });
+      if (currentRouteStill("join", run.id) && !shouldDeferAutoRefreshForDocument()) render();
+    } catch (error) {
+      backendLearnerJobs.set(key, { status: "error", error: error.message });
+      backendLearnerTelemetry.set(
+        key,
+        learnerTelemetryPayload(me.progress ?? 0, { error: error.message, phase: "error" }),
+      );
+      if (currentRouteStill("join", run.id) && !shouldDeferAutoRefreshForDocument()) render();
+    }
+  })();
 }
 
 function renderJoin(route) {
@@ -866,21 +1021,26 @@ function renderBackendJoinSnapshot(route, run) {
       panel.append(errorBox("This run already started; joining is closed."));
     } else {
       const nameInput = el("input", { type: "text", placeholder: "display name (optional)" });
+      const modeControl = renderModeControl(run.id);
       const joinError = el("p", { class: "note" });
       panel.append(
         el("label", {}, ["Display name", nameInput]),
+        el("label", {}, ["Run mode", modeControl]),
         el("button", {
           text: "Join run",
           onclick: async () => {
             try {
+              const automationMode = selectedMode(modeControl);
               const reply = await backendClient.joinRun(run.id, {
                 joinToken: route.token,
                 displayName: nameInput.value.trim() || null,
                 sessionId: sessionIdForRun(run.id),
+                automationMode,
               });
               writeBackendParticipant(run.id, {
                 participantId: reply.participantId,
                 participantToken: reply.participantToken,
+                automationMode,
               });
               render();
             } catch (error) {
@@ -895,17 +1055,45 @@ function renderBackendJoinSnapshot(route, run) {
     return;
   }
 
-  panel.append(renderParticipantState(run, me, false, stored.participantToken));
+  panel.append(
+    renderParticipantState(run, me, false, stored.participantToken, {
+      automationMode: me.automationMode ?? stored.automationMode ?? "auto",
+    }),
+  );
   app.append(panel);
 }
 
-function renderParticipantState(run, me, simulated, participantToken = null) {
+function renderLearnerTelemetry(run, me, telemetry) {
+  const value = telemetry ?? latestUpdateMetadata(me, me.round ?? run.round) ?? {};
+  const progress = value.progress ?? me.progress ?? 0;
+  return el("div", { class: "learner-telemetry" }, [
+    el("div", { class: "telemetry-head" }, [
+      el("strong", { text: `round ${me.round ?? run.round} learner` }),
+      value.phase ? el("span", { class: "muted", text: value.phase }) : stateBadge(value.collapseRisk ?? "watch"),
+    ]),
+    el("progress", { max: "1", value: String(progress) }),
+    el("div", { class: "metric-tiles" }, [
+      metricTile("progress", `${formatMetric(progress * 100, 0)}%`),
+      metricTile("loss", formatMetric(value.loss, 4)),
+      metricTile("probe", formatMetric(value.probe, 4)),
+      metricTile("eff dim", formatMetric(value.effectiveDim, 2), value.effectiveDimRatio !== null && value.effectiveDimRatio !== undefined ? `${formatMetric(value.effectiveDimRatio * 100, 0)}%` : null),
+      metricTile("clip", `${formatMetric((value.clipSaturation ?? 0) * 100, 0)}%`),
+      metricTile("runtime", value.runtimeMs === null || value.runtimeMs === undefined ? "n/a" : `${formatMetric(value.runtimeMs, 1)} ms`),
+    ]),
+    value.error ? errorBox(value.error) : null,
+  ]);
+}
+
+function renderParticipantState(run, me, simulated, participantToken = null, options = {}) {
+  const automationMode = options.automationMode ?? me.automationMode ?? "manual";
   const stageText = {
     joined: "Joined. Waiting for the host to start the run.",
     ready: "Ready. Waiting for the host to start the run.",
     assigned: simulated
       ? `Assigned round ${me.round}. Preparing simulated local work.`
-      : `Assigned round ${me.round}. Ready to run the browser-local tiny learner.`,
+      : automationMode === "auto"
+        ? `Assigned round ${me.round}. Auto learner queued.`
+        : `Assigned round ${me.round}. Ready to run the browser-local tiny learner.`,
     training: simulated ? `Simulating local work for round ${me.round}.` : `Browser-local tiny learner work in progress for round ${me.round}.`,
     submitted: "Bounded update artifact submitted. Waiting for aggregation.",
     completed: "Run complete. Thanks for participating.",
@@ -915,43 +1103,34 @@ function renderParticipantState(run, me, simulated, participantToken = null) {
   const children = [
     el("p", {}, [el("span", { class: "stage", text: stageText }), " ", stateBadge(me.state)]),
   ];
+  if (!simulated) {
+    children.push(el("p", { class: "note" }, ["Run mode: ", stateBadge(automationMode)]));
+  }
   if (me.state === "training") {
     children.push(el("progress", { max: "1", value: String(me.progress ?? 0) }));
   }
   if (!simulated && ["assigned", "training"].includes(me.state)) {
-    const learnerStatus = el("p", { class: "note" });
+    const key = learnerJobKey(run, me);
+    const job = backendLearnerJobs.get(key) ?? null;
+    const telemetry = backendLearnerTelemetry.get(key) ?? null;
+    if (automationMode === "auto" && participantToken) {
+      startBackendLearner(run, me, participantToken);
+    }
     const button = el("button", {
-      text: "Run local learner and submit update",
-      onclick: async () => {
-        button.disabled = true;
-        try {
-          await backendClient.progress(run.id, me.id, participantToken, 0.1);
-          const artifact = await runBrowserLearner(
-            {
-              runId: run.id,
-              participantId: me.id,
-              round: run.round,
-              roundId: `${run.id}:round-${run.round}`,
-              modelRevisionId: run.currentModelRevisionId ?? "initial",
-              seed: randomSeed(),
-              sampleCount: 24,
-              localSteps: 8,
-            },
-            (progress) => {
-              learnerStatus.textContent = `local learner progress ${Math.round(progress * 100)}%`;
-              void backendClient.progress(run.id, me.id, participantToken, progress).catch(() => {});
-            },
-          );
-          await backendClient.submitUpdate(run.id, me.id, participantToken, artifact);
-          learnerStatus.textContent = "bounded update artifact submitted";
-          render();
-        } catch (error) {
-          learnerStatus.textContent = error.message;
-          button.disabled = false;
-        }
+      class: automationMode === "auto" ? "secondary" : null,
+      text: automationMode === "auto" ? "Retry local learner" : "Run local learner and submit update",
+      onclick: () => {
+        startBackendLearner(run, me, participantToken, { force: true });
       },
     });
-    children.push(button, learnerStatus);
+    if (job?.status === "running" || job?.status === "submitted") button.disabled = true;
+    if (automationMode === "auto" && job?.status !== "error") button.disabled = true;
+    children.push(renderLearnerTelemetry(run, me, telemetry));
+    children.push(button);
+  }
+  const submittedMetadata = latestUpdateMetadata(me, me.round ?? run.round);
+  if (!simulated && submittedMetadata) {
+    children.push(renderLearnerTelemetry(run, me, submittedMetadata));
   }
   if (run.state === "aborted") {
     children.push(errorBox("The host aborted this run."));

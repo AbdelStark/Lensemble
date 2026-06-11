@@ -148,6 +148,26 @@ button:disabled {
   color: #6d1414;
 }
 
+.badge.state-low,
+.badge.state-auto {
+  border-color: #1f7a3d;
+  background: #e2f4e8;
+  color: #155a2c;
+}
+
+.badge.state-watch,
+.badge.state-manual {
+  border-color: #b88514;
+  background: #fdf3da;
+  color: #5d4407;
+}
+
+.badge.state-high {
+  border-color: #8c1f1f;
+  background: #fbe4e4;
+  color: #6d1414;
+}
+
 .slots {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -259,6 +279,102 @@ progress {
   gap: 4px;
 }
 
+.metrics-grid,
+.learner-telemetry {
+  display: grid;
+  gap: 10px;
+}
+
+.metric-card,
+.learner-telemetry {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #c9c2b4;
+  background: #faf8ef;
+  padding: 10px;
+}
+
+.metric-card-head,
+.telemetry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.metric-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 8px;
+}
+
+.metric-tile {
+  display: grid;
+  gap: 2px;
+  min-height: 46px;
+  border-top: 1px solid #d8d1c5;
+  padding-top: 6px;
+}
+
+.metric-tile strong {
+  font-size: 15px;
+}
+
+.metric-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #5c655d;
+}
+
+.diagnostic-table {
+  display: grid;
+  gap: 4px;
+  font-size: 12.5px;
+}
+
+.diagnostic-row {
+  display: grid;
+  grid-template-columns: minmax(96px, 1.2fr) repeat(4, minmax(76px, 1fr)) auto;
+  gap: 8px;
+  align-items: center;
+  border-left: 3px solid #c9c2b4;
+  background: #faf8ef;
+  padding: 5px 8px;
+}
+
+.segmented {
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(92px, 1fr));
+  border: 1px solid #18221c;
+  background: #fffdf7;
+}
+
+.segmented label {
+  display: block;
+  min-height: 34px;
+  cursor: pointer;
+}
+
+.segmented input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.segmented span {
+  display: grid;
+  min-height: 34px;
+  place-items: center;
+  padding: 0 10px;
+}
+
+.segmented input:checked + span {
+  background: #18221c;
+  color: #fffdf7;
+}
+
 .stage {
   font-size: 15px;
   font-weight: 700;
@@ -307,6 +423,10 @@ progress {
   .columns,
   .inference-grid {
     grid-template-columns: 1fr;
+  }
+
+  .diagnostic-row {
+    grid-template-columns: 1fr 1fr;
   }
 
   .env-canvas {

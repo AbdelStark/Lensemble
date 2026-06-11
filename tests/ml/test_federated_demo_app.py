@@ -80,6 +80,13 @@ def _update_artifact(
 ) -> dict[str, object]:
     update_vector = vector or [0.1, 0.1, 0.0, 0.0]
     l2_norm = sum(value * value for value in update_vector) ** 0.5
+    energy = [value * value for value in update_vector]
+    effective_dim = (
+        (sum(energy) * sum(energy)) / sum(value * value for value in energy)
+        if sum(energy)
+        else 0.0
+    )
+    effective_dim_ratio = effective_dim / len(update_vector)
     return {
         "schema": "browser-update/1",
         "source": "browser-local-surrogate",
@@ -97,8 +104,13 @@ def _update_artifact(
         "hash": "a" * 64,
         "l2Norm": round(l2_norm, 8),
         "clipNorm": 1.0,
+        "unclippedNorm": round(l2_norm, 8),
+        "clipSaturation": 0.0,
         "loss": 0.2,
         "probe": 0.8,
+        "effectiveDim": round(effective_dim, 8),
+        "effectiveDimRatio": round(effective_dim_ratio, 8),
+        "collapseRisk": "watch" if effective_dim_ratio < 0.6 else "low",
         "runtimeMs": 12.5,
         "seed": 7,
         "simulated": False,
@@ -155,6 +167,12 @@ def test_backend_demo_service_closes_browser_submitted_round_and_exports_evidenc
     assert result["run"]["roundMetrics"][0]["aggregateNorm"] == pytest.approx(
         0.14142136
     )
+    assert result["run"]["roundMetrics"][0]["localLossMean"] == pytest.approx(0.2)
+    assert result["run"]["roundMetrics"][0]["probeMean"] == pytest.approx(0.8)
+    assert result["run"]["roundMetrics"][0]["aggregateEffectiveDim"] == pytest.approx(
+        2.0
+    )
+    assert result["run"]["roundMetrics"][0]["collapseRisk"] == "watch"
 
     evidence = service.export_evidence(run["id"])
     encoded = json.dumps(evidence, sort_keys=True)
@@ -172,14 +190,33 @@ def test_backend_demo_rejects_limits_duplicates_wrong_round_and_raw_payloads() -
     service = FederatedDemoService()
     run = service.create_run({"maxParticipants": 1, "quorum": 1, "rounds": 1})
     first = service.join_run(
-        run["id"], join_token=run["joinToken"], session_id="browser-session"
+        run["id"],
+        join_token=run["joinToken"],
+        session_id="browser-session",
+        automation_mode="manual",
     )
+    assert first["run"]["participants"][0]["automationMode"] == "manual"
 
     resumed = service.join_run(
         run["id"], join_token=run["joinToken"], session_id="browser-session"
     )
     assert resumed["participantId"] == first["participantId"]
+    assert resumed["run"]["participants"][0]["automationMode"] == "manual"
     assert len(resumed["run"]["participants"]) == 1
+    switched = service.join_run(
+        run["id"],
+        join_token=run["joinToken"],
+        session_id="browser-session",
+        automation_mode="auto",
+    )
+    assert switched["run"]["participants"][0]["automationMode"] == "auto"
+    with pytest.raises(FederatedDemoError, match="automationMode"):
+        service.join_run(
+            run["id"],
+            join_token=run["joinToken"],
+            session_id="browser-session",
+            automation_mode="invalid",
+        )
     with pytest.raises(FederatedDemoError, match="run is full"):
         service.join_run(
             run["id"], join_token=run["joinToken"], session_id="other-session"
