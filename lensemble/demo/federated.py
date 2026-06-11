@@ -66,6 +66,8 @@ ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz"
 HACKATHON_MODEL_RUNTIME = "tiny-js-vector-v1"
 INITIAL_REVISION_ID = "initial"
 DEFAULT_CLIP_NORM = 1.0
+DEFAULT_ROUNDS = 1000
+MAX_ROUNDS = 1000
 
 CLAIM_BOUNDARY = (
     "Educational browser demo of federated JEPA world-model orchestration. "
@@ -201,7 +203,7 @@ class DemoConfig:
                 payload.get("maxParticipants", payload.get("max_participants", 4))
             )
             quorum = int(payload.get("quorum", payload.get("minTrainers", 2)))
-            rounds = int(payload.get("rounds", 2))
+            rounds = int(payload.get("rounds", DEFAULT_ROUNDS))
         except (TypeError, ValueError) as exc:
             raise FederatedDemoError(
                 "invalid_config", "run shape fields must be integers"
@@ -215,8 +217,10 @@ class DemoConfig:
             raise FederatedDemoError(
                 "invalid_config", "quorum must be in [1, maxParticipants]"
             )
-        if rounds < 1 or rounds > 50:
-            raise FederatedDemoError("invalid_config", "rounds must be in [1, 50]")
+        if rounds < 1 or rounds > MAX_ROUNDS:
+            raise FederatedDemoError(
+                "invalid_config", f"rounds must be in [1, {MAX_ROUNDS}]"
+            )
         if preset not in DEMO_PRESETS:
             raise FederatedDemoError("invalid_config", f"unknown demo preset: {preset}")
         return cls(
@@ -238,11 +242,11 @@ class DemoConfig:
 @dataclass(slots=True)
 class DemoSafetyConfig:
     max_public_participants: int = 8
-    max_public_rounds: int = 3
+    max_public_rounds: int = MAX_ROUNDS
     max_artifact_bytes: int = 8192
     max_message_bytes: int = 16384
     max_update_vector_length: int = 32
-    max_events: int = 1000
+    max_events: int = 20_000
     token_ttl_ms: int = 4 * 60 * 60 * 1000
     heartbeat_stale_ms: int = 15_000
     participant_timeout_ms: int = 45_000
@@ -599,16 +603,22 @@ class FederatedDemoService:
     ) -> dict[str, Any]:
         run, participant = self._participant(run_id, participant_id, participant_token)
         participant.last_heartbeat_at = _now_ms()
-        participant.connection_state = "connected"
         participant.last_seen_seq = run.next_event_seq - 1
-        self._emit(
-            run,
-            "participant.heartbeat",
-            f"heartbeat from {participant.id}",
-            participant_id=participant.id,
-            actor="participant",
-            payload={"state": participant.state},
-        )
+        if participant.state not in {"completed", "dropped", "error"}:
+            participant.connection_state = "connected"
+        if run.state not in TERMINAL_RUN_STATES and participant.state not in {
+            "completed",
+            "dropped",
+            "error",
+        }:
+            self._emit(
+                run,
+                "participant.heartbeat",
+                f"heartbeat from {participant.id}",
+                participant_id=participant.id,
+                actor="participant",
+                payload={"state": participant.state},
+            )
         return {"ok": True, "run": self.snapshot(run.id)}
 
     def connection_opened(
@@ -636,9 +646,10 @@ class FederatedDemoService:
             _, participant = self._participant(
                 run_id, participant_id, participant_token
             )
-            if participant.connection_state in {"reconnecting", "stale"}:
-                participant.reconnect_count += 1
-            participant.connection_state = "connected"
+            if participant.state not in {"completed", "dropped", "error"}:
+                if participant.connection_state in {"reconnecting", "stale"}:
+                    participant.reconnect_count += 1
+                participant.connection_state = "connected"
             participant.last_connection_at = _now_ms()
             participant.last_heartbeat_at = _now_ms()
             participant.last_seen_seq = after
@@ -850,7 +861,7 @@ class FederatedDemoService:
                 "simulated": metadata["simulated"],
             },
         )
-        if self._submitted_count(run) >= run.config.quorum:
+        if self._round_ready_to_close(run):
             self._close_round(run)
         return {"ok": True, "run": self.snapshot(run.id)}
 
@@ -868,7 +879,7 @@ class FederatedDemoService:
                 "training",
             }:
                 self._drop_participant(run, participant, reason=reason)
-        if self._submitted_count(run) >= run.config.quorum:
+        if self._round_ready_to_close(run):
             self._close_round(run)
         else:
             self.fail_run(run.id, reason="quorum lost after participant timeout")
@@ -891,10 +902,7 @@ class FederatedDemoService:
             and len(self._active_participants(run)) < run.config.quorum
         ):
             self.fail_run(run.id, reason="quorum lost after participant drop")
-        elif (
-            run.state == "running_round"
-            and self._submitted_count(run) >= run.config.quorum
-        ):
+        elif run.state == "running_round" and self._round_ready_to_close(run):
             self._close_round(run)
         elif (
             run.state in {"joining", "ready"}
@@ -1144,6 +1152,14 @@ class FederatedDemoService:
             1
             for p in self._assigned_participants(run)
             if run.round in p.submitted_rounds
+        )
+
+    def _round_ready_to_close(self, run: DemoRun) -> bool:
+        assigned = self._assigned_participants(run)
+        if self._submitted_count(run) < run.config.quorum:
+            return False
+        return all(
+            run.round in participant.submitted_rounds for participant in assigned
         )
 
     def _assign_round(self, run: DemoRun, round_index: int) -> None:

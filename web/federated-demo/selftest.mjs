@@ -236,6 +236,15 @@ check("config validation rejects bad quorum", () => {
   );
 });
 
+check("config validation allows the long-run budget", () => {
+  const run = makeRun(7, { rounds: 1000 });
+  assertEqual(run.config.rounds, 1000);
+  assertThrowsCode(
+    () => createSimRun({ maxParticipants: 2, quorum: 1, rounds: 1001 }, 1),
+    "invalid_config",
+  );
+});
+
 check("participant limit is enforced", () => {
   const run = makeRun();
   joinSimRun(run);

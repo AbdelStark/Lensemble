@@ -35,8 +35,8 @@ function validateConfig(config) {
   if (!Number.isInteger(quorum) || quorum < 1 || quorum > maxParticipants) {
     throw new SimError("invalid_config", "quorum must be an integer in [1, maxParticipants]");
   }
-  if (!Number.isInteger(rounds) || rounds < 1 || rounds > 50) {
-    throw new SimError("invalid_config", "rounds must be an integer in [1, 50]");
+  if (!Number.isInteger(rounds) || rounds < 1 || rounds > 1000) {
+    throw new SimError("invalid_config", "rounds must be an integer in [1, 1000]");
   }
   if (!DEMO_PRESETS.includes(preset)) {
     throw new SimError("invalid_config", `unknown preset: ${preset}`);

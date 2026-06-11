@@ -123,6 +123,11 @@ def test_backend_demo_service_closes_browser_submitted_round_and_exports_evidenc
     service = FederatedDemoService(
         public_base_url="http://127.0.0.1:8765/web/federated-demo"
     )
+    default_run = service.create_run({"maxParticipants": 1, "quorum": 1})
+    assert default_run["config"]["rounds"] == 1000
+    with pytest.raises(FederatedDemoError, match=r"rounds must be in \[1, 1000\]"):
+        service.create_run({"maxParticipants": 1, "quorum": 1, "rounds": 1001})
+
     run = service.create_run({"maxParticipants": 2, "quorum": 2, "rounds": 1})
     assert run["state"] == "created"
     assert run["joinUrl"].endswith(f"#/join/{run['id']}?t={run['joinToken']}")
@@ -173,6 +178,14 @@ def test_backend_demo_service_closes_browser_submitted_round_and_exports_evidenc
         2.0
     )
     assert result["run"]["roundMetrics"][0]["collapseRisk"] == "watch"
+    before_terminal_heartbeat = len(service.events(run["id"]))
+    heartbeat = service.heartbeat(
+        run["id"],
+        joined[0]["participantId"],
+        participant_token=joined[0]["participantToken"],
+    )
+    assert heartbeat["run"]["participants"][0]["connectionState"] == "completed"
+    assert len(service.events(run["id"])) == before_terminal_heartbeat
 
     evidence = service.export_evidence(run["id"])
     encoded = json.dumps(evidence, sort_keys=True)
@@ -284,12 +297,14 @@ def test_backend_demo_timeout_abort_and_ndjson_event_stream() -> None:
     p1 = service.join_run(run["id"], join_token=run["joinToken"])
     service.join_run(run["id"], join_token=run["joinToken"])
     service.start_run(run["id"])
-    service.submit_update(
+    pending = service.submit_update(
         run["id"],
         p1["participantId"],
         participant_token=p1["participantToken"],
         artifact=_update_artifact(run["id"], p1["participantId"], 1),
     )
+    assert pending["run"]["state"] == "running_round"
+    service.expire_missing(run["id"], reason="test timeout")
     assert service.snapshot(run["id"])["state"] == "completed"
     assert any(e["kind"] == "participant.dropped" for e in service.events(run["id"]))
 

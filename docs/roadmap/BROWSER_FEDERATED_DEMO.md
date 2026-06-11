@@ -43,7 +43,9 @@ transport mode, fallback mode, deployment target, and safety settings.
 
 ## Hackathon Live Flow
 
-1. The host opens the public HTTPS URL and creates a run.
+1. The host opens the public HTTPS URL and creates a run, optionally adjusting
+   participant count, quorum, and round count. New runs default to 1000 rounds
+   with a 1000-round public-demo cap.
 2. The dashboard shows a QR code and join URL for that run.
 3. Four participants scan the QR code from mobile browsers and join with short
    display names.
@@ -167,8 +169,11 @@ rejected before aggregation.
 
 ## Aggregation and Inference
 
-When quorum is met, the coordinator computes a deterministic mean over submitted
-tiny update vectors and publishes:
+The coordinator starts after quorum is available. A round closes only after the
+quorum threshold is met and every still-active participant assigned to that
+round has submitted; timeout/dropout paths are explicit run events rather than
+silent skips. On round close, the coordinator computes a deterministic mean over
+submitted tiny update vectors and publishes:
 
 - a checkpoint-style integrity artifact;
 - a `demo-model-revision/1` artifact with revision id, parent revision, vector,

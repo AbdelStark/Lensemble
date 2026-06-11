@@ -85,7 +85,9 @@ function errorBox(text) {
 
 function formatMetric(value, digits = 3) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return "n/a";
-  return Number(value).toFixed(digits).replace(/\.?0+$/, "");
+  const fixed = Number(value).toFixed(digits);
+  if (!fixed.includes(".")) return fixed;
+  return fixed.replace(/\.?0+$/, "");
 }
 
 function latestUpdateMetadata(participant, preferredRound = null) {
@@ -431,7 +433,7 @@ function renderHome() {
   ]);
   const maxInput = el("input", { type: "number", min: "1", max: "64", value: "4" });
   const quorumInput = el("input", { type: "number", min: "1", max: "64", value: "2" });
-  const roundsInput = el("input", { type: "number", min: "1", max: "50", value: "2" });
+  const roundsInput = el("input", { type: "number", min: "1", max: "1000", value: "1000" });
   const presetSelect = el("select", {}, [
     el("option", { value: "swipe-dot-tiny", text: "swipe-dot-tiny (synthetic dynamic env)" }),
   ]);
