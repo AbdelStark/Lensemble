@@ -282,8 +282,11 @@ def make_handler(service: FederatedDemoService) -> type[BaseHTTPRequestHandler]:
             role = query.get("role", ["host"])[0]
             participant_id = query.get("participantId", [None])[0]
             participant_token = query.get("participantToken", [None])[0]
+            selected_protocol = None
             if participant_token is None:
-                participant_token = self._participant_token_from_protocol()
+                selected_protocol, participant_token = (
+                    self._participant_protocol_and_token()
+                )
             after = int(query.get("after", ["-1"])[0])
             key = self.headers.get("Sec-WebSocket-Key")
             if not key:
@@ -294,6 +297,8 @@ def make_handler(service: FederatedDemoService) -> type[BaseHTTPRequestHandler]:
             self.send_header("Upgrade", "websocket")
             self.send_header("Connection", "Upgrade")
             self.send_header("Sec-WebSocket-Accept", _websocket_accept(key))
+            if selected_protocol is not None:
+                self.send_header("Sec-WebSocket-Protocol", selected_protocol)
             self.end_headers()
             self.close_connection = True
             self.connection.settimeout(0.35)
@@ -336,8 +341,10 @@ def make_handler(service: FederatedDemoService) -> type[BaseHTTPRequestHandler]:
                     events = service.events(run_id, after=last_seq)
                     if events:
                         last_seq = max(event["seq"] for event in events)
+                        run = service.snapshot(run_id)
                         _send_ws_json(
-                            self.connection, {"type": "events", "events": events}
+                            self.connection,
+                            {"type": "events", "run": run, "events": events},
                         )
             except (EOFError, OSError):
                 pass
@@ -557,13 +564,13 @@ def make_handler(service: FederatedDemoService) -> type[BaseHTTPRequestHandler]:
                 return origin
             return None
 
-        def _participant_token_from_protocol(self) -> str | None:
+        def _participant_protocol_and_token(self) -> tuple[str | None, str | None]:
             header = self.headers.get("Sec-WebSocket-Protocol", "")
             for item in header.split(","):
                 protocol = item.strip()
                 if protocol.startswith("ptok."):
-                    return protocol.removeprefix("ptok.")
-            return None
+                    return protocol, protocol.removeprefix("ptok.")
+            return None, None
 
     return DemoHandler
 

@@ -128,12 +128,28 @@ export class BackendClient {
     return `${wsOrigin}${this.basePath}/runs/${encodeURIComponent(runId)}/ws?${params.toString()}`;
   }
 
+  webSocketProtocols({ participantToken = null } = {}) {
+    return participantToken ? [`ptok.${participantToken}`] : [];
+  }
+
   connectRun(runId, options = {}) {
     if (typeof WebSocket !== "function") {
       return null;
     }
-    const protocols = options.participantToken ? [`ptok.${options.participantToken}`] : undefined;
-    const socket = new WebSocket(this.webSocketUrl(runId, options), protocols);
+    const protocols = this.webSocketProtocols(options);
+    const url = this.webSocketUrl(runId, options);
+    const socket = protocols.length > 0 ? new WebSocket(url, protocols) : new WebSocket(url);
+    let heartbeatTimer = null;
+    const clearHeartbeat = () => {
+      if (heartbeatTimer !== null) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      }
+    };
+    const sendKeepalive = () => {
+      if (socket.readyState !== WebSocket.OPEN) return;
+      socket.send(JSON.stringify({ type: options.role === "participant" ? "heartbeat" : "ping" }));
+    };
     socket.addEventListener("message", (event) => {
       try {
         options.onMessage?.(JSON.parse(event.data));
@@ -141,9 +157,20 @@ export class BackendClient {
         options.onError?.(error);
       }
     });
-    socket.addEventListener("open", () => options.onOpen?.());
-    socket.addEventListener("close", () => options.onClose?.());
-    socket.addEventListener("error", () => options.onError?.(new Error("WebSocket connection failed")));
+    socket.addEventListener("open", () => {
+      options.onOpen?.();
+      const intervalMs = options.role === "participant" ? 5000 : 15000;
+      sendKeepalive();
+      heartbeatTimer = setInterval(sendKeepalive, intervalMs);
+    });
+    socket.addEventListener("close", () => {
+      clearHeartbeat();
+      options.onClose?.();
+    });
+    socket.addEventListener("error", () => {
+      clearHeartbeat();
+      options.onError?.(new Error("WebSocket connection failed"));
+    });
     return socket;
   }
 

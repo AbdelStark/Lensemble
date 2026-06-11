@@ -199,7 +199,6 @@ async function refreshBackendRoute(view, runId) {
     const run = await backendClient.getRun(runId);
     if (!currentRouteStill(view, runId) || shouldDeferAutoRefreshForDocument()) return;
     app.replaceChildren();
-    ensureBackendPoll(view, runId);
     if (view === "host") renderBackendHostSnapshot(run);
     else if (view === "join") renderBackendJoinSnapshot(parseRoute(window.location.hash), run);
   } catch {
@@ -209,46 +208,26 @@ async function refreshBackendRoute(view, runId) {
   }
 }
 
-function clearBackendPoll() {
-  if (backendPoll) {
-    clearInterval(backendPoll.timer);
-    backendPoll.socket?.close();
-    backendPoll = null;
-  }
+function backendSocketClosed(socket) {
+  return !socket || socket.readyState >= 2;
 }
 
-function ensureBackendPoll(view, runId, streamOptions = {}) {
-  const streamKey = JSON.stringify({
-    view,
-    runId,
-    role: streamOptions.role ?? "host",
-    participantId: streamOptions.participantId ?? null,
-  });
-  if (backendPoll?.streamKey === streamKey) return;
-  clearBackendPoll();
-  backendPoll = {
-    view,
-    runId,
-    streamKey,
-    transport: "polling",
-    lastSeq: -1,
-    refreshing: false,
-    socket: null,
-    timer: setInterval(() => {
-      void refreshBackendRoute(view, runId);
-    }, 1000),
-  };
-  const poll = backendPoll;
-  poll.socket = backendClient.connectRun(runId, {
-    role: streamOptions.role ?? "host",
-    participantId: streamOptions.participantId ?? null,
-    participantToken: streamOptions.participantToken ?? null,
+function attachBackendSocket(poll) {
+  if (!backendSocketClosed(poll.socket)) return;
+  const { view, runId, streamOptions } = poll;
+  const socket = backendClient.connectRun(runId, {
+    role: streamOptions.role,
+    participantId: streamOptions.participantId,
+    participantToken: streamOptions.participantToken,
     after: poll.lastSeq,
     onOpen: () => {
-      poll.transport = "websocket";
+      if (backendPoll === poll) poll.transport = "websocket";
     },
     onClose: () => {
-      if (backendPoll === poll) poll.transport = "polling";
+      if (backendPoll === poll) {
+        poll.transport = "polling";
+        if (poll.socket === socket) poll.socket = null;
+      }
     },
     onMessage: (message) => {
       if (backendPoll !== poll || !currentRouteStill(view, runId)) return;
@@ -261,12 +240,56 @@ function ensureBackendPoll(view, runId, streamOptions = {}) {
         app.replaceChildren();
         if (view === "host") renderBackendHostSnapshot(run);
         else if (view === "join") renderBackendJoinSnapshot(parseRoute(window.location.hash), run);
+      } else if (events.length > 0) {
+        void refreshBackendRoute(view, runId);
       }
     },
     onError: () => {
       if (backendPoll === poll) poll.transport = "polling";
     },
   });
+  poll.socket = socket;
+}
+
+function clearBackendPoll() {
+  if (backendPoll) {
+    clearInterval(backendPoll.timer);
+    backendPoll.socket?.close();
+    backendPoll = null;
+  }
+}
+
+function ensureBackendPoll(view, runId, streamOptions = {}) {
+  const normalizedOptions = {
+    role: streamOptions.role ?? "host",
+    participantId: streamOptions.participantId ?? null,
+    participantToken: streamOptions.participantToken ?? null,
+  };
+  const streamKey = JSON.stringify({
+    view,
+    runId,
+    role: normalizedOptions.role,
+    participantId: normalizedOptions.participantId,
+  });
+  if (backendPoll?.streamKey === streamKey) {
+    attachBackendSocket(backendPoll);
+    return;
+  }
+  clearBackendPoll();
+  backendPoll = {
+    view,
+    runId,
+    streamKey,
+    streamOptions: normalizedOptions,
+    transport: "polling",
+    lastSeq: -1,
+    refreshing: false,
+    socket: null,
+    timer: setInterval(() => {
+      void refreshBackendRoute(view, runId);
+    }, 1000),
+  };
+  attachBackendSocket(backendPoll);
 }
 
 function downloadJson(filename, value) {
@@ -545,7 +568,7 @@ function renderLocalHost(runId) {
 // ---------------------------------------------------------- backend host mode
 
 async function renderBackendHost(runId) {
-  clearBackendPoll();
+  if (backendPoll?.view !== "host" || backendPoll?.runId !== runId) clearBackendPoll();
   app.append(el("section", { class: "panel" }, [el("h2", { text: "Loading backend run..." })]));
   try {
     const run = await backendClient.getRun(runId);

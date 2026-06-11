@@ -117,6 +117,9 @@ check("backend client keeps the documented local API base path", () => {
     participantToken: "ptok-secret",
   });
   assert(!participantWs.includes("ptok-secret"), "participant token leaked into WebSocket URL");
+  const protocols = client.webSocketProtocols({ participantToken: "ptok-secret" });
+  assertEqual(protocols.length, 1, "participant protocol missing");
+  assertEqual(protocols[0], "ptok.ptok-secret", "participant protocol mismatch");
 });
 
 check("route parser handles host/admin/home/unknown", () => {

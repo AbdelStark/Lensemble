@@ -426,6 +426,7 @@ def test_demo_http_api_websocket_replay_and_commands() -> None:
         )
         joined_events = _ws_read_until_kind(host_socket, "participant.joined")
         assert joined_events["type"] == "events"
+        assert joined_events["run"]["participants"][0]["displayName"] == "phone"
 
         participant_socket = _ws_connect(
             "127.0.0.1",
@@ -529,6 +530,11 @@ def _ws_connect(
     while b"\r\n\r\n" not in response:
         response += sock.recv(1)
     assert b" 101 " in response, response.decode("utf-8", errors="replace")
+    if protocols:
+        expected = f"Sec-WebSocket-Protocol: {protocols[0]}".encode("ascii")
+        assert expected.lower() in response.lower(), response.decode(
+            "utf-8", errors="replace"
+        )
     sock.settimeout(5)
     return sock
 
