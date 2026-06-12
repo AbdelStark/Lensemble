@@ -1,0 +1,164 @@
+{
+  "schema": "lewm-adapter-overfit/1",
+  "seed": 20260612,
+  "protocol": "frozen exported-graph teacher-forced predictions vs frozen-encoder next latents over official expert episodes; trained with the shipping JS adapter (web/federated-demo/lewm_adapter.mjs) under node",
+  "checkpoint": {
+    "repoId": "quentinll/lewm-tworooms",
+    "revision": "77adaae0bc31deab21c93740d1f8bb947cd0bdec",
+    "weightsSha256": "566f223624ea4bfb39dbfe6ae731198dd6ea73b7b8919fed6b1ecafca810f7dd"
+  },
+  "episodes": 6,
+  "trainer": {
+    "runtime": "lewm-js-adapter-v1",
+    "pairCount": 30,
+    "dim": 192,
+    "steps": 300,
+    "firstPredLoss": 0.055857755783996876,
+    "lastPredLoss": 0.0006094723728013722,
+    "lossDecreased": true,
+    "relativeImprovement": 0.9890888496280048,
+    "finalDiagnostics": {
+      "step": 299,
+      "latentStdMean": 0.9400878681068506,
+      "effectiveRank": 10.536496261436383,
+      "effectiveRankRatio": 0.05487758469498116,
+      "sigregStatistic": 0.018650518032781463
+    },
+    "delta": {
+      "l2Norm": 3,
+      "unclippedNorm": 4.087967934888196,
+      "clipSaturation": 1,
+      "parameterCount": 12512
+    },
+    "lossCurve": [
+      {
+        "step": 0,
+        "predLoss": 0.055858
+      },
+      {
+        "step": 10,
+        "predLoss": 0.040993
+      },
+      {
+        "step": 20,
+        "predLoss": 0.022112
+      },
+      {
+        "step": 30,
+        "predLoss": 0.018525
+      },
+      {
+        "step": 40,
+        "predLoss": 0.011443
+      },
+      {
+        "step": 50,
+        "predLoss": 0.010793
+      },
+      {
+        "step": 60,
+        "predLoss": 0.008
+      },
+      {
+        "step": 70,
+        "predLoss": 0.006481
+      },
+      {
+        "step": 80,
+        "predLoss": 0.005389
+      },
+      {
+        "step": 90,
+        "predLoss": 0.004455
+      },
+      {
+        "step": 100,
+        "predLoss": 0.003705
+      },
+      {
+        "step": 110,
+        "predLoss": 0.002615
+      },
+      {
+        "step": 120,
+        "predLoss": 0.002582
+      },
+      {
+        "step": 130,
+        "predLoss": 0.001832
+      },
+      {
+        "step": 140,
+        "predLoss": 0.002268
+      },
+      {
+        "step": 150,
+        "predLoss": 0.001845
+      },
+      {
+        "step": 160,
+        "predLoss": 0.001636
+      },
+      {
+        "step": 170,
+        "predLoss": 0.001498
+      },
+      {
+        "step": 180,
+        "predLoss": 0.001771
+      },
+      {
+        "step": 190,
+        "predLoss": 0.001487
+      },
+      {
+        "step": 200,
+        "predLoss": 0.001272
+      },
+      {
+        "step": 210,
+        "predLoss": 0.001557
+      },
+      {
+        "step": 220,
+        "predLoss": 0.001052
+      },
+      {
+        "step": 230,
+        "predLoss": 0.000696
+      },
+      {
+        "step": 240,
+        "predLoss": 0.001141
+      },
+      {
+        "step": 250,
+        "predLoss": 0.001171
+      },
+      {
+        "step": 260,
+        "predLoss": 0.001191
+      },
+      {
+        "step": 270,
+        "predLoss": 0.000741
+      },
+      {
+        "step": 280,
+        "predLoss": 0.000945
+      },
+      {
+        "step": 290,
+        "predLoss": 0.000742
+      },
+      {
+        "step": 299,
+        "predLoss": 0.000609
+      }
+    ]
+  },
+  "passes": true,
+  "nonClaims": [
+    "One-browser overfit gate for the bounded Tapestry-like adapter subset; checkpoint adaptation around a frozen base, not from-scratch browser LeWM pretraining and not a benchmark claim."
+  ]
+}

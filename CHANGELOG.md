@@ -34,6 +34,21 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:model`: **Browser-local Tapestry-like LeWM adapter continuation + SIGReg diagnostics
+  (gate G3)** (#319, epic #314) — `web/federated-demo/lewm_adapter.mjs` trains a bounded
+  zero-init residual adapter (12,512 params) on the FROZEN exported predictor's outputs with
+  manual-gradient Adam, global-norm clipping, a variance-floor anti-collapse surrogate (gradient
+  in closed form), and real diagnostics: per-dim latent std, participation-ratio effective rank,
+  and an exact JS port of the `lensemble.model.sigreg` Epps–Pulley statistic (torch parity
+  ≤ 2e-7 rel, `tests/ml/test_lewm_adapter.py`). `lewm_local_trainer.mjs` collects resident
+  TwoRooms rollouts, builds (frozen-prediction → next-latent) pairs through the exported graphs,
+  and emits the bounded clipped delta + honest metric summary; raw frames/actions/latents never
+  leave the browser and no sleeps fake progress. One-browser overfit gate on REAL expert-episode
+  latents through the shipping JS trainer (`scripts/lewm_adapter_overfit_check.py` →
+  `docs/evidence/lewm_tworooms_adapter_overfit.json`): pred loss 0.0559 → 0.00061
+  (98.9% improvement, 300 steps, 30 pairs), delta clipped at 3.0. JS selftests include an
+  analytic-vs-numerical gradient check (`web/federated-demo/lewm_adapter_selftest.mjs`).
+
 - `area:model`: **TwoRooms browser environment + real LeWM rollout/planning** (#318, epic #314) —
   `web/federated-demo/tworooms_env.mjs` is a deterministic JS port of the upstream TwoRoom env at
   the released default variations, validated pixel-level against the official expert dataset
