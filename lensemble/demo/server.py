@@ -101,7 +101,7 @@ def _send_ws_close(conn: socket.socket) -> None:
 
 
 def make_handler(service: FederatedDemoService) -> type[BaseHTTPRequestHandler]:
-    rate_limits: dict[tuple[str, int], int] = {}
+    rate_limits: dict[tuple[str, ...], int] = {}
 
     class DemoHandler(BaseHTTPRequestHandler):
         server_version = "LensembleFederatedDemo/1"
@@ -125,7 +125,7 @@ def make_handler(service: FederatedDemoService) -> type[BaseHTTPRequestHandler]:
                     self._handle_ws(parsed.path, parse_qs(parsed.query))
                     return
                 if parsed.path.startswith("/api/runs/"):
-                    self._check_rate_limit()
+                    self._check_rate_limit(parsed.path)
                     self._handle_api_get(parsed.path, parse_qs(parsed.query))
                     return
                 self._static(parsed.path)
@@ -137,8 +137,8 @@ def make_handler(service: FederatedDemoService) -> type[BaseHTTPRequestHandler]:
         def do_POST(self) -> None:  # noqa: N802
             try:
                 parsed = urlparse(self.path)
-                self._check_rate_limit()
                 payload = self._read_json()
+                self._check_rate_limit(parsed.path, payload)
                 if parsed.path == "/api/runs":
                     self._json(service.create_run(payload))
                     return
@@ -469,11 +469,12 @@ def make_handler(service: FederatedDemoService) -> type[BaseHTTPRequestHandler]:
                 )
             _send_ws_json(self.connection, {"type": "command.ok", "run": run})
 
-        def _check_rate_limit(self) -> None:
-            limit = service.safety.rate_limit_per_minute
+        def _check_rate_limit(
+            self, path: str, payload: dict[str, Any] | None = None
+        ) -> None:
+            limit, key = self._rate_limit_bucket(path, payload or {})
             if limit <= 0:
                 return
-            key = (self.client_address[0], int(time.time() // 60))
             rate_limits[key] = rate_limits.get(key, 0) + 1
             if rate_limits[key] > limit:
                 raise FederatedDemoError(
@@ -481,6 +482,42 @@ def make_handler(service: FederatedDemoService) -> type[BaseHTTPRequestHandler]:
                     "too many demo API requests from this client",
                     status=429,
                 )
+
+        def _rate_limit_bucket(
+            self, path: str, payload: dict[str, Any]
+        ) -> tuple[int, tuple[str, ...]]:
+            minute = str(int(time.time() // 60))
+            participant = self._participant_rate_limit_identity(path, payload)
+            if participant is not None:
+                run_id, participant_id, token_hash = participant
+                return (
+                    service.safety.participant_rate_limit_per_minute,
+                    ("participant", run_id, participant_id, token_hash, minute),
+                )
+            return (
+                service.safety.rate_limit_per_minute,
+                ("client", self.client_address[0], minute),
+            )
+
+        @staticmethod
+        def _participant_rate_limit_identity(
+            path: str, payload: dict[str, Any]
+        ) -> tuple[str, str, str] | None:
+            parts = [unquote(p) for p in path.split("/") if p]
+            if (
+                len(parts) == 6
+                and parts[0] == "api"
+                and parts[1] == "runs"
+                and parts[3] == "participants"
+                and parts[5] in {"heartbeat", "progress", "updates"}
+            ):
+                participant_token = str(payload.get("participantToken") or "")
+                if participant_token:
+                    token_hash = hashlib.sha256(
+                        participant_token.encode("utf-8")
+                    ).hexdigest()[:16]
+                    return parts[2], parts[4], token_hash
+            return None
 
         def _read_json(self) -> dict[str, Any]:
             length = int(self.headers.get("Content-Length", "0"))

@@ -160,8 +160,8 @@ and explicit:
 
 Current public-demo limits are exposed in run snapshots and evidence export:
 max artifact bytes, max message bytes, max vector length, max participants, max
-rounds, token TTL, heartbeat stale timeout, participant timeout, rate limit, and
-clip norm.
+rounds, token TTL, heartbeat stale timeout, participant timeout, shared client
+rate limit, participant-scoped protocol rate limit, and clip norm.
 
 Forbidden fields include raw observations, actions, labels, latents, tensors,
 participant tokens, and model weights. Payloads with raw-data-like keys are

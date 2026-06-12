@@ -447,6 +447,54 @@ def test_demo_http_api_create_join_events_and_export() -> None:
         server.server_close()
 
 
+def test_demo_http_api_participant_protocol_uses_participant_rate_bucket() -> None:
+    service = FederatedDemoService(
+        public_base_url="http://127.0.0.1:0/web/federated-demo",
+        safety=DemoSafetyConfig(
+            rate_limit_per_minute=3,
+            participant_rate_limit_per_minute=20,
+        ),
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(service))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_port}"
+    try:
+        created = _post_json(
+            f"{base}/api/runs",
+            {"maxParticipants": 1, "quorum": 1, "rounds": 1},
+        )
+        joined = _post_json(
+            f"{base}/api/runs/{created['id']}/join",
+            {"joinToken": created["joinToken"], "displayName": "browser"},
+        )
+        _post_json(f"{base}/api/runs/{created['id']}/control", {"action": "start"})
+
+        with pytest.raises(urllib.error.HTTPError) as host_limit:
+            urllib.request.urlopen(f"{base}/api/runs/{created['id']}")
+        assert host_limit.value.code == 429
+
+        for _ in range(5):
+            progress = _post_json(
+                f"{base}/api/runs/{created['id']}/participants/{joined['participantId']}/progress",
+                {"participantToken": joined["participantToken"], "progress": 0.5},
+            )
+            assert progress["run"]["state"] == "running_round"
+
+        completed = _post_json(
+            f"{base}/api/runs/{created['id']}/participants/{joined['participantId']}/updates",
+            {
+                "participantToken": joined["participantToken"],
+                "artifact": _update_artifact(created["id"], joined["participantId"], 1),
+            },
+        )
+        assert completed["run"]["state"] == "completed"
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
 def test_demo_http_api_websocket_replay_and_commands() -> None:
     service = FederatedDemoService(
         public_base_url="http://127.0.0.1:0/web/federated-demo"

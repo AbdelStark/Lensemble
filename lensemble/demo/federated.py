@@ -251,6 +251,7 @@ class DemoSafetyConfig:
     heartbeat_stale_ms: int = 15_000
     participant_timeout_ms: int = 45_000
     rate_limit_per_minute: int = 120
+    participant_rate_limit_per_minute: int = 10_000
     clip_norm: float = DEFAULT_CLIP_NORM
 
     def as_payload(self) -> dict[str, int | float]:
@@ -265,6 +266,7 @@ class DemoSafetyConfig:
             "heartbeatStaleMs": self.heartbeat_stale_ms,
             "participantTimeoutMs": self.participant_timeout_ms,
             "rateLimitPerMinute": self.rate_limit_per_minute,
+            "participantRateLimitPerMinute": self.participant_rate_limit_per_minute,
             "clipNorm": self.clip_norm,
         }
 
