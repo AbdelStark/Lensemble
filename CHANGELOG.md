@@ -34,6 +34,18 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Changed
 
+- `area:observability`: **Host dashboard analytics: charts, status strip, probe placement** —
+  `web/federated-demo/charts.mjs` adds dependency-free SVG line charts (pure node-tested data
+  preparation: per-participant loss series with surrogate fallback, round-metric series with
+  gaps preserved, nice ticks, compact tick labels). The dashboard gains a status strip (round
+  progress bar, active participants, latest pred loss/SIGReg/effective rank/adapter norms,
+  latest health flags) and a "Run analytics" grid: prediction loss per participant (+dashed
+  mean), round-mean loss start-vs-trained, SIGReg statistic, latent geometry (effective rank +
+  std), and adapter Δ/state norms — all real run data over WebSocket. The right column is
+  reordered so the before/after probe sits directly under the analytics, above diagnostics,
+  round metrics, artifacts, and the event timeline (order pinned by
+  `test_dashboard_mounts_analytics_above_probe_and_timeline`).
+
 - `area:docs`: **Demo UI redesign: real-LeWM only, premium theme, product-voice copy** — the web
   app now exposes only the Tapestry-like `real-lewm-tworooms` path (the surrogate learner and the
   frontend simulator remain in the codebase/API for tests, but the host form hardcodes the real

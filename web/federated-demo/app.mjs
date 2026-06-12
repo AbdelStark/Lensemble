@@ -30,6 +30,7 @@ import {
   defaultAdapters,
   loadRunSnapshot,
 } from "./local_bus.mjs";
+import { lineChart, participantLossSeries, roundSeries } from "./charts.mjs";
 import { loadLewmRuntime } from "./lewm_runtime.mjs";
 import { compareRevisions } from "./lewm_probe.mjs";
 import { runRealLewmRound } from "./lewm_participant.mjs";
@@ -224,6 +225,95 @@ function artifactList(run) {
       ]),
     ),
   );
+}
+
+function runStatusStrip(run) {
+  const latest = (run.roundMetrics ?? [])[run.roundMetrics?.length - 1] ?? null;
+  const real = run.runMode === "real-lewm-tworooms";
+  const active = (run.participants ?? []).filter((p) => !["dropped", "error"].includes(p.state)).length;
+  const progressValue = run.config.rounds > 0 ? (run.roundMetrics?.length ?? 0) / run.config.rounds : 0;
+  const tiles = [
+    el("div", { class: "metric-tile" }, [
+      el("span", { class: "metric-label", text: "progress" }),
+      el("strong", { text: `${run.roundMetrics?.length ?? 0}/${run.config.rounds}` }),
+      el("progress", { max: "1", value: String(progressValue) }),
+    ]),
+    metricTile("participants", `${active}/${run.config.maxParticipants}`, `quorum ${run.config.quorum}`),
+  ];
+  if (latest && real) {
+    tiles.push(
+      metricTile("pred loss", formatMetric(latest.predLossLastMean, 5), `from ${formatMetric(latest.predLossFirstMean, 5)}`),
+      metricTile("sigreg", formatMetric(latest.sigregStatisticMean, 5)),
+      metricTile("eff rank", formatMetric(latest.effectiveRankMean, 1)),
+      metricTile("adapter ‖θ‖", formatMetric(latest.adapterStateNorm, 3), `Δ ${formatMetric(latest.aggregateDeltaNorm, 3)}`),
+    );
+  } else if (latest) {
+    tiles.push(
+      metricTile("loss", formatMetric(latest.localLossMean, 4)),
+      metricTile("agg norm", formatMetric(latest.aggregateNorm, 4)),
+    );
+  }
+  const flags = latest?.healthFlags ?? [];
+  return el("div", { class: "status-strip" }, [
+    el("div", { class: "metric-tiles" }, tiles),
+    flags.length > 0 ? errorBox(`health: ${flags.join("; ")}`) : null,
+  ]);
+}
+
+function runAnalytics(run) {
+  const rounds = run.roundMetrics ?? [];
+  if (rounds.length === 0) return [];
+  const real = run.runMode === "real-lewm-tworooms";
+  const charts = [];
+
+  const perParticipant = participantLossSeries(run);
+  const meanSeries = roundSeries(run, [
+    { key: real ? "predLossLastMean" : "localLossMean", label: "mean", dashed: true },
+  ]).map((s) => ({ ...s, color: "#8b909a" }));
+  if (perParticipant.length > 0) {
+    charts.push(
+      lineChart({
+        series: [...perParticipant, ...meanSeries],
+        title: real ? "Prediction loss by participant" : "Local loss by participant",
+        yZero: true,
+      }),
+    );
+  }
+  if (real) {
+    charts.push(
+      lineChart({
+        series: roundSeries(run, [
+          { key: "predLossFirstMean", label: "round start" },
+          { key: "predLossLastMean", label: "after local training" },
+        ]),
+        title: "Round-mean loss: start vs trained",
+        yZero: true,
+      }),
+      lineChart({
+        series: roundSeries(run, [{ key: "sigregStatisticMean", label: "SIGReg" }]),
+        title: "SIGReg statistic (anti-collapse)",
+        yZero: true,
+      }),
+      lineChart({
+        series: roundSeries(run, [
+          { key: "effectiveRankMean", label: "effective rank" },
+          { key: "latentStdMeanMean", label: "latent std", dashed: true },
+        ]),
+        title: "Latent geometry",
+        yZero: true,
+      }),
+      lineChart({
+        series: roundSeries(run, [
+          { key: "aggregateDeltaNorm", label: "round Δ norm" },
+          { key: "adapterStateNorm", label: "adapter ‖θ‖", dashed: true },
+        ]),
+        title: "Adapter norms",
+        yZero: true,
+      }),
+    );
+  }
+  if (charts.length === 0) return [];
+  return [el("h2", { text: "Run analytics" }), el("div", { class: "charts-grid" }, charts)];
 }
 
 function metricsList(run) {
@@ -804,6 +894,7 @@ function renderBackendHostSnapshot(run) {
           : el("span", { class: "chip", text: run.learnerRuntime }),
         ` quorum ${run.config.quorum} · up to ${run.config.maxParticipants} participants · ${run.config.rounds} rounds · ${backendPoll?.transport ?? run.deployment?.transportMode ?? "polling"}`,
       ]),
+      runStatusStrip(run),
       el("div", { class: "columns" }, [
         el("div", { class: "panel" }, [
           el("h2", { text: "Invite participants" }),
@@ -822,12 +913,13 @@ function renderBackendHostSnapshot(run) {
         el("div", { class: "panel" }, [
           el("h2", { text: run.round > 0 ? `Round ${run.round} of ${run.config.rounds}` : "Waiting for participants" }),
           participantSlots(run),
+          ...runAnalytics(run),
+          run.runMode === "real-lewm-tworooms" ? el("h2", { text: "Before/after validation probe" }) : null,
+          renderRealModeProbe(run),
           el("h2", { text: "Training diagnostics" }),
           trainingDiagnostics(run),
           el("h2", { text: "Round metrics" }),
           metricsList(run),
-          run.runMode === "real-lewm-tworooms" ? el("h2", { text: "Before/after validation probe" }) : null,
-          renderRealModeProbe(run),
           el("h2", { text: "Artifacts" }),
           artifactList(run),
           el("h2", { text: "Event timeline" }),

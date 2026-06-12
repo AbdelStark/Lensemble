@@ -10,9 +10,45 @@ claim-boundary banners, and the no-artificial-sleeps rule for the real path.
 
 from __future__ import annotations
 
+import json
+import shutil
+import subprocess
 from pathlib import Path
 
+import pytest
+
 WEB_DIR = Path("web/federated-demo")
+
+
+def test_chart_data_preparation_passes_under_node() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+    result = subprocess.run(
+        [node, str(WEB_DIR / "charts_selftest.mjs")],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    report = json.loads(result.stdout.strip().splitlines()[-1])
+    assert report["failed"] == 0
+    assert report["total"] >= 5
+
+
+def test_dashboard_mounts_analytics_above_probe_and_timeline() -> None:
+    app = (WEB_DIR / "app.mjs").read_text(encoding="utf-8")
+    # the backend dashboard is the LAST invite column (the legacy simulator view precedes it)
+    dashboard = app.split('"Invite participants"')[-1]
+    order = [
+        dashboard.index("runAnalytics(run)"),
+        dashboard.index("renderRealModeProbe(run)"),
+        dashboard.index("trainingDiagnostics(run)"),
+        dashboard.index("metricsList(run)"),
+        dashboard.index("timelineList(run.events)"),
+    ]
+    assert order == sorted(order), "analytics → probe → diagnostics → metrics → timeline"
+    assert "runStatusStrip(run)" in app
+    assert "participantLossSeries" in app
 
 
 def test_host_form_creates_real_mode_runs_only() -> None:
