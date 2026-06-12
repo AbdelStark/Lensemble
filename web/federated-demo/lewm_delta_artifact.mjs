@@ -45,7 +45,7 @@ export async function buildAdapterDeltaArtifact({
   simulated = false,
 }) {
   if (!binding?.checkpoint?.revision) {
-    throw new Error("run snapshot carries no lewmBinding — not a real-lewm-tworooms run");
+    throw new Error("run snapshot carries no lewmBinding, so this is not a real-lewm-tworooms run");
   }
   const delta = Array.from(result.delta.delta, (v) => Number(v.toFixed(8)));
   const metrics = result.metrics;

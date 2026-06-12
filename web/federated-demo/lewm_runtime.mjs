@@ -57,7 +57,7 @@ export async function loadLewmRuntime({
   } catch (error) {
     throw new LewmUnsupportedError(
       "manifest-missing",
-      `exported graphs not found under ${baseUrl} — run scripts/lewm_tworooms_export.py (${error.message})`,
+      `exported graphs not found under ${baseUrl}. Run scripts/lewm_tworooms_export.py (${error.message})`,
     );
   }
   if (manifest.schema !== "lewm-browser-export/1") {

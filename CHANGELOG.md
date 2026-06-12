@@ -34,6 +34,16 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Changed
 
+- `area:docs`: **Frontend polish pass: humanized copy, no em/en dashes, motion and interaction
+  refinements** — every user-facing string in the demo app rewritten in plain product voice
+  (participant stage texts, empty states, probe panel, TwoRooms lab status/identity lines, home
+  hero and steps, runtime error messages) with em/en dashes removed from all visible text. Visual
+  layer gains a gradient hero heading, panel rise-in animation (disabled under
+  prefers-reduced-motion), hover elevation on cards/charts/slots, timeline row hover, input hover
+  states, accent text selection, and a tidier TwoRooms lab (simpler headings, humanized runtime
+  and model identity lines). Pinned test needles preserved ("never leave this browser",
+  "fails visibly", "did not beat the parent checkpoint", "reported, not hidden").
+
 - `area:observability`: **Host dashboard analytics: charts, status strip, probe placement** —
   `web/federated-demo/charts.mjs` adds dependency-free SVG line charts (pure node-tested data
   preparation: per-participant loss series with surrogate fallback, round-metric series with

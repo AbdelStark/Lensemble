@@ -768,3 +768,96 @@ a {
     gap: 4px;
   }
 }
+
+/* ------------------------------------------------------------ polish layer */
+
+::selection {
+  background: rgba(79, 70, 229, 0.18);
+}
+
+h1 {
+  font-size: clamp(26px, 4vw, 32px);
+}
+
+.panel {
+  animation: rise 0.32s ease both;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.slot,
+.metric-card,
+.chart,
+.diagnostic-row,
+.timeline li {
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.slot.filled:hover,
+.metric-card:hover,
+.chart:hover {
+  border-color: var(--line-strong);
+  box-shadow: 0 2px 10px -4px rgba(25, 28, 34, 0.1);
+}
+
+.timeline li:hover {
+  background: var(--accent-soft);
+}
+
+input[type="number"]:hover,
+input[type="text"]:hover,
+select:hover {
+  border-color: var(--ink-3);
+}
+
+.slot .badge {
+  justify-self: start;
+}
+
+.stage::first-letter {
+  text-transform: uppercase;
+}
+
+.join-url input {
+  background: var(--surface-2);
+}
+
+#qr {
+  transition: transform 0.2s ease;
+}
+
+#qr:hover {
+  transform: scale(1.02);
+}
+
+.hero h1 {
+  background: linear-gradient(110deg, var(--ink) 60%, var(--accent-ink));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.error-box {
+  animation: rise 0.25s ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel,
+  .error-box {
+    animation: none;
+  }
+
+  button:hover:not(:disabled),
+  #qr:hover {
+    transform: none;
+  }
+}

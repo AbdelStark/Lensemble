@@ -208,7 +208,7 @@ function participantSlots(run) {
 function artifactList(run) {
   const artifacts = run.artifacts ?? [];
   if (artifacts.length === 0) {
-    return note("No artifacts yet. Checkpoint-like artifacts appear after aggregation closes a round.");
+    return note("No artifacts yet. They appear as rounds aggregate.");
   }
   return el(
     "ul",
@@ -319,7 +319,7 @@ function runAnalytics(run) {
 function metricsList(run) {
   const metrics = run.roundMetrics ?? [];
   if (metrics.length === 0) {
-    return note("Round metrics appear after the first aggregation closes.");
+    return note("Round metrics appear once the first round aggregates.");
   }
   const real = run.runMode === "real-lewm-tworooms";
   return el(
@@ -373,7 +373,7 @@ function trainingDiagnostics(run) {
     .map((participant) => ({ participant, metadata: latestUpdateMetadata(participant, run.round) }))
     .filter(({ metadata }) => metadata);
   if (rows.length === 0) {
-    return note("Training diagnostics appear after bounded updates are submitted.");
+    return note("Per participant diagnostics appear once updates start arriving.");
   }
   const real = run.runMode === "real-lewm-tworooms";
   return el(
@@ -598,7 +598,7 @@ function renderHome() {
     el("section", { class: "panel hero" }, [
       el("h1", { text: "Federate a world model across browsers" }),
       note(
-        "Every participant adapts a real LeWorldModel TwoRooms checkpoint locally — rollouts stay on their device — and shares only a small, bounded adapter delta. Rounds aggregate into hash-bound global revisions you can probe, inspect, and export.",
+        "Each participant adapts a real LeWorldModel checkpoint right in their browser. Rollouts stay on the device, and only a small, bounded adapter update is shared. Rounds aggregate into hash-bound global revisions you can probe, inspect, and export.",
       ),
       el("p", {}, [
         el("span", { class: "chip", text: "quentinll/lewm-tworooms · 77adaae0bc31" }),
@@ -617,14 +617,14 @@ function renderHome() {
         el("div", { class: "panel" }, [
           el("h2", { text: "How it works" }),
           el("ol", { class: "steps" }, [
-            el("li", { text: "Create a run and share the QR code — each participant joins from their own browser and trains autonomously." }),
-            el("li", { text: "Watch rounds aggregate live: prediction loss, SIGReg, effective rank, and adapter revisions update over WebSocket." }),
-            el("li", { text: "Run the before/after probe against the latest global revision, then export the evidence bundle." }),
+            el("li", { text: "Create a run and share the QR code. Each participant joins from their own browser and trains on its own." }),
+            el("li", { text: "Watch rounds aggregate live. Prediction loss, SIGReg, effective rank, and adapter revisions stream in as they happen." }),
+            el("li", { text: "When you are ready, run the before and after probe against the latest revision, then export the evidence bundle." }),
           ]),
           el("p", {}, [
             el("a", {
               href: "#/tworooms",
-              text: "Open the TwoRooms lab → checkpoint-backed rollout & planning",
+              text: "Open the TwoRooms lab and watch the model plan in real time",
             }),
           ]),
         ]),
@@ -930,9 +930,9 @@ function renderBackendHostSnapshot(run) {
         ? el("section", { class: "panel compact" }, [
             el("h2", { text: "Checkpoint-backed inference" }),
             el("p", { class: "note" }, [
-              "Rollout and planning with the real TwoRooms model run in the ",
+              "Watch the real model roll out and plan in the ",
               el("a", { href: "#/tworooms", text: "TwoRooms lab" }),
-              "; the before/after probe above scores the latest aggregated adapter revision.",
+              ". The probe above scores the latest aggregated revision.",
             ]),
           ])
         : renderInferencePanel(run),
@@ -1261,22 +1261,22 @@ function renderLearnerTelemetry(run, me, telemetry) {
 function renderParticipantState(run, me, simulated, participantToken = null, options = {}) {
   const automationMode = options.automationMode ?? me.automationMode ?? "manual";
   const stageText = {
-    joined: "Joined. Waiting for the host to start the run.",
-    ready: "Ready. Waiting for the host to start the run.",
+    joined: "You are in. Waiting for the host to start the run.",
+    ready: "Ready to go. The run begins when the host starts it.",
     assigned: simulated
       ? `Assigned round ${me.round}. Preparing simulated local work.`
       : automationMode === "auto"
-        ? `Assigned round ${me.round}. Auto learner queued.`
+        ? `Round ${me.round} assigned. Your browser is getting to work.`
         : run.runMode === "real-lewm-tworooms"
-          ? `Assigned round ${me.round}. Ready to run browser-local LeWM adapter continuation.`
-          : `Assigned round ${me.round}. Ready to run the browser-local tiny learner.`,
+          ? `Round ${me.round} assigned. Press the button below to train locally.`
+          : `Round ${me.round} assigned. Press the button below to run the local learner.`,
     training: simulated
       ? `Simulating local work for round ${me.round}.`
       : run.runMode === "real-lewm-tworooms"
-        ? `Browser-local LeWM adapter continuation in progress for round ${me.round}.`
-        : `Browser-local tiny learner work in progress for round ${me.round}.`,
-    submitted: "Bounded update artifact submitted. Waiting for aggregation.",
-    completed: "Run complete. Thanks for participating.",
+        ? `Training the adapter locally for round ${me.round}.`
+        : `Local learner running for round ${me.round}.`,
+    submitted: "Your update is in. Waiting for the round to aggregate.",
+    completed: "Run complete. Thanks for taking part.",
     dropped: "You were dropped from this run.",
     error: `Run failed: ${run.failureReason ?? me.error ?? "demo error"}`,
   }[me.state];
@@ -1319,7 +1319,7 @@ function renderParticipantState(run, me, simulated, participantToken = null, opt
     el("p", { class: "muted" }, [
       simulated
         ? "Local work in this slice is simulated."
-        : "Rollouts and training never leave this browser — only a bounded adapter delta is shared. If the runtime is unavailable the round fails visibly; there is no fallback.",
+        : "Rollouts and training never leave this browser. Only a bounded adapter delta is shared. If the runtime is unavailable the round fails visibly, with no fallback.",
     ]),
   );
   return el("div", {}, children);
@@ -1333,20 +1333,20 @@ function renderRealModeProbe(run) {
   if (run.runMode !== "real-lewm-tworooms") return null;
   const revisions = run.modelRevisions ?? [];
   if (revisions.length === 0) {
-    return note("Before/after validation appears after the first adapter revision aggregates.");
+    return note("The probe unlocks once the first adapter revision aggregates.");
   }
   const last = revisions[revisions.length - 1];
   const cached = probeResults.get(`${run.id}:${last.modelRevisionId}`);
-  const statusNote = el("p", { class: "note", text: cached ? "" : "Compares the parent checkpoint (identity adapter) against the latest global adapter revision on a fixed seeded TwoRooms validation set, in this browser, through the exported graphs." });
+  const statusNote = el("p", { class: "note", text: cached ? "" : "Scores the latest global adapter against the plain checkpoint on a fixed validation set, right here in your browser." });
   const resultBox = el("div", {});
   if (cached) renderProbeResult(resultBox, cached);
 
   const button = el("button", {
     class: "secondary",
-    text: `Run before/after probe vs ${last.modelRevisionId}`,
+    text: `Run before/after probe against ${last.modelRevisionId}`,
     onclick: async () => {
       button.disabled = true;
-      statusNote.textContent = "Loading runtime and scoring both revisions on the fixed validation set…";
+      statusNote.textContent = "Loading the runtime and scoring both revisions on the fixed validation set…";
       try {
         const runtime = await loadLewmRuntime();
         const revision = await backendClient.modelRevision(run.id, last.modelRevisionId);
@@ -1390,7 +1390,7 @@ function renderProbeResult(container, report) {
   if (report.verdict !== "improved") {
     children.push(
       note(
-        "An honest non-positive result: the adapter revision did not beat the parent checkpoint on this probe. This blocks positive claims; it is reported, not hidden.",
+        "The adapter revision did not beat the parent checkpoint on this probe. The result stands as reported, not hidden.",
       ),
     );
   }

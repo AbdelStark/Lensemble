@@ -2,7 +2,7 @@
 //
 // The lab object is UI-free and node-testable with an injected runtime (see lewm_runtime.mjs);
 // mountTwoRoomsLab wires it to DOM canvases and readouts. Everything shown is produced by the
-// exported checkpoint graphs — current frame, goal frame, candidate rollout costs, the chosen
+// exported checkpoint graphs: current frame, goal frame, candidate rollout costs, the chosen
 // action block, latent goal distance, model identity, runtime backend, and explicit errors.
 
 import {
@@ -111,7 +111,7 @@ function drawFrame(canvas, rgb) {
 }
 
 export function mountTwoRoomsLab(container, { loadRuntime, el }) {
-  const statusNote = el("p", { class: "note", text: "Loading checkpoint-backed LeWM graphs…" });
+  const statusNote = el("p", { class: "note", text: "Loading the checkpoint graphs…" });
   const identityNote = el("p", { class: "note", text: "" });
   const planNote = el("p", { class: "note", text: "No plan yet." });
   const errorNote = el("p", { class: "note error", text: "" });
@@ -138,7 +138,7 @@ export function mountTwoRoomsLab(container, { loadRuntime, el }) {
       `plan ${snap.stepsPlanned}: ${p.candidates} candidate rollouts, terminal latent cost ` +
       `best=${p.bestCost.toFixed(2)} chosen=${p.cost.toFixed(2)} worst=${p.worstCost.toFixed(2)}; ` +
       `chosen block=[${p.actionBlock.slice(0, 4).map((v) => v.toFixed(2)).join(", ")}…]; ` +
-      `distance=${snap.distance.toFixed(1)} px${snap.done ? " — target reached" : ""}`;
+      `distance=${snap.distance.toFixed(1)} px${snap.done ? ". Target reached" : ""}`;
   }
 
   async function step() {
@@ -182,16 +182,16 @@ export function mountTwoRoomsLab(container, { loadRuntime, el }) {
 
   container.append(
     el("section", { class: "panel" }, [
-      el("h2", { text: "TwoRooms — checkpoint-backed LeWM rollout & planning" }),
-      note_(el, "Frames are encoded by the exported checkpoint graphs; planning samples action "
-        + "candidates, rolls latents forward with the real predictor, and picks the lowest "
-        + "terminal goal-latent distance."),
+      el("h2", { text: "TwoRooms rollout and planning" }),
+      note_(el, "The model sees exactly these frames. Planning samples candidate actions, rolls "
+        + "latents forward with the real predictor, and picks the path that lands closest "
+        + "to the goal."),
       el("p", { class: "muted", text: TWOROOMS_DEVIATIONS }),
       statusNote,
       identityNote,
       el("div", { class: "columns" }, [
-        el("div", { class: "panel" }, [el("h2", { text: "Current (agent + target)" }), currentCanvas]),
-        el("div", { class: "panel" }, [el("h2", { text: "Goal frame (model input)" }), goalCanvas]),
+        el("div", { class: "panel" }, [el("h2", { text: "Live frame" }), currentCanvas]),
+        el("div", { class: "panel" }, [el("h2", { text: "Goal frame" }), goalCanvas]),
       ]),
       el("div", { class: "btn-row" }, [resetButton, stepButton, autoButton]),
       planNote,
@@ -204,12 +204,12 @@ export function mountTwoRoomsLab(container, { loadRuntime, el }) {
       runtime = await loadRuntime();
       lab = await createTwoRoomsLab({ runtime, seed: 20260612 });
       statusNote.textContent =
-        `Runtime ready: ${runtime.runtime} on ${runtime.backend}; window=${runtime.numFrames} frames, ` +
-        `action block=${ACTION_BLOCK}×${ACTION_DIM}.`;
+        `Runtime ready on ${runtime.backend}. ${runtime.numFrames} frame window, ` +
+        `${ACTION_BLOCK}×${ACTION_DIM} action blocks.`;
       const id = runtime.identity;
       identityNote.textContent =
-        `Model: ${id.checkpointRepo}@${String(id.checkpointRevision).slice(0, 12)} ` +
-        `(weights ${String(id.weightsSha256).slice(0, 12)}…, graph v${id.graphVersion}, opset ${id.opset}).`;
+        `Model ${id.checkpointRepo}@${String(id.checkpointRevision).slice(0, 12)}, ` +
+        `weights ${String(id.weightsSha256).slice(0, 12)}…, graph v${id.graphVersion}, opset ${id.opset}.`;
       const snap = await lab.reset();
       redraw();
       describe(snap);

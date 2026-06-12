@@ -124,7 +124,7 @@ export async function runLocalAdapterContinuation({
   const collected = await collectResidentPairs({ runtime, seed, episodes, maxModelSteps });
   if (collected.pairs.count < 4) {
     throw new Error(
-      `insufficient resident pairs (${collected.pairs.count}) — episodes ended too early`,
+      `insufficient resident pairs (${collected.pairs.count}). Episodes ended too early`,
     );
   }
   onProgress(0.35, { phase: "adapter-training", pairs: collected.pairs.count });
