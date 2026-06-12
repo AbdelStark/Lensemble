@@ -9,6 +9,7 @@
 
 import { runLocalAdapterContinuation } from "./lewm_local_trainer.mjs";
 import { buildAdapterDeltaArtifact } from "./lewm_delta_artifact.mjs";
+import { adapterFromInitAndOffset } from "./lewm_adapter.mjs";
 
 let cachedRuntimePromise = null;
 
@@ -23,11 +24,14 @@ export function resetLewmRuntimeCache() {
 
 // Auto-mode work budget per round: small enough for a phone browser round, real enough to move
 // the loss. All steps are real optimizer steps — progress reflects actual work, never sleeps.
+// The episode/step balance follows the #322 probe sweep: more resident pairs and FEWER optimizer
+// steps make the adapter learn the systematic predictor bias (which generalizes to held-out
+// episodes, +12% probe improvement) instead of memorizing its local rollouts (flat probe).
 export const REAL_ROUND_DEFAULTS = Object.freeze({
-  episodes: 1,
-  maxModelSteps: 8,
-  trainSteps: 40,
-  batchSize: 16,
+  episodes: 3,
+  maxModelSteps: 10,
+  trainSteps: 20,
+  batchSize: 32,
   clipNorm: 3.0,
 });
 
@@ -52,6 +56,24 @@ export async function runRealLewmRound({
   onProgress(0.05, { phase: "loading-runtime" });
   const runtime = await cacheLewmRuntime(loadRuntime);
 
+  // continuation start: the shared deterministic init plus the current global offset (FedAvg/
+  // DiLoCo shape — every participant trains from the SAME point, so mean deltas are coherent)
+  const hiddenDim = run.lewmBinding.adapterHiddenDim ?? 32;
+  let offset = null;
+  if (run.currentModelRevisionId && run.currentModelRevisionId !== "initial") {
+    const revision = await client.modelRevision(run.id, run.currentModelRevisionId);
+    if (!Array.isArray(revision?.adapterState)) {
+      throw new Error(`revision ${run.currentModelRevisionId} carries no adapter state`);
+    }
+    offset = revision.adapterState;
+  }
+  const startAdapter = adapterFromInitAndOffset({
+    inputDim: runtime.hidden,
+    hiddenDim,
+    initSeed: run.lewmBinding.adapterInitSeed ?? 42,
+    offset,
+  });
+
   const result = await runLocalAdapterContinuation({
     runtime,
     seed,
@@ -62,7 +84,8 @@ export async function runRealLewmRound({
     clipNorm: budget.clipNorm,
     // the trainable subset is fixed by the run binding — a mismatched local adapter would be
     // rejected server-side as an adapterSpec violation
-    adapterHidden: run.lewmBinding.adapterHiddenDim ?? 32,
+    adapterHidden: hiddenDim,
+    initialAdapter: startAdapter,
     onProgress: (progress, telemetry) => {
       onProgress(0.05 + progress * 0.85, telemetry);
       void client

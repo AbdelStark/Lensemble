@@ -117,6 +117,7 @@ export async function runLocalAdapterContinuation({
   lambda = 0.1,
   clipNorm = 3.0,
   adapterHidden = 32,
+  initialAdapter = null, // continuation start (shared init + global offset); fresh init when null
   onProgress = () => {},
 } = {}) {
   onProgress(0.05, { phase: "rollout-collection" });
@@ -128,7 +129,8 @@ export async function runLocalAdapterContinuation({
   }
   onProgress(0.35, { phase: "adapter-training", pairs: collected.pairs.count });
 
-  const adapter = createAdapter({ inputDim: runtime.hidden, hiddenDim: adapterHidden, seed });
+  const adapter =
+    initialAdapter ?? createAdapter({ inputDim: runtime.hidden, hiddenDim: adapterHidden, seed });
   const initialFlat = flattenParams(adapter);
   const baseline = latentDiagnostics(collected.pairs.x, collected.pairs.count, runtime.hidden);
   const report = trainAdapterOnPairs(adapter, collected.pairs, {

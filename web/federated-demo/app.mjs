@@ -31,6 +31,7 @@ import {
   loadRunSnapshot,
 } from "./local_bus.mjs";
 import { loadLewmRuntime } from "./lewm_runtime.mjs";
+import { compareRevisions } from "./lewm_probe.mjs";
 import { runRealLewmRound } from "./lewm_participant.mjs";
 import { mountTwoRoomsLab } from "./tworooms_panel.mjs";
 import { randomSeed } from "./rng.mjs";
@@ -247,6 +248,9 @@ function metricsList(run) {
                 : metric.collapseRisk ?? "watch",
             ),
           ]),
+          real && (metric.healthFlags ?? []).length > 0
+            ? errorBox(`health: ${metric.healthFlags.join("; ")}`)
+            : null,
           el(
             "div",
             { class: "metric-tiles" },
@@ -859,6 +863,8 @@ function renderBackendHostSnapshot(run) {
           trainingDiagnostics(run),
           el("h2", { text: "Round metrics" }),
           metricsList(run),
+          run.runMode === "real-lewm-tworooms" ? el("h2", { text: "Before/after validation probe" }) : null,
+          renderRealModeProbe(run),
           el("h2", { text: "Artifacts" }),
           artifactList(run),
           el("h2", { text: "Event timeline" }),
@@ -1255,6 +1261,75 @@ function renderParticipantState(run, me, simulated, participantToken = null, opt
     ),
   );
   return el("div", {}, children);
+}
+
+// --------------------------------------------------- real-mode validation probe
+
+const probeResults = new Map();
+
+function renderRealModeProbe(run) {
+  if (run.runMode !== "real-lewm-tworooms") return null;
+  const revisions = run.modelRevisions ?? [];
+  if (revisions.length === 0) {
+    return note("Before/after validation appears after the first adapter revision aggregates.");
+  }
+  const last = revisions[revisions.length - 1];
+  const cached = probeResults.get(`${run.id}:${last.modelRevisionId}`);
+  const statusNote = el("p", { class: "note", text: cached ? "" : "Compares the parent checkpoint (identity adapter) against the latest global adapter revision on a fixed seeded TwoRooms validation set, in this browser, through the exported graphs." });
+  const resultBox = el("div", {});
+  if (cached) renderProbeResult(resultBox, cached);
+
+  const button = el("button", {
+    class: "secondary",
+    text: `Run before/after probe vs ${last.modelRevisionId}`,
+    onclick: async () => {
+      button.disabled = true;
+      statusNote.textContent = "Loading runtime and scoring both revisions on the fixed validation set…";
+      try {
+        const runtime = await loadLewmRuntime();
+        const revision = await backendClient.modelRevision(run.id, last.modelRevisionId);
+        if (!Array.isArray(revision.adapterState)) {
+          throw new Error("revision carries no adapter state");
+        }
+        const report = await compareRevisions({
+          runtime,
+          adaptedState: revision.adapterState,
+          adapterHiddenDim: run.lewmBinding?.adapterHiddenDim ?? 32,
+          adapterInitSeed: run.lewmBinding?.adapterInitSeed ?? 42,
+        });
+        report.modelRevisionId = last.modelRevisionId;
+        probeResults.set(`${run.id}:${last.modelRevisionId}`, report);
+        statusNote.textContent = "";
+        renderProbeResult(resultBox, report);
+      } catch (error) {
+        statusNote.textContent = "";
+        resultBox.replaceChildren(errorBox(`Probe failed: ${error.message}`));
+      } finally {
+        button.disabled = false;
+      }
+    },
+  });
+  return el("div", {}, [button, statusNote, resultBox]);
+}
+
+function renderProbeResult(container, report) {
+  container.replaceChildren(
+    el("div", { class: "metric-tiles" }, [
+      metricTile("baseline mse", formatMetric(report.baselineMse, 6)),
+      metricTile("adapted mse", formatMetric(report.adaptedMse, 6)),
+      metricTile("Δ relative", `${formatMetric(report.relativeImprovement * 100, 2)}%`),
+    ]),
+    el("p", {}, [
+      "Verdict: ",
+      stateBadge(report.verdict),
+      ` on ${report.pairCount} fixed validation pairs (seed ${report.seed}, ${report.modelRevisionId ?? "latest"}).`,
+    ]),
+    report.verdict !== "improved"
+      ? note(
+          "An honest non-positive result: the adapter revision did not beat the parent checkpoint on this probe. This blocks positive claims; it is reported, not hidden.",
+        )
+      : null,
+  );
 }
 
 // --------------------------------------------------------------- inference UI

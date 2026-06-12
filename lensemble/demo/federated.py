@@ -82,8 +82,16 @@ RUN_MODES = frozenset({SURROGATE_MODE, REAL_LEWM_MODE})
 
 # The bounded trainable subset of the real mode (web/federated-demo/lewm_adapter.mjs): a zero-init
 # residual MLP on the frozen predictor output. The flattened delta order is fixed: w1, b1, w2, b2.
+#
+# Init/offset protocol: every participant constructs the SAME deterministic initial adapter from
+# ``adapterInitSeed`` (client-side; w1/b1 seeded random, w2/b2 zero so the residual starts as the
+# identity). The coordinator's per-revision ``adapterState`` is the cumulative OFFSET from that
+# shared init (round r: state_r = state_{r-1} + mean(deltas), delta = clip(local - (init +
+# state_{r-1}))). The server never reproduces the JS init math — it only aggregates offsets — so
+# there is no cross-language float-divergence surface.
 LEWM_ADAPTER_HIDDEN = 32
 LEWM_ADAPTER_INPUT = 192
+LEWM_ADAPTER_INIT_SEED = 42
 
 
 def lewm_adapter_spec(
@@ -545,6 +553,8 @@ class FederatedDemoService:
             "adapterParameterCount": lewm_adapter_parameter_count(),
             "adapterHiddenDim": LEWM_ADAPTER_HIDDEN,
             "adapterInputDim": LEWM_ADAPTER_INPUT,
+            "adapterInitSeed": LEWM_ADAPTER_INIT_SEED,
+            "adapterStateSemantics": "offset-from-shared-init",
         }
 
     def create_run(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -1910,6 +1920,7 @@ class FederatedDemoService:
             else None
         )
         metrics_list = [metadata["metrics"] for metadata in update_metadata]
+        health_flags = self._lewm_health_flags(metrics_list)
         run.round_metrics.append(
             {
                 "round": run.round,
@@ -1955,6 +1966,8 @@ class FederatedDemoService:
                 "clipSaturationRate": self._mean_optional(
                     [metadata.get("clipSaturation") for metadata in update_metadata]
                 ),
+                "healthy": not health_flags,
+                "healthFlags": health_flags,
             }
         )
         # the aggregated delta is folded into the revision; drop the raw per-participant delta
@@ -2248,6 +2261,49 @@ class FederatedDemoService:
             "seed": int(artifact.get("seed", 0)),
             "simulated": bool(artifact.get("simulated", False)),
         }
+
+    @classmethod
+    def _lewm_health_flags(
+        cls, metrics_list: list[dict[str, Any]], *, hidden: int = LEWM_ADAPTER_INPUT
+    ) -> list[str]:
+        """Honest failure states for real-mode rounds (#322; mirrors lewm_probe.mjs).
+
+        Collapse diagnostics raise warnings but are never the sole success signal — the
+        before/after validation probe is the binding metric; these flags keep flat/worsening
+        loss and collapse patterns visible on the dashboard and in evidence.
+        """
+        flags: list[str] = []
+        effective_rank = cls._mean_optional(
+            [metrics.get("effectiveRank") for metrics in metrics_list]
+        )
+        if effective_rank is not None and effective_rank / hidden < 0.03:
+            flags.append("collapse-warning: effective rank below 3% of the latent width")
+        latent_std = cls._mean_optional(
+            [metrics.get("latentStdMean") for metrics in metrics_list]
+        )
+        if latent_std is not None and latent_std < 0.05:
+            flags.append(
+                "collapse-warning: adapted latent std near zero (magnitude collapse)"
+            )
+        first = cls._mean_optional(
+            [metrics.get("predLossFirst") for metrics in metrics_list]
+        )
+        last = cls._mean_optional(
+            [metrics.get("predLossLast") for metrics in metrics_list]
+        )
+        if first is not None and last is not None:
+            if last > first * 1.05:
+                flags.append("loss-worsened: local training increased prediction loss")
+            elif last > first * 0.99:
+                flags.append("flat-loss: no measurable local improvement")
+        sigreg = cls._mean_optional(
+            [metrics.get("sigregStatistic") for metrics in metrics_list]
+        )
+        if sigreg is not None and sigreg > 1.0:
+            flags.append(
+                "sigreg-warning: projected marginals far from the isotropic target"
+            )
+        return flags
 
     def _round_id(self, run: DemoRun) -> str:
         return f"{run.id}:round-{run.round}"

@@ -34,6 +34,23 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:eval`: **Tapestry-like LeWM before/after probe, anti-collapse diagnostics, and honest
+  failure states (gate G5)** (#322, epic #314) — `web/federated-demo/lewm_probe.mjs` scores any
+  global adapter revision against the identity baseline on a FIXED seeded TwoRooms validation
+  task; verdicts are `improved`/`flat`/`worse` and the host dashboard probe panel reports
+  negative results explicitly ("reported, not hidden"). The adapter protocol gained the
+  shared-init + offset semantics this requires (`adapterInitSeed` in the run binding; every
+  participant trains from the SAME deterministic init plus the current global offset, fetched
+  from the model-revision endpoint — without this, cross-participant delta means were
+  incoherent). Round metrics and evidence now carry server-side `healthFlags` mirroring the JS
+  assessment (effective-rank collapse, latent-std magnitude collapse, flat/worsened loss,
+  SIGReg outliers). Real-data result (`scripts/lewm_probe_check.py` →
+  `docs/evidence/lewm_tworooms_probe_check.json`): the frozen predictor's residual is
+  systematically biased (bias cosine 0.97 across disjoint episodes), and 3 rounds × 2
+  participants of the shipping federation math improve held-out validation MSE 0.0604 → 0.0530
+  (**+12.3%**, verdict `improved`); the earlier flat result at 60 steps/4 episodes is what set
+  the validated auto-round defaults (more resident pairs, fewer optimizer steps).
+
 - `area:federation`: **real-lewm mode integrated into the federated flow with autonomous
   participants** (#321, epic #314) — the host form gains a learner-path selector
   (`surrogate-swipe-dot` default vs `real-lewm-tworooms`; the frontend simulator refuses the real

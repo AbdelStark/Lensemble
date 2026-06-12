@@ -1,0 +1,68 @@
+{
+  "schema": "lewm-federated-probe/1",
+  "seed": 20260612,
+  "protocol": "disjoint per-participant expert episodes -> shipping JS federation (shared init + offset, clipped deltas, deterministic mean) -> held-out validation pairs; before = identity adapter (frozen predictor), after = final global revision",
+  "checkpoint": {
+    "repoId": "quentinll/lewm-tworooms",
+    "revision": "77adaae0bc31deab21c93740d1f8bb947cd0bdec",
+    "weightsSha256": "566f223624ea4bfb39dbfe6ae731198dd6ea73b7b8919fed6b1ecafca810f7dd"
+  },
+  "trainPairsPerParticipant": [
+    40,
+    40
+  ],
+  "result": {
+    "rounds": 3,
+    "participants": 2,
+    "validationPairs": 20,
+    "baselineMse": 0.06037891671884794,
+    "adaptedMse": 0.05296706380249468,
+    "relativeImprovement": 0.12275564583025336,
+    "verdict": "improved",
+    "roundTelemetry": [
+      {
+        "round": 1,
+        "losses": [
+          {
+            "first": 0.10105719101924959,
+            "last": 0.05379377836457425
+          },
+          {
+            "first": 0.06371931703222192,
+            "last": 0.03211384157185338
+          }
+        ]
+      },
+      {
+        "round": 2,
+        "losses": [
+          {
+            "first": 0.05429387585165301,
+            "last": 0.03896894401556648
+          },
+          {
+            "first": 0.05440326614240865,
+            "last": 0.02523766954495268
+          }
+        ]
+      },
+      {
+        "round": 3,
+        "losses": [
+          {
+            "first": 0.04709869341838316,
+            "last": 0.023008084976269137
+          },
+          {
+            "first": 0.03596551025278097,
+            "last": 0.015681571761421487
+          }
+        ]
+      }
+    ]
+  },
+  "passes": true,
+  "nonClaims": [
+    "Before/after validation probe for the Tapestry-like demo's federated adapter path; not paper-scale TwoRooms benchmark parity and not evidence of production browser training."
+  ]
+}

@@ -182,6 +182,42 @@ export function flattenParams(adapter) {
   return flat;
 }
 
+// Rebuild an adapter object from a flattened parameter vector (order: w1, b1, w2, b2).
+export function adapterFromFlat(flat, { inputDim, hiddenDim }) {
+  const sizes = [hiddenDim * inputDim, hiddenDim, inputDim * hiddenDim, inputDim];
+  const expected = sizes.reduce((a, b) => a + b, 0);
+  if (flat.length !== expected) {
+    throw new Error(`adapter vector length ${flat.length} != expected ${expected}`);
+  }
+  let off = 0;
+  const take = (n) => {
+    const out = Float32Array.from(flat.slice(off, off + n));
+    off += n;
+    return out;
+  };
+  return {
+    runtime: ADAPTER_RUNTIME,
+    inputDim,
+    hiddenDim,
+    seed: null,
+    params: { w1: take(sizes[0]), b1: take(sizes[1]), w2: take(sizes[2]), b2: take(sizes[3]) },
+  };
+}
+
+// The shared-init + offset protocol: adapter = deterministic init(seed) + global offset.
+export function adapterFromInitAndOffset({ inputDim, hiddenDim, initSeed, offset = null }) {
+  const adapter = createAdapter({ inputDim, hiddenDim, seed: initSeed });
+  if (offset) {
+    const flat = flattenParams(adapter);
+    if (offset.length !== flat.length) {
+      throw new Error(`offset length ${offset.length} != adapter size ${flat.length}`);
+    }
+    for (let i = 0; i < flat.length; i += 1) flat[i] += offset[i];
+    return adapterFromFlat(flat, { inputDim, hiddenDim });
+  }
+  return adapter;
+}
+
 export function adapterParameterSpec(adapter) {
   return [
     { name: "w1", shape: [adapter.hiddenDim, adapter.inputDim] },
