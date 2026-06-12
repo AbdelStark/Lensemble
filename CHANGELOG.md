@@ -34,6 +34,19 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:docs`: **End-to-end Tapestry-like rehearsal gate + researcher runbook (gate G7)** (#324,
+  epic #314, closes the epic's active queue) — `scripts/lewm_demo_rehearsal.py` exercises the
+  real-mode service contract end to end: a two-participant smoke run (auto + manual mix), a
+  four-participant run with mid-round dropout (quorum preserved), a WebSocket-style
+  reconnect (`connection.closed`→`connection.opened`, reconnectCount), stale-round rejection,
+  adapter-state retrieval after aggregation, configurable long runs (validated at 12 rounds),
+  evidence export, and a clean fail-closed claim audit on every run; it auto-binds the real
+  export manifest when present. `docs/roadmap/TAPESTRY_LEWM_RUNBOOK.md` is the researcher-facing
+  runbook: automated gates, the two-browser and four-phone paths, what the metrics prove, the
+  narration script, the never-claim list, and the rule that a non-improving probe verdict blocks
+  public positive claims. `tests/ml/test_lewm_rehearsal.py` runs the gate in-process and as a
+  command and pins the runbook contract.
+
 - `area:docs`: **Tapestry-like LeWM evidence card + claim audit (gate G7 surface)** (#323, epic
   #314) — `docs/evidence/lewm_tworooms_demo_card.md` is the public evidence surface: the accepted
   claim, the what-was-real table linking every gate artifact (G1 manifest/reference, G2

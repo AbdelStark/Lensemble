@@ -132,7 +132,8 @@ graph):
 9. [#323](https://github.com/AbdelStark/Lensemble/issues/323) — evidence
    bundle schema for real-mode runs, model/demo card, claim-audit tests.
 10. [#324](https://github.com/AbdelStark/Lensemble/issues/324) — end-to-end
-    rehearsal gate and researcher-facing runbook.
+    rehearsal gate and researcher-facing runbook
+    ([TAPESTRY_LEWM_RUNBOOK.md](TAPESTRY_LEWM_RUNBOOK.md)).
 
 The previously open dynamic-env backlog
 ([#273](https://github.com/AbdelStark/Lensemble/issues/273),

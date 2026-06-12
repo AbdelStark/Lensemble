@@ -60,6 +60,9 @@ IMAGENET_STD = (0.229, 0.224, 0.225)
 class EncoderGraph(nn.Module):
     """Frame in [0,1] → ImageNet-normalize → projected CLS latent (the browser's ``encode`` op)."""
 
+    pixel_mean: Tensor
+    pixel_std: Tensor
+
     def __init__(self, model: LeWMTwoRooms) -> None:
         super().__init__()
         self.encoder = model.encoder
@@ -79,6 +82,9 @@ class ActionGraph(nn.Module):
     ``action_stats``: per-2D-dimension ``(mean, std)`` fitted on the expert dataset; the stats are
     tiled across the frameskip-5 block (the upstream pipeline z-scores before chunking).
     """
+
+    action_mean: Tensor
+    action_std: Tensor
 
     def __init__(
         self,

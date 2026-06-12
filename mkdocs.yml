@@ -55,6 +55,7 @@ nav:
       - Dynamic Env Evidence: roadmap/DYNAMIC_ENV.md
       - Browser Federated Demo: roadmap/BROWSER_FEDERATED_DEMO.md
       - Tapestry-like LeWM Pivot: roadmap/TAPESTRY_LEWM.md
+      - Tapestry-like LeWM Runbook: roadmap/TAPESTRY_LEWM_RUNBOOK.md
   - Evidence:
       - Phase 2 Model Card: evidence/phase2_model_card.md
       - Phase 3 Model Card: evidence/phase3_model_card.md
