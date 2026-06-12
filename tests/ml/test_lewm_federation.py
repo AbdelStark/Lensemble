@@ -311,6 +311,52 @@ def test_evidence_export_is_honest_and_residency_safe() -> None:
     assert '"adapterState"' not in encoded
 
 
+def test_full_size_delta_passes_the_http_transport() -> None:
+    """Regression: adapter-delta bodies (~100 KB) exceed the generic 16 KB message cap; the
+    /updates endpoint must grant the lewm artifact budget at the transport layer too."""
+    import threading
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+
+    from lensemble.demo.server import make_handler
+
+    service = _service()
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(service))
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{httpd.server_port}"
+
+        def post(path: str, body: dict[str, Any]) -> dict[str, Any]:
+            req = urllib.request.Request(
+                f"{base}{path}",
+                data=json.dumps(body).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(req) as response:
+                return json.load(response)
+
+        run = post(
+            "/api/runs",
+            {"maxParticipants": 1, "quorum": 1, "rounds": 1, "mode": REAL_LEWM_MODE},
+        )
+        join = post(
+            f"/api/runs/{run['id']}/join", {"joinToken": run["joinToken"], "displayName": "p"}
+        )
+        post(f"/api/runs/{run['id']}/control", {"action": "start"})
+        snapshot = service.snapshot(run["id"])
+        artifact = _delta_artifact(snapshot, join, hash_suffix="9f")
+        body = {"participantToken": join["participantToken"], "artifact": artifact}
+        encoded = len(json.dumps(body).encode())
+        assert encoded > 16384, "the regression needs a body above the generic cap"
+        result = post(
+            f"/api/runs/{run['id']}/participants/{join['participantId']}/updates", body
+        )
+        assert result["ok"] is True
+        assert result["run"]["state"] == "completed"
+    finally:
+        httpd.shutdown()
+
+
 def test_progress_and_manual_mode_flow_unchanged_in_real_mode() -> None:
     service = _service()
     run = service.create_run(

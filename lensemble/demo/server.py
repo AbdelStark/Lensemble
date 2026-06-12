@@ -134,10 +134,20 @@ def make_handler(service: FederatedDemoService) -> type[BaseHTTPRequestHandler]:
             except Exception as exc:  # pragma: no cover - defensive local server guard
                 self._error(500, "internal_error", str(exc))
 
+        def _body_budget(self, path: str) -> int:
+            # update submissions in the real mode carry ~150 KB lewm-adapter-delta/1 payloads;
+            # every other endpoint keeps the tiny message cap
+            if path.rstrip("/").endswith("/updates"):
+                return max(
+                    service.safety.max_message_bytes,
+                    service.safety.max_lewm_artifact_bytes + 8192,
+                )
+            return service.safety.max_message_bytes
+
         def do_POST(self) -> None:  # noqa: N802
             try:
                 parsed = urlparse(self.path)
-                payload = self._read_json()
+                payload = self._read_json(max_bytes=self._body_budget(parsed.path))
                 self._check_rate_limit(parsed.path, payload)
                 if parsed.path == "/api/runs":
                     self._json(service.create_run(payload))
@@ -321,11 +331,20 @@ def make_handler(service: FederatedDemoService) -> type[BaseHTTPRequestHandler]:
                     self.connection,
                     {"type": "snapshot", "run": opened["run"], "events": events},
                 )
+                # participant sockets may submitUpdate over WS; allow the adapter-delta budget
+                ws_max_bytes = (
+                    max(
+                        service.safety.max_message_bytes,
+                        service.safety.max_lewm_artifact_bytes + 8192,
+                    )
+                    if role == "participant"
+                    else service.safety.max_message_bytes
+                )
                 while True:
                     text: str | None = ""
                     try:
                         text = _read_ws_text(
-                            self.connection, max_bytes=service.safety.max_message_bytes
+                            self.connection, max_bytes=ws_max_bytes
                         )
                     except socket.timeout:
                         text = ""
@@ -519,12 +538,13 @@ def make_handler(service: FederatedDemoService) -> type[BaseHTTPRequestHandler]:
                     return parts[2], parts[4], token_hash
             return None
 
-        def _read_json(self) -> dict[str, Any]:
+        def _read_json(self, max_bytes: int | None = None) -> dict[str, Any]:
+            limit = max_bytes if max_bytes is not None else service.safety.max_message_bytes
             length = int(self.headers.get("Content-Length", "0"))
-            if length > service.safety.max_message_bytes:
+            if length > limit:
                 raise FederatedDemoError(
                     "message_too_large",
-                    f"request body exceeds {service.safety.max_message_bytes} bytes",
+                    f"request body exceeds {limit} bytes",
                     status=413,
                 )
             if length == 0:
