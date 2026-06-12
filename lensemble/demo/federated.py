@@ -1628,7 +1628,9 @@ class FederatedDemoService:
             if artifact.get("schema") != LEWM_UPDATE_SCHEMA:
                 raise FederatedDemoError(
                     "invalid_artifact",
-                    f"real-lewm-tworooms runs accept only {LEWM_UPDATE_SCHEMA} artifacts",
+                    f"real-lewm-tworooms runs accept only {LEWM_UPDATE_SCHEMA} artifacts "
+                    f"(got {artifact.get('schema')!r} — a surrogate update usually means this "
+                    "browser tab is running stale JavaScript; hard-reload the participant page)",
                 )
             return self._validate_lewm_adapter_delta(
                 artifact, run=run, participant=participant

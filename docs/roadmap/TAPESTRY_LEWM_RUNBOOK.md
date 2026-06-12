@@ -117,6 +117,7 @@ view, the PushT checkpoint, and WebGPU training of larger subsets.
 |---|---|
 | `real_lewm_mode=unavailable` at startup | regenerate the export (step 0); real-mode run creation fails closed until then |
 | Participant shows `real-lewm runtime unavailable: …` | that browser lacks WASM/WebGPU or cannot fetch the graphs; the round fails visibly by design — fix the network or use another device; never switch the run to the surrogate path mid-demo |
+| Participant errors with `accept only lewm-adapter-delta/1 artifacts`, or shows "tiny learner" text in a real run | that tab is running stale JavaScript (hash-route navigation never reloads an old tab's modules) — hard-reload the participant page (Cmd+Shift+R / pull-to-refresh) and it rejoins the same run with the real learner |
 | Probe says `flat`/`worse` | report it; the run's evidence stays valid as a systems demo, positive adaptation claims are blocked |
 | Health flags on a round card | read them out (collapse warning / flat loss); they exist to be seen |
 | Quorum lost | the run fails with an explicit event; create a fresh run (no persistent state) |
