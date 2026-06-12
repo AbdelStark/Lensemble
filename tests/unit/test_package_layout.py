@@ -31,6 +31,8 @@ MODULES = [
     "lensemble.model.action_head",
     "lensemble.model.objective",
     "lensemble.model.sigreg",
+    "lensemble.model.lewm_tworooms",
+    "lensemble.model.lewm_checkpoint",
     "lensemble.gauge.anchor",
     "lensemble.gauge.procrustes",
     "lensemble.gauge.drift",

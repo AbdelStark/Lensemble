@@ -34,6 +34,20 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:model`: **TwoRooms LeWM checkpoint ingestion + PyTorch parity (gate G1)** (#316, epic #314) —
+  `lensemble.model.lewm_tworooms` reconstructs the released `quentinll/lewm-tworooms` module tree
+  in plain torch, state-dict-key compatible with `weights.pt` (HF-ViT-tiny encoder schema +
+  upstream `stable_worldmodel.wm.lewm` predictor/action-encoder/BatchNorm projection heads;
+  303/303 tensors strict-load, 18,034,478 params). `lensemble.model.lewm_checkpoint` resolves the
+  pinned revision (`77adaae…`; claim-grade refuses unpinned revisions), fails closed on mismatched
+  config/missing weights/unknown tensor names, and emits `lewm-checkpoint-manifest/1` +
+  deterministic reference-forward report (`scripts/lewm_tworooms_ingest.py` →
+  `docs/evidence/lewm_tworooms_checkpoint_manifest.json`,
+  `docs/evidence/lewm_tworooms_reference_report.json`). Parity vs the actual upstream
+  implementation (transformers 4.49 `ViTModel` + upstream `lewm` modules) measured at ingest:
+  max abs diff ≤ 2e-5 across encode/action/predict/rollout paths
+  (`tests/ml/test_lewm_tworooms.py`).
+
 - `area:docs`: **Tapestry-like LeWM TwoRooms pivot contract** (#315, epic #314) —
   `docs/roadmap/TAPESTRY_LEWM.md` locks the real-checkpoint browser-federation pivot before
   implementation widens: the accepted claim and non-claims, the `surrogate-swipe-dot` vs

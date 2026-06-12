@@ -1,0 +1,116 @@
+{
+  "seed": 20260612,
+  "rolloutSteps": 2,
+  "fixture": {
+    "pixels": {
+      "shape": [
+        1,
+        3,
+        3,
+        224,
+        224
+      ],
+      "distribution": "uniform[0,1)"
+    },
+    "actions": {
+      "shape": [
+        1,
+        5,
+        10
+      ],
+      "distribution": "uniform[-1,1)"
+    }
+  },
+  "outputs": [
+    {
+      "name": "frameEmbedding",
+      "shape": [
+        1,
+        3,
+        192
+      ],
+      "mean": -0.026094,
+      "std": 2.918426,
+      "l2Norm": 69.9842,
+      "first8": [
+        2.98459,
+        -4.90916,
+        6.07267,
+        0.76366,
+        -2.40106,
+        0.26891,
+        1.55517,
+        3.58606
+      ]
+    },
+    {
+      "name": "actionEmbedding",
+      "shape": [
+        1,
+        5,
+        192
+      ],
+      "mean": 0.164933,
+      "std": 0.963052,
+      "l2Norm": 30.2582,
+      "first8": [
+        0.2176,
+        0.0823,
+        1.14525,
+        0.71634,
+        0.58913,
+        0.70835,
+        1.1413,
+        0.82525
+      ]
+    },
+    {
+      "name": "teacherForcedPrediction",
+      "shape": [
+        1,
+        3,
+        192
+      ],
+      "mean": 0.060158,
+      "std": 0.556269,
+      "l2Norm": 13.4168,
+      "first8": [
+        -0.2411,
+        -0.02933,
+        -0.31886,
+        -0.27604,
+        -0.29426,
+        0.37491,
+        0.81446,
+        1.30942
+      ]
+    },
+    {
+      "name": "autoregressiveRollout",
+      "shape": [
+        1,
+        6,
+        192
+      ],
+      "mean": 0.017703,
+      "std": 2.12839,
+      "l2Norm": 72.2111,
+      "first8": [
+        2.98459,
+        -4.90916,
+        6.07267,
+        0.76366,
+        -2.40106,
+        0.26891,
+        1.55517,
+        3.58606
+      ]
+    }
+  ],
+  "fingerprintSha256": "f21b89241b082a83349106e379f5ed284ef8f2b90f772f55a5fe088937e9c095",
+  "checkpoint": {
+    "repoId": "quentinll/lewm-tworooms",
+    "revision": "77adaae0bc31deab21c93740d1f8bb947cd0bdec",
+    "weightsSha256": "566f223624ea4bfb39dbfe6ae731198dd6ea73b7b8919fed6b1ecafca810f7dd"
+  }
+}
