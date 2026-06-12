@@ -1,0 +1,23 @@
+{
+  "schema": "lewm-realdata-check/1",
+  "seed": 20260612,
+  "episodes": 24,
+  "protocol": "teacher-forced next-latent prediction over [t, t+5, t+10] frames + 3 raw frameskip-5 action blocks; target = exported-encoder latent of frame t+15; baseline = copy-last latent",
+  "checkpoint": {
+    "repoId": "quentinll/lewm-tworooms",
+    "revision": "77adaae0bc31deab21c93740d1f8bb947cd0bdec",
+    "weightsSha256": "566f223624ea4bfb39dbfe6ae731198dd6ea73b7b8919fed6b1ecafca810f7dd"
+  },
+  "graphHashes": {
+    "lewm_tworooms_encoder.onnx": "736777c330ab3df2a080810b1b781124ec5ded16d5f1f235ba76b538d7122d81",
+    "lewm_tworooms_action.onnx": "3d936cf45df0a168934e50a75aae24fc0ff4e8a39ddbe883cf23777faed5904e",
+    "lewm_tworooms_predictor.onnx": "42d0cb06ab1775d15a81280f42f3d0b3fdc9b2fc4eae619f92c231b5d9f3419e"
+  },
+  "modelPredictionMse": 0.069897,
+  "copyLastBaselineMse": 1.306404,
+  "modelOverBaselineRatio": 0.053503,
+  "passes": true,
+  "nonClaims": [
+    "Pipeline-correctness probe for the Tapestry-like demo's exported inference graphs on the official expert dataset; not a paper-scale benchmark reproduction."
+  ]
+}

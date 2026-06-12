@@ -49,28 +49,59 @@ _ACTION_FILE = "lewm_tworooms_action.onnx"
 _PREDICTOR_FILE = "lewm_tworooms_predictor.onnx"
 
 
+# Input normalizations are baked INTO the graphs so the browser feeds raw values and cannot
+# drift from the training pipeline: pixels in [0,1] get the ImageNet statistics the upstream
+# ToImage transform applied; raw env actions get the expert-dataset z-score
+# (docs/evidence/lewm_tworooms_action_stats.json).
+IMAGENET_MEAN = (0.485, 0.456, 0.406)
+IMAGENET_STD = (0.229, 0.224, 0.225)
+
+
 class EncoderGraph(nn.Module):
-    """Frame → projected CLS latent (the browser's ``encode`` op)."""
+    """Frame in [0,1] → ImageNet-normalize → projected CLS latent (the browser's ``encode`` op)."""
 
     def __init__(self, model: LeWMTwoRooms) -> None:
         super().__init__()
         self.encoder = model.encoder
         self.projector = model.projector
+        self.register_buffer("pixel_mean", torch.tensor(IMAGENET_MEAN).view(1, 3, 1, 1))
+        self.register_buffer("pixel_std", torch.tensor(IMAGENET_STD).view(1, 3, 1, 1))
 
     def forward(self, pixels: Tensor) -> Tensor:
-        cls = self.encoder(pixels)[:, 0]
+        normalized = (pixels - self.pixel_mean) / self.pixel_std
+        cls = self.encoder(normalized)[:, 0]
         return self.projector(cls)
 
 
 class ActionGraph(nn.Module):
-    """Raw action blocks → action embeddings (the browser's ``embed_actions`` op)."""
+    """Raw action blocks → z-score → action embeddings (the browser's ``embed_actions`` op).
 
-    def __init__(self, model: LeWMTwoRooms) -> None:
+    ``action_stats``: per-2D-dimension ``(mean, std)`` fitted on the expert dataset; the stats are
+    tiled across the frameskip-5 block (the upstream pipeline z-scores before chunking).
+    """
+
+    def __init__(
+        self,
+        model: LeWMTwoRooms,
+        action_stats: tuple[tuple[float, ...], tuple[float, ...]] | None = None,
+    ) -> None:
         super().__init__()
         self.action_encoder = model.action_encoder
+        block = model.cfg.action_input_dim
+        if action_stats is None:
+            mean = torch.zeros(block)
+            std = torch.ones(block)
+        else:
+            raw_mean, raw_std = action_stats
+            repeats = block // len(raw_mean)
+            mean = torch.tensor(raw_mean).repeat(repeats)
+            std = torch.tensor(raw_std).repeat(repeats)
+        self.register_buffer("action_mean", mean.view(1, 1, block))
+        self.register_buffer("action_std", std.view(1, 1, block))
 
     def forward(self, actions: Tensor) -> Tensor:
-        return self.action_encoder(actions)
+        normalized = (actions - self.action_mean) / self.action_std
+        return self.action_encoder(normalized)
 
 
 class PredictorGraph(nn.Module):
@@ -105,14 +136,21 @@ _IO_SPECS: dict[str, dict[str, Any]] = {
     _ENCODER_FILE: {
         "graph": "encoder",
         "inputs": {"pixels": ["batch", 3, "image_size", "image_size"]},
+        "inputUnits": "RGB floats in [0,1]; ImageNet normalization applied inside the graph",
         "outputs": {"latent": ["batch", "hidden_dim"]},
-        "components": ["encoder (HF-ViT)", "projector (Linear-BN-GELU-Linear)"],
+        "components": [
+            "imagenet-normalize",
+            "encoder (HF-ViT)",
+            "projector (Linear-BN-GELU-Linear)",
+        ],
     },
     _ACTION_FILE: {
         "graph": "action_encoder",
         "inputs": {"actions": ["batch", "time", "action_dim"]},
+        "inputUnits": "raw env action blocks (frameskip-5 x 2D, each in [-1,1]); expert-dataset "
+        "z-score applied inside the graph",
         "outputs": {"action_embedding": ["batch", "time", "hidden_dim"]},
-        "components": ["action_encoder (Conv1d-SiLU-MLP)"],
+        "components": ["zscore-normalize", "action_encoder (Conv1d-SiLU-MLP)"],
     },
     _PREDICTOR_FILE: {
         "graph": "predictor",
@@ -127,7 +165,11 @@ _IO_SPECS: dict[str, dict[str, Any]] = {
 
 
 def export_browser_graphs(
-    model: LeWMTwoRooms, out_dir: Path, *, opset: int = 18
+    model: LeWMTwoRooms,
+    out_dir: Path,
+    *,
+    opset: int = 18,
+    action_stats: tuple[tuple[float, ...], tuple[float, ...]] | None = None,
 ) -> dict[str, Path]:
     """Export the three inference graphs; returns ``{file_name: path}``.
 
@@ -139,7 +181,7 @@ def export_browser_graphs(
     out_dir.mkdir(parents=True, exist_ok=True)
     graphs: dict[str, nn.Module] = {
         _ENCODER_FILE: EncoderGraph(model),
-        _ACTION_FILE: ActionGraph(model),
+        _ACTION_FILE: ActionGraph(model, action_stats),
         _PREDICTOR_FILE: PredictorGraph(model),
     }
     dynamic: dict[str, dict[str, dict[int, str]]] = {
@@ -192,6 +234,7 @@ def onnxruntime_parity(
     *,
     atol: float = 1e-4,
     require: bool = False,
+    action_stats: tuple[tuple[float, ...], tuple[float, ...]] | None = None,
 ) -> dict[str, Any]:
     """PyTorch-vs-onnxruntime parity on fixed fixtures, including short-history predictor calls."""
     try:
@@ -209,7 +252,7 @@ def onnxruntime_parity(
     model.eval()
     graphs: dict[str, nn.Module] = {
         _ENCODER_FILE: EncoderGraph(model).eval(),
-        _ACTION_FILE: ActionGraph(model).eval(),
+        _ACTION_FILE: ActionGraph(model, action_stats).eval(),
         _PREDICTOR_FILE: PredictorGraph(model).eval(),
     }
     cases: dict[str, list[tuple[Tensor, ...]]] = {
@@ -269,6 +312,7 @@ def browser_export_manifest(
     *,
     opset: int,
     weights_sha256: str,
+    action_stats_record: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The ``lewm-browser-export/1`` manifest binding graphs to the parent checkpoint (gate G2)."""
     cfg = model.cfg
@@ -299,6 +343,22 @@ def browser_export_manifest(
         },
         "files": files,
         "totalBytes": sum(f["bytes"] for f in files.values()),
+        "normalization": {
+            "pixels": {
+                "where": "inside lewm_tworooms_encoder.onnx",
+                "kind": "imagenet",
+                "mean": list(IMAGENET_MEAN),
+                "std": list(IMAGENET_STD),
+                "input": "RGB floats in [0,1], CHW",
+            },
+            "actions": {
+                "where": "inside lewm_tworooms_action.onnx",
+                "kind": "expert-dataset z-score (per 2D dim, tiled over the frameskip-5 block)",
+                "input": "raw env actions in [-1,1]",
+                "stats": action_stats_record
+                or {"status": "identity (no dataset stats baked — dev export only)"},
+            },
+        },
         "runtime": {
             "preferred": "onnxruntime-web webgpu",
             "fallback": "onnxruntime-web wasm",

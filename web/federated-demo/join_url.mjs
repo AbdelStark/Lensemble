@@ -34,6 +34,9 @@ export function parseRoute(hash) {
   if (parts[0] === "admin" && parts.length === 2) {
     return { view: "admin", runId: decodeURIComponent(parts[1]) };
   }
+  if (parts[0] === "tworooms" && parts.length === 1) {
+    return { view: "tworooms" };
+  }
   return { view: "unknown", path: raw };
 }
 

@@ -1,0 +1,22 @@
+{
+  "schema": "lewm-action-stats/1",
+  "dataset": {
+    "repoId": "quentinll/lewm-tworooms",
+    "revision": "6903a2de048b13819d812da0b4dd661290bc01e4",
+    "file": "tworoom.h5 (from tworoom.tar.zst)",
+    "rows": 920809,
+    "episodes": 10000,
+    "nanRows": 10000,
+    "nanHandling": "nanmean/nanstd (one NaN action per episode terminal step)"
+  },
+  "method": "per-dimension z-score: (a - mean) / std, fitted on the raw 2D actions before frameskip-5 block chunking (mirrors stable_worldmodel ZScoreScaler)",
+  "actionDim": 2,
+  "mean": [
+    0.00309341,
+    -0.05298233
+  ],
+  "std": [
+    0.86747581,
+    0.86776555
+  ]
+}

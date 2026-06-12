@@ -30,6 +30,8 @@ import {
   defaultAdapters,
   loadRunSnapshot,
 } from "./local_bus.mjs";
+import { loadLewmRuntime } from "./lewm_runtime.mjs";
+import { mountTwoRoomsLab } from "./tworooms_panel.mjs";
 import { randomSeed } from "./rng.mjs";
 import {
   abortSimRun,
@@ -408,6 +410,7 @@ function render() {
   if (route.view === "home") renderHome();
   else if (route.view === "host") renderHost(route.runId);
   else if (route.view === "join") renderJoin(route);
+  else if (route.view === "tworooms") renderTwoRoomsLab();
   else {
     clearBackendPoll();
     app.append(
@@ -418,6 +421,20 @@ function render() {
       ]),
     );
   }
+}
+
+// ------------------------------------------------------- tworooms LeWM lab
+
+function renderTwoRoomsLab() {
+  clearBackendPoll();
+  teardownHost();
+  teardownParticipant();
+  app.append(
+    el("section", { class: "panel" }, [
+      el("p", {}, el("a", { href: "#/", text: "← Back to home" })),
+    ]),
+  );
+  mountTwoRoomsLab(app, { loadRuntime: () => loadLewmRuntime(), el });
 }
 
 // --------------------------------------------------------------------- home
@@ -487,6 +504,12 @@ function renderHome() {
           note(
             "One-command backend path: uv run lensemble demo federated --port 8765, then open the printed URL.",
           ),
+          el("p", {}, [
+            el("a", {
+              href: "#/tworooms",
+              text: "TwoRooms LeWM lab → checkpoint-backed rollout & planning (real-lewm-tworooms component)",
+            }),
+          ]),
         ]),
       ]),
     ]),

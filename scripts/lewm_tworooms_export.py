@@ -50,6 +50,18 @@ def _args() -> argparse.Namespace:
         action="store_true",
         help="Export without onnxruntime parity (the manifest records the skip honestly).",
     )
+    parser.add_argument(
+        "--action-stats",
+        type=Path,
+        default=Path("docs/evidence/lewm_tworooms_action_stats.json"),
+        help="Expert-dataset action z-score stats baked into the action graph "
+        "(scripts/lewm_tworooms_action_stats.py). Required unless --allow-identity-actions.",
+    )
+    parser.add_argument(
+        "--allow-identity-actions",
+        action="store_true",
+        help="Dev only: export without dataset action stats (identity normalization).",
+    )
     return parser.parse_args()
 
 
@@ -61,15 +73,44 @@ def main() -> None:
         claim_grade=not args.no_claim_grade,
     )
     model, _ = load_tworooms_model(resolved)
-    paths = export_browser_graphs(model, args.out_dir, opset=args.opset)
+
+    action_stats = None
+    action_stats_record = None
+    if args.action_stats.is_file():
+        record = json.loads(args.action_stats.read_text())
+        action_stats = (tuple(record["mean"]), tuple(record["std"]))
+        action_stats_record = {
+            "schema": record["schema"],
+            "source": str(args.action_stats),
+            "dataset": record["dataset"]["repoId"],
+            "datasetRevision": record["dataset"]["revision"],
+            "mean": record["mean"],
+            "std": record["std"],
+        }
+    elif not args.allow_identity_actions:
+        raise SystemExit(
+            f"action stats not found at {args.action_stats}; run "
+            "scripts/lewm_tworooms_action_stats.py first or pass --allow-identity-actions "
+            "for a dev export"
+        )
+
+    paths = export_browser_graphs(
+        model, args.out_dir, opset=args.opset, action_stats=action_stats
+    )
     parity = onnxruntime_parity(
-        model, paths, atol=args.atol, require=not args.skip_parity
+        model, paths, atol=args.atol, require=not args.skip_parity, action_stats=action_stats
     )
     import hashlib
 
     weights_sha = hashlib.sha256(resolved.weights_path.read_bytes()).hexdigest()
     manifest = browser_export_manifest(
-        resolved, model, paths, parity, opset=args.opset, weights_sha256=weights_sha
+        resolved,
+        model,
+        paths,
+        parity,
+        opset=args.opset,
+        weights_sha256=weights_sha,
+        action_stats_record=action_stats_record,
     )
     payload = json.dumps(manifest, indent=2) + "\n"
     (args.out_dir / "manifest.json").write_text(payload)

@@ -34,6 +34,22 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:model`: **TwoRooms browser environment + real LeWM rollout/planning** (#318, epic #314) —
+  `web/federated-demo/tworooms_env.mjs` is a deterministic JS port of the upstream TwoRoom env at
+  the released default variations, validated pixel-level against the official expert dataset
+  (max abs diff 1.0/255 vs real frames; geometry/door/border/collision/expert-policy selftests).
+  `web/federated-demo/lewm_runtime.mjs` loads the hash-verified exported graphs through ONNX
+  Runtime Web (WebGPU→WASM; explicit `LewmUnsupportedError`, no silent surrogate fallback) and
+  implements windowed autoregressive rollout + CEM goal-latent planning with real history action
+  conditioning. `web/federated-demo/tworooms_panel.mjs` (+ `#/tworooms` route) shows current/goal
+  frames, candidate rollout costs, the chosen block, latent distance, model identity, and
+  deviations. Export graphs now bake input normalization in (ImageNet pixels; expert-dataset
+  action z-score from `docs/evidence/lewm_tworooms_action_stats.json` @ dataset revision
+  `6903a2d`). End-to-end real-data probe (`scripts/lewm_tworooms_realdata_check.py` →
+  `docs/evidence/lewm_tworooms_realdata_check.json`): exported-pipeline next-latent MSE 0.070 vs
+  copy-last baseline 1.306 (ratio 0.054) over 24 held-out expert episodes. Node selftests:
+  `web/federated-demo/tworooms_selftest.mjs` via `tests/ml/test_lewm_tworooms_browser.py`.
+
 - `area:model`: **Checkpoint-backed LeWM browser inference graphs (gate G2)** (#317, epic #314) —
   `lensemble.model.lewm_export` exports the TwoRooms encoder (+BatchNorm projector), action
   encoder, and AdaLN predictor (+pred_proj) as single-file ONNX graphs for ONNX Runtime Web

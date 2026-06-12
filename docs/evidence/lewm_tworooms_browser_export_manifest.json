@@ -17,8 +17,8 @@
   },
   "files": {
     "lewm_tworooms_encoder.onnx": {
-      "sha256": "865616c5e9686d66159619b9ab57552fd26f611fadd1e90984c6530ae51d8236",
-      "bytes": 25920451,
+      "sha256": "736777c330ab3df2a080810b1b781124ec5ded16d5f1f235ba76b538d7122d81",
+      "bytes": 25923986,
       "graph": "encoder",
       "inputs": {
         "pixels": [
@@ -28,6 +28,7 @@
           "image_size"
         ]
       },
+      "inputUnits": "RGB floats in [0,1]; ImageNet normalization applied inside the graph",
       "outputs": {
         "latent": [
           "batch",
@@ -35,13 +36,14 @@
         ]
       },
       "components": [
+        "imagenet-normalize",
         "encoder (HF-ViT)",
         "projector (Linear-BN-GELU-Linear)"
       ]
     },
     "lewm_tworooms_action.onnx": {
-      "sha256": "327bcf2276a5c7074d5a6fcd6a27039b99c1001842cf21ea8f0e16092b2d2d09",
-      "bytes": 639878,
+      "sha256": "3d936cf45df0a168934e50a75aae24fc0ff4e8a39ddbe883cf23777faed5904e",
+      "bytes": 641851,
       "graph": "action_encoder",
       "inputs": {
         "actions": [
@@ -50,6 +52,7 @@
           "action_dim"
         ]
       },
+      "inputUnits": "raw env action blocks (frameskip-5 x 2D, each in [-1,1]); expert-dataset z-score applied inside the graph",
       "outputs": {
         "action_embedding": [
           "batch",
@@ -58,12 +61,13 @@
         ]
       },
       "components": [
+        "zscore-normalize",
         "action_encoder (Conv1d-SiLU-MLP)"
       ]
     },
     "lewm_tworooms_predictor.onnx": {
-      "sha256": "e458d65bfdd974c068ec4238e9a741b54221fc640947bf58f7c5c88daaf44783",
-      "bytes": 46909758,
+      "sha256": "42d0cb06ab1775d15a81280f42f3d0b3fdc9b2fc4eae619f92c231b5d9f3419e",
+      "bytes": 46910027,
       "graph": "predictor",
       "inputs": {
         "latents": [
@@ -90,7 +94,43 @@
       ]
     }
   },
-  "totalBytes": 73470087,
+  "totalBytes": 73475864,
+  "normalization": {
+    "pixels": {
+      "where": "inside lewm_tworooms_encoder.onnx",
+      "kind": "imagenet",
+      "mean": [
+        0.485,
+        0.456,
+        0.406
+      ],
+      "std": [
+        0.229,
+        0.224,
+        0.225
+      ],
+      "input": "RGB floats in [0,1], CHW"
+    },
+    "actions": {
+      "where": "inside lewm_tworooms_action.onnx",
+      "kind": "expert-dataset z-score (per 2D dim, tiled over the frameskip-5 block)",
+      "input": "raw env actions in [-1,1]",
+      "stats": {
+        "schema": "lewm-action-stats/1",
+        "source": "docs/evidence/lewm_tworooms_action_stats.json",
+        "dataset": "quentinll/lewm-tworooms",
+        "datasetRevision": "6903a2de048b13819d812da0b4dd661290bc01e4",
+        "mean": [
+          0.00309341,
+          -0.05298233
+        ],
+        "std": [
+          0.86747581,
+          0.86776555
+        ]
+      }
+    }
+  },
   "runtime": {
     "preferred": "onnxruntime-web webgpu",
     "fallback": "onnxruntime-web wasm",
@@ -100,7 +140,7 @@
     "onnxruntimeAvailable": true,
     "status": "passed",
     "atol": 0.0001,
-    "maxAbsDiff": 4.863739013671875e-05,
+    "maxAbsDiff": 1.0013580322265625e-05,
     "checks": [
       {
         "graph": "lewm_tworooms_encoder.onnx",
@@ -112,7 +152,7 @@
             224
           ]
         ],
-        "maxAbsDiff": 4.863739013671875e-05
+        "maxAbsDiff": 1.0013580322265625e-05
       },
       {
         "graph": "lewm_tworooms_action.onnx",
@@ -123,7 +163,7 @@
             10
           ]
         ],
-        "maxAbsDiff": 9.5367431640625e-07
+        "maxAbsDiff": 1.6689300537109375e-06
       },
       {
         "graph": "lewm_tworooms_action.onnx",
@@ -134,7 +174,7 @@
             10
           ]
         ],
-        "maxAbsDiff": 1.1920928955078125e-06
+        "maxAbsDiff": 9.5367431640625e-07
       },
       {
         "graph": "lewm_tworooms_predictor.onnx",
