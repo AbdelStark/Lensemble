@@ -34,6 +34,20 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:federation`: **real-lewm mode integrated into the federated flow with autonomous
+  participants** (#321, epic #314) — the host form gains a learner-path selector
+  (`surrogate-swipe-dot` default vs `real-lewm-tworooms`; the frontend simulator refuses the real
+  path). Real-mode participants run `web/federated-demo/lewm_participant.mjs` autonomously by
+  default (manual/debug mode preserved): load the hash-verified runtime once (cached across
+  rounds, adapter sized from the run binding's `adapterHiddenDim`), collect resident rollouts,
+  train, and submit the bounded delta — failures surface visibly with no surrogate fallback and
+  no artificial sleeps. The host dashboard shows the run mode badge, checkpoint binding, and
+  real per-round metrics (pred loss first→last, SIGReg statistic, effective rank, latent std,
+  delta/state norms, loss-decreased count); participant rows show per-browser adapter metrics.
+  WebSocket reactivity, reconnect, and rate-limit defaults are unchanged (real mode reuses the
+  existing event plumbing). Tests: `tests/ml/test_lewm_demo_integration.py` + 3 new node
+  selftests (autonomous round, visible-failure path, mode-mismatch rejection).
+
 - `area:federation`: **lewm-adapter-delta/1 schema, validation, aggregation, and privacy honesty
   (gate G6)** (#320, epic #314) — the demo coordinator gains a run-level mode
   (`surrogate-swipe-dot` default vs `real-lewm-tworooms`); real runs require the

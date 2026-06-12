@@ -356,6 +356,105 @@ await checkAsync("the delta artifact carries the binding and only bounded fields
   }
 });
 
+// ---------------------------------------------------------------------------
+// the autonomous real-mode participant round (#321)
+// ---------------------------------------------------------------------------
+
+function fakeRunSnapshot() {
+  return {
+    id: "run-test1234",
+    round: 1,
+    runMode: "real-lewm-tworooms",
+    currentModelRevisionId: "initial",
+    lewmBinding: {
+      checkpoint: { repoId: "quentinll/lewm-tworooms", revision: "77adaae0bc31deab21c93740d1f8bb947cd0bdec", weightsSha256: "ab".repeat(32) },
+      exportGraphHashes: { "lewm_tworooms_encoder.onnx": "11".repeat(32) },
+      adapterHiddenDim: 4,
+      adapterSpec: [
+        { name: "w1", shape: [4, 6] },
+        { name: "b1", shape: [4] },
+        { name: "w2", shape: [6, 4] },
+        { name: "b2", shape: [6] },
+      ],
+    },
+  };
+}
+
+await checkAsync("the autonomous round trains, builds, and submits the bounded delta", async () => {
+  const { runRealLewmRound, resetLewmRuntimeCache } = await import("./lewm_participant.mjs");
+  resetLewmRuntimeCache();
+  const progressCalls = [];
+  const submitted = [];
+  const client = {
+    progress: async (runId, pid, token, value) => progressCalls.push(value),
+    submitUpdate: async (runId, pid, token, artifact) => submitted.push({ runId, pid, token, artifact }),
+  };
+  const run = fakeRunSnapshot();
+  const { artifact, metrics } = await runRealLewmRound({
+    run,
+    me: { id: "browser-abc123" },
+    participantToken: "ptok-secret",
+    client,
+    loadRuntime: async () => fakeFrozenRuntime(),
+    seed: 21,
+    budget: { episodes: 2, maxModelSteps: 8, trainSteps: 15, batchSize: 8, clipNorm: 3.0 },
+  });
+  assert(submitted.length === 1, "one bounded submission");
+  assert(submitted[0].artifact.schema === "lewm-adapter-delta/1", "adapter schema");
+  assert(submitted[0].artifact.baseCheckpoint.revision === run.lewmBinding.checkpoint.revision, "binding carried");
+  assert(metrics.optimizerSteps === 15, "real steps");
+  assert(progressCalls.length >= 1 && progressCalls.every((v) => v >= 0 && v <= 1), "real progress");
+  // w1 4x6 + b1 4 + w2 6x4 + b2 6 = 58 params, sized from the binding's adapterHiddenDim
+  assert(artifact.delta.length === 58, `full delta for the 4x6 adapter, got ${artifact.delta.length}`);
+});
+
+await checkAsync("a missing runtime fails the round visibly with no fallback submission", async () => {
+  const { runRealLewmRound, resetLewmRuntimeCache } = await import("./lewm_participant.mjs");
+  resetLewmRuntimeCache();
+  const submitted = [];
+  const client = {
+    progress: async () => {},
+    submitUpdate: async (...args) => submitted.push(args),
+  };
+  let threw = null;
+  try {
+    await runRealLewmRound({
+      run: fakeRunSnapshot(),
+      me: { id: "browser-abc123" },
+      participantToken: "ptok-secret",
+      client,
+      loadRuntime: async () => {
+        throw new Error("real-lewm runtime unavailable: manifest-missing");
+      },
+      seed: 3,
+    });
+  } catch (error) {
+    threw = error;
+  }
+  assert(threw !== null, "round fails");
+  assert(String(threw.message).includes("unavailable"), "explicit unsupported reason");
+  assert(submitted.length === 0, "nothing submitted on failure");
+  resetLewmRuntimeCache();
+});
+
+await checkAsync("surrogate runs are refused by the real round driver", async () => {
+  const { runRealLewmRound } = await import("./lewm_participant.mjs");
+  let threw = false;
+  try {
+    await runRealLewmRound({
+      run: { id: "run-x", runMode: "surrogate-swipe-dot" },
+      me: { id: "b" },
+      participantToken: "t",
+      client: { progress: async () => {}, submitUpdate: async () => {} },
+      loadRuntime: async () => fakeFrozenRuntime(),
+      seed: 1,
+    });
+  } catch {
+    threw = true;
+  }
+  assert(threw, "mode mismatch rejected");
+});
+
 const report = { total, passed: total - failures.length, failed: failures.length, failures };
 console.log(JSON.stringify(report));
 if (failures.length > 0) process.exit(1);

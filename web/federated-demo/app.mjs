@@ -31,6 +31,7 @@ import {
   loadRunSnapshot,
 } from "./local_bus.mjs";
 import { loadLewmRuntime } from "./lewm_runtime.mjs";
+import { runRealLewmRound } from "./lewm_participant.mjs";
 import { mountTwoRoomsLab } from "./tworooms_panel.mjs";
 import { randomSeed } from "./rng.mjs";
 import {
@@ -229,6 +230,7 @@ function metricsList(run) {
   if (metrics.length === 0) {
     return note("Round metrics appear after the first aggregation closes.");
   }
+  const real = run.runMode === "real-lewm-tworooms";
   return el(
     "div",
     { class: "metrics-grid" },
@@ -239,16 +241,33 @@ function metricsList(run) {
         el("div", { class: "metric-card" }, [
           el("div", { class: "metric-card-head" }, [
             el("strong", { text: `round ${metric.round}` }),
-            stateBadge(metric.collapseRisk ?? "watch"),
+            stateBadge(
+              real
+                ? `loss↓ ${metric.lossDecreasedCount ?? 0}/${metric.submitted ?? 0}`
+                : metric.collapseRisk ?? "watch",
+            ),
           ]),
-          el("div", { class: "metric-tiles" }, [
-            metricTile("loss", formatMetric(metric.localLossMean, 4)),
-            metricTile("probe", formatMetric(metric.probeMean, 4)),
-            metricTile("eff dim", formatMetric(metric.aggregateEffectiveDim, 2), `${formatMetric((metric.aggregateEffectiveDimRatio ?? 0) * 100, 0)}%`),
-            metricTile("clip sat", `${formatMetric((metric.clipSaturationRate ?? 0) * 100, 0)}%`),
-            metricTile("runtime", metric.runtimeMsMean === null || metric.runtimeMsMean === undefined ? "n/a" : `${formatMetric(metric.runtimeMsMean, 1)} ms`),
-            metricTile("agg norm", formatMetric(metric.aggregateNorm, 4)),
-          ]),
+          el(
+            "div",
+            { class: "metric-tiles" },
+            real
+              ? [
+                  metricTile("pred loss", formatMetric(metric.predLossLastMean, 5), `from ${formatMetric(metric.predLossFirstMean, 5)}`),
+                  metricTile("sigreg", formatMetric(metric.sigregStatisticMean, 5)),
+                  metricTile("eff rank", formatMetric(metric.effectiveRankMean, 2)),
+                  metricTile("latent std", formatMetric(metric.latentStdMeanMean, 4)),
+                  metricTile("Δ norm", formatMetric(metric.aggregateDeltaNorm, 5), `state ${formatMetric(metric.adapterStateNorm, 4)}`),
+                  metricTile("clip sat", `${formatMetric((metric.clipSaturationRate ?? 0) * 100, 0)}%`),
+                ]
+              : [
+                  metricTile("loss", formatMetric(metric.localLossMean, 4)),
+                  metricTile("probe", formatMetric(metric.probeMean, 4)),
+                  metricTile("eff dim", formatMetric(metric.aggregateEffectiveDim, 2), `${formatMetric((metric.aggregateEffectiveDimRatio ?? 0) * 100, 0)}%`),
+                  metricTile("clip sat", `${formatMetric((metric.clipSaturationRate ?? 0) * 100, 0)}%`),
+                  metricTile("runtime", metric.runtimeMsMean === null || metric.runtimeMsMean === undefined ? "n/a" : `${formatMetric(metric.runtimeMsMean, 1)} ms`),
+                  metricTile("agg norm", formatMetric(metric.aggregateNorm, 4)),
+                ],
+          ),
           el("span", { class: "mono muted", text: metric.modelRevisionId }),
         ]),
       ),
@@ -262,18 +281,32 @@ function trainingDiagnostics(run) {
   if (rows.length === 0) {
     return note("Training diagnostics appear after bounded updates are submitted.");
   }
+  const real = run.runMode === "real-lewm-tworooms";
   return el(
     "div",
     { class: "diagnostic-table" },
     rows.map(({ participant, metadata }) =>
-      el("div", { class: "diagnostic-row" }, [
-        el("span", { class: "mono", text: participant.displayName || participant.id }),
-        el("span", { text: `loss ${formatMetric(metadata.loss, 4)}` }),
-        el("span", { text: `probe ${formatMetric(metadata.probe, 4)}` }),
-        el("span", { text: `eff-dim ${formatMetric(metadata.effectiveDim, 2)}` }),
-        el("span", { text: `clip ${formatMetric((metadata.clipSaturation ?? 0) * 100, 0)}%` }),
-        stateBadge(metadata.collapseRisk ?? "watch"),
-      ]),
+      el(
+        "div",
+        { class: "diagnostic-row" },
+        real
+          ? [
+              el("span", { class: "mono", text: participant.displayName || participant.id }),
+              el("span", { text: `pred ${formatMetric(metadata.metrics?.predLossLast, 5)} (from ${formatMetric(metadata.metrics?.predLossFirst, 5)})` }),
+              el("span", { text: `sigreg ${formatMetric(metadata.metrics?.sigregStatistic, 5)}` }),
+              el("span", { text: `rank ${formatMetric(metadata.metrics?.effectiveRank, 1)}` }),
+              el("span", { text: `steps ${formatMetric(metadata.metrics?.optimizerSteps, 0)}` }),
+              stateBadge(metadata.metrics?.lossDecreased ? "loss↓" : "flat"),
+            ]
+          : [
+              el("span", { class: "mono", text: participant.displayName || participant.id }),
+              el("span", { text: `loss ${formatMetric(metadata.loss, 4)}` }),
+              el("span", { text: `probe ${formatMetric(metadata.probe, 4)}` }),
+              el("span", { text: `eff-dim ${formatMetric(metadata.effectiveDim, 2)}` }),
+              el("span", { text: `clip ${formatMetric((metadata.clipSaturation ?? 0) * 100, 0)}%` }),
+              stateBadge(metadata.collapseRisk ?? "watch"),
+            ],
+      ),
     ),
   );
 }
@@ -454,6 +487,16 @@ function renderHome() {
   const presetSelect = el("select", {}, [
     el("option", { value: "swipe-dot-tiny", text: "swipe-dot-tiny (synthetic dynamic env)" }),
   ]);
+  const runModeSelect = el("select", {}, [
+    el("option", {
+      value: "surrogate-swipe-dot",
+      text: "surrogate-swipe-dot (educational tiny-vector path)",
+    }),
+    el("option", {
+      value: "real-lewm-tworooms",
+      text: "real-lewm-tworooms (Tapestry-like checkpoint adaptation)",
+    }),
+  ]);
   const errorNote = el("p", { class: "note" });
 
   const createButton = el("button", {
@@ -464,9 +507,16 @@ function renderHome() {
         quorum: Number(quorumInput.value),
         rounds: Number(roundsInput.value),
         preset: presetSelect.value,
+        mode: runModeSelect.value,
       };
       try {
         if (modeSelect.value === "frontend-simulator") {
+          if (config.mode === "real-lewm-tworooms") {
+            errorNote.textContent =
+              "real-lewm-tworooms needs the backend API mode (the simulator has no checkpoint runtime)";
+            return;
+          }
+          delete config.mode;
           const run = createSimRun(config, randomSeed());
           adoptHostRun(run);
           window.location.hash = `#/host/${run.id}`;
@@ -489,6 +539,7 @@ function renderHome() {
       el("div", { class: "columns" }, [
         el("div", { class: "panel" }, [
           el("label", {}, ["Mode", modeSelect]),
+          el("label", {}, ["Learner path", runModeSelect]),
           el("label", {}, ["Max participants", maxInput]),
           el("label", {}, ["Quorum (min trainers to start)", quorumInput]),
           el("label", {}, ["Rounds", roundsInput]),
@@ -770,10 +821,21 @@ function renderBackendHostSnapshot(run) {
 
   app.append(
     el("section", { class: "panel" }, [
-      el("h2", {}, [`Host dashboard - ${run.id} `, stateBadge(run.state)]),
+      el("h2", {}, [
+        `Host dashboard - ${run.id} `,
+        stateBadge(run.state),
+        " ",
+        stateBadge(run.runMode ?? "surrogate-swipe-dot"),
+      ]),
       note(
-        `Mode: ${run.mode}; transport: ${backendPoll?.transport ?? run.deployment?.transportMode ?? "polling"}; aggregation: ${run.aggregationMode}; learner: ${run.learnerRuntime}. Quorum ${run.config.quorum}, max ${run.config.maxParticipants}, rounds ${run.config.rounds}.`,
+        `Mode: ${run.mode}; learner path: ${run.runMode ?? "surrogate-swipe-dot"}; transport: ${backendPoll?.transport ?? run.deployment?.transportMode ?? "polling"}; aggregation: ${run.aggregationMode}; learner: ${run.learnerRuntime}. Quorum ${run.config.quorum}, max ${run.config.maxParticipants}, rounds ${run.config.rounds}.`,
       ),
+      run.runMode === "real-lewm-tworooms"
+        ? note(
+            `Tapestry-like real-LeWM run: checkpoint ${run.lewmBinding?.checkpoint?.repoId}@${String(run.lewmBinding?.checkpoint?.revision ?? "").slice(0, 12)}, ` +
+              `bounded adapter subset of ${run.lewmBinding?.adapterParameterCount} params. ${run.claimBoundary ?? ""}`,
+          )
+        : null,
       el("div", { class: "columns" }, [
         el("div", { class: "panel" }, [
           el("h2", { text: "Invite participants" }),
@@ -877,25 +939,42 @@ function startBackendLearner(run, me, participantToken, { force = false } = {}) 
 
   void (async () => {
     try {
-      await backendClient.progress(run.id, me.id, participantToken, 0.1);
-      const artifact = await runBrowserLearner(
-        {
-          runId: run.id,
-          participantId: me.id,
-          round: run.round,
-          roundId: `${run.id}:round-${run.round}`,
-          modelRevisionId: run.currentModelRevisionId ?? "initial",
+      if (run.runMode === "real-lewm-tworooms") {
+        // checkpoint-backed local continuation; no surrogate fallback on failure
+        const { metrics } = await runRealLewmRound({
+          run,
+          me,
+          participantToken,
+          client: backendClient,
+          loadRuntime: () => loadLewmRuntime(),
           seed: randomSeed(),
-          sampleCount: 24,
-          localSteps: 8,
-        },
-        (progress, telemetry) => {
-          backendLearnerTelemetry.set(key, learnerTelemetryPayload(progress, telemetry));
-          void backendClient.progress(run.id, me.id, participantToken, progress).catch(() => {});
-        },
-      );
-      backendLearnerTelemetry.set(key, learnerTelemetryPayload(1, artifact));
-      await backendClient.submitUpdate(run.id, me.id, participantToken, artifact);
+          participantMode: me.automationMode ?? "auto",
+          onProgress: (progress, telemetry) => {
+            backendLearnerTelemetry.set(key, learnerTelemetryPayload(progress, telemetry));
+          },
+        });
+        backendLearnerTelemetry.set(key, learnerTelemetryPayload(1, metrics));
+      } else {
+        await backendClient.progress(run.id, me.id, participantToken, 0.1);
+        const artifact = await runBrowserLearner(
+          {
+            runId: run.id,
+            participantId: me.id,
+            round: run.round,
+            roundId: `${run.id}:round-${run.round}`,
+            modelRevisionId: run.currentModelRevisionId ?? "initial",
+            seed: randomSeed(),
+            sampleCount: 24,
+            localSteps: 8,
+          },
+          (progress, telemetry) => {
+            backendLearnerTelemetry.set(key, learnerTelemetryPayload(progress, telemetry));
+            void backendClient.progress(run.id, me.id, participantToken, progress).catch(() => {});
+          },
+        );
+        backendLearnerTelemetry.set(key, learnerTelemetryPayload(1, artifact));
+        await backendClient.submitUpdate(run.id, me.id, participantToken, artifact);
+      }
       backendLearnerJobs.set(key, { status: "submitted" });
       if (currentRouteStill("join", run.id) && !shouldDeferAutoRefreshForDocument()) render();
     } catch (error) {
@@ -1118,8 +1197,14 @@ function renderParticipantState(run, me, simulated, participantToken = null, opt
       ? `Assigned round ${me.round}. Preparing simulated local work.`
       : automationMode === "auto"
         ? `Assigned round ${me.round}. Auto learner queued.`
-        : `Assigned round ${me.round}. Ready to run the browser-local tiny learner.`,
-    training: simulated ? `Simulating local work for round ${me.round}.` : `Browser-local tiny learner work in progress for round ${me.round}.`,
+        : run.runMode === "real-lewm-tworooms"
+          ? `Assigned round ${me.round}. Ready to run browser-local LeWM adapter continuation.`
+          : `Assigned round ${me.round}. Ready to run the browser-local tiny learner.`,
+    training: simulated
+      ? `Simulating local work for round ${me.round}.`
+      : run.runMode === "real-lewm-tworooms"
+        ? `Browser-local LeWM adapter continuation in progress for round ${me.round}.`
+        : `Browser-local tiny learner work in progress for round ${me.round}.`,
     submitted: "Bounded update artifact submitted. Waiting for aggregation.",
     completed: "Run complete. Thanks for participating.",
     dropped: "You were dropped from this run.",
@@ -1164,7 +1249,9 @@ function renderParticipantState(run, me, simulated, participantToken = null, opt
     note(
       simulated
         ? "Local work in this slice is simulated; no data leaves your browser and no real training happens."
-        : "This browser computes a tiny clipped update vector from resident synthetic samples in a worker. Only the derived vector and shape/hash/norm metadata are submitted; raw observations, actions, labels, latents, tensors, participant tokens, and model weights are not uploaded.",
+        : run.runMode === "real-lewm-tworooms"
+          ? "Tapestry-like real-LeWM round: this browser generates TwoRooms rollouts locally, runs checkpoint-backed inference through the exported graphs, trains a bounded adapter, and submits only the clipped adapter delta plus metric summaries. Raw frames, actions, latents, tensors, tokens, and base checkpoint weights never leave this browser. If the runtime is unavailable the round fails visibly — there is no surrogate fallback."
+          : "This browser computes a tiny clipped update vector from resident synthetic samples in a worker. Only the derived vector and shape/hash/norm metadata are submitted; raw observations, actions, labels, latents, tensors, participant tokens, and model weights are not uploaded.",
     ),
   );
   return el("div", {}, children);
