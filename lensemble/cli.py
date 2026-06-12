@@ -229,6 +229,11 @@ def demo_federated(
         min=0,
         help="participant heartbeat/progress/update limit per minute; 0 disables rate limiting",
     ),
+    lewm_manifest: str | None = typer.Option(
+        None,
+        "--lewm-manifest",
+        help="path to the lewm-browser-export/1 manifest unlocking real-lewm-tworooms",
+    ),
 ) -> None:
     """Serve the browser federated demo app (#294/#303).
 
@@ -249,6 +254,7 @@ def demo_federated(
         deployment_target=deployment_target,
         rate_limit_per_minute=rate_limit_per_minute,
         participant_rate_limit_per_minute=participant_rate_limit_per_minute,
+        lewm_manifest_path=lewm_manifest,
     )
 
 

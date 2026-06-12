@@ -57,6 +57,7 @@ CONNECTION_STATES = (
 RUN_SCHEMA = "demo-run/1"
 EVENT_SCHEMA = "demo-event/1"
 UPDATE_SCHEMA = "browser-update/1"
+LEWM_UPDATE_SCHEMA = "lewm-adapter-delta/1"
 CHECKPOINT_SCHEMA = "demo-checkpoint/1"
 MODEL_REVISION_SCHEMA = "demo-model-revision/1"
 INFERENCE_SCHEMA = "demo-inference-artifact/1"
@@ -64,10 +65,49 @@ EVIDENCE_SCHEMA = "demo-evidence/1"
 DEMO_PRESETS = frozenset({"swipe-dot-tiny"})
 ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz"
 HACKATHON_MODEL_RUNTIME = "tiny-js-vector-v1"
+LEWM_MODEL_RUNTIME = "lewm-adapter-mean-v1"
+LEWM_LEARNER_RUNTIME = "lewm-local-continuation-v1"
 INITIAL_REVISION_ID = "initial"
 DEFAULT_CLIP_NORM = 1.0
 DEFAULT_ROUNDS = 1000
 MAX_ROUNDS = 1000
+
+# Run-level product modes (docs/roadmap/TAPESTRY_LEWM.md): the surrogate path is the existing
+# educational tiny-vector demo; the real path federates bounded adapter deltas around the pinned
+# TwoRooms LeWM checkpoint. A run's mode is fixed at creation and binds which update schema the
+# coordinator accepts — there is no silent cross-mode fallback.
+SURROGATE_MODE = "surrogate-swipe-dot"
+REAL_LEWM_MODE = "real-lewm-tworooms"
+RUN_MODES = frozenset({SURROGATE_MODE, REAL_LEWM_MODE})
+
+# The bounded trainable subset of the real mode (web/federated-demo/lewm_adapter.mjs): a zero-init
+# residual MLP on the frozen predictor output. The flattened delta order is fixed: w1, b1, w2, b2.
+LEWM_ADAPTER_HIDDEN = 32
+LEWM_ADAPTER_INPUT = 192
+
+
+def lewm_adapter_spec(
+    hidden: int = LEWM_ADAPTER_HIDDEN, input_dim: int = LEWM_ADAPTER_INPUT
+) -> list[dict[str, Any]]:
+    return [
+        {"name": "w1", "shape": [hidden, input_dim]},
+        {"name": "b1", "shape": [hidden]},
+        {"name": "w2", "shape": [input_dim, hidden]},
+        {"name": "b2", "shape": [input_dim]},
+    ]
+
+
+def lewm_adapter_parameter_count(
+    hidden: int = LEWM_ADAPTER_HIDDEN, input_dim: int = LEWM_ADAPTER_INPUT
+) -> int:
+    total = 0
+    for entry in lewm_adapter_spec(hidden, input_dim):
+        size = 1
+        for dim in entry["shape"]:
+            size *= dim
+        total += size
+    return total
+
 
 CLAIM_BOUNDARY = (
     "Educational browser demo of federated JEPA world-model orchestration. "
@@ -78,6 +118,29 @@ CLAIM_BOUNDARY = (
     "computation, and not a physical SO-100 success claim."
 )
 
+LEWM_CLAIM_BOUNDARY = (
+    "Tapestry-like browser-local federated adaptation run for a real LeWorldModel "
+    "TwoRooms checkpoint: browser participants keep local rollouts resident, train a "
+    "bounded checkpoint-adaptation subset, submit bounded clipped adapter deltas, and "
+    "the coordinator aggregates them into hash-bound global revisions. It is not "
+    "full from-scratch LeWM browser pretraining, not production browser training, "
+    "not paper-scale TwoRooms benchmark parity, not a cryptographic proof of honest "
+    "computation, and no raw frames, actions, labels, latents, tensors, or base "
+    "checkpoint weights leave participant browsers."
+)
+
+# Honest privacy status for the real-mode demo path: the main lensemble stack has secure
+# aggregation (RFC-0011) and DP accounting (RFC-0012); the demo coordinator does NOT wire them,
+# and the evidence says so instead of implying protection.
+LEWM_PRIVACY_STATUS = {
+    "secureAggregation": "absent-in-demo-path (RFC-0011 exists in lensemble.aggregation; the "
+    "demo coordinator aggregates plaintext bounded deltas)",
+    "differentialPrivacy": "absent-in-demo-path (RFC-0012 accounting is not applied to "
+    "adapter deltas)",
+    "boundedness": "server-enforced: schema allowlist, byte budget, declared shapes, clip-norm "
+    "recomputation, duplicate/stale rejection, raw-key rejection",
+}
+
 _FORBIDDEN_PAYLOAD_KEYS = frozenset(
     {
         "action",
@@ -86,8 +149,14 @@ _FORBIDDEN_PAYLOAD_KEYS = frozenset(
         "dataset",
         "example",
         "examples",
+        "frame",
+        "frames",
         "image",
         "images",
+        "pixel",
+        "pixels",
+        "rollout",
+        "rollouts",
         "label",
         "labels",
         "latent",
@@ -166,7 +235,7 @@ def _contains_forbidden_key(value: object) -> str | None:
     if isinstance(value, dict):
         for key, nested in value.items():
             lowered = str(key).lower()
-            if lowered in _FORBIDDEN_PAYLOAD_KEYS or lowered.startswith("raw_"):
+            if lowered in _FORBIDDEN_PAYLOAD_KEYS or lowered.startswith("raw"):
                 return str(key)
             found = _contains_forbidden_key(nested)
             if found is not None:
@@ -195,6 +264,7 @@ class DemoConfig:
     quorum: int
     rounds: int
     preset: str = "swipe-dot-tiny"
+    mode: str = SURROGATE_MODE
 
     @classmethod
     def from_payload(cls, payload: dict[str, Any]) -> "DemoConfig":
@@ -209,6 +279,7 @@ class DemoConfig:
                 "invalid_config", "run shape fields must be integers"
             ) from exc
         preset = str(payload.get("preset", "swipe-dot-tiny"))
+        mode = str(payload.get("mode", SURROGATE_MODE))
         if max_participants < 1 or max_participants > 64:
             raise FederatedDemoError(
                 "invalid_config", "maxParticipants must be in [1, 64]"
@@ -223,11 +294,16 @@ class DemoConfig:
             )
         if preset not in DEMO_PRESETS:
             raise FederatedDemoError("invalid_config", f"unknown demo preset: {preset}")
+        if mode not in RUN_MODES:
+            raise FederatedDemoError(
+                "invalid_config", f"unknown run mode: {mode}; supported: {sorted(RUN_MODES)}"
+            )
         return cls(
             max_participants=max_participants,
             quorum=quorum,
             rounds=rounds,
             preset=preset,
+            mode=mode,
         )
 
     def as_payload(self) -> dict[str, int | str]:
@@ -236,6 +312,7 @@ class DemoConfig:
             "quorum": self.quorum,
             "rounds": self.rounds,
             "preset": self.preset,
+            "mode": self.mode,
         }
 
 
@@ -253,6 +330,11 @@ class DemoSafetyConfig:
     rate_limit_per_minute: int = 0
     participant_rate_limit_per_minute: int = 0
     clip_norm: float = DEFAULT_CLIP_NORM
+    # real-lewm-tworooms budgets: adapter deltas are ~12.5k floats, far above the surrogate
+    # tiny-vector budget, but still hard-bounded
+    max_lewm_artifact_bytes: int = 393216
+    max_adapter_parameters: int = 16384
+    lewm_clip_norm: float = 3.0
 
     def as_payload(self) -> dict[str, int | float]:
         return {
@@ -268,6 +350,9 @@ class DemoSafetyConfig:
             "rateLimitPerMinute": self.rate_limit_per_minute,
             "participantRateLimitPerMinute": self.participant_rate_limit_per_minute,
             "clipNorm": self.clip_norm,
+            "maxLewmArtifactBytes": self.max_lewm_artifact_bytes,
+            "maxAdapterParameters": self.max_adapter_parameters,
+            "lewmClipNorm": self.lewm_clip_norm,
         }
 
 
@@ -332,6 +417,12 @@ class ParticipantState:
             }
             if "vector" in metadata:
                 public["vectorLength"] = len(metadata["vector"])
+            if metadata.get("schema") == LEWM_UPDATE_SCHEMA:
+                public["metrics"] = deepcopy(metadata.get("metrics", {}))
+                public["participantMode"] = metadata.get("participantMode")
+                public["baseCheckpointRevision"] = metadata.get("baseCheckpointRevision")
+                if "delta" in metadata:
+                    public["deltaLength"] = len(metadata["delta"])
             redacted[str(round_index)] = public
         return redacted
 
@@ -376,6 +467,18 @@ class DemoRun:
     model_revisions: list[dict[str, Any]] = field(default_factory=list)
     round_metrics: list[dict[str, Any]] = field(default_factory=list)
     round_started_at: int | None = None
+    # real-lewm-tworooms: accumulated global adapter parameters per revision id, served via the
+    # model-revision endpoint only (kept out of snapshots so long runs stay light)
+    adapter_states: dict[str, list[float]] = field(default_factory=dict)
+    seen_update_hashes: set[str] = field(default_factory=set)
+
+    @property
+    def mode(self) -> str:
+        return self.config.mode
+
+    @property
+    def claim_boundary(self) -> str:
+        return LEWM_CLAIM_BOUNDARY if self.mode == REAL_LEWM_MODE else CLAIM_BOUNDARY
 
 
 class FederatedDemoService:
@@ -390,6 +493,7 @@ class FederatedDemoService:
         transport_mode: str = "http-polling",
         safety: DemoSafetyConfig | None = None,
         allowed_origins: tuple[str, ...] = ("same-origin", "local", "tunnel"),
+        lewm_export_manifest: dict[str, Any] | None = None,
     ) -> None:
         self.public_base_url = public_base_url
         self.public_demo = public_demo
@@ -397,7 +501,51 @@ class FederatedDemoService:
         self.transport_mode = transport_mode
         self.safety = safety or DemoSafetyConfig()
         self.allowed_origins = allowed_origins
+        # the lewm-browser-export/1 manifest (#317) binding the real mode to exact checkpoint
+        # revision + graph hashes; the real mode is unavailable without it (no silent fallback)
+        self.lewm_export_manifest = lewm_export_manifest
         self._runs: dict[str, DemoRun] = {}
+
+    def lewm_binding(self) -> dict[str, Any]:
+        """The checkpoint/export binding the real mode validates updates against."""
+        manifest = self.lewm_export_manifest
+        if not manifest:
+            raise FederatedDemoError(
+                "real_mode_unavailable",
+                "real-lewm-tworooms requires the lewm-browser-export/1 manifest "
+                "(run scripts/lewm_tworooms_export.py and start the server with it)",
+                status=409,
+            )
+        if manifest.get("schema") != "lewm-browser-export/1":
+            raise FederatedDemoError(
+                "real_mode_unavailable",
+                f"unsupported export manifest schema {manifest.get('schema')!r}",
+                status=409,
+            )
+        checkpoint = manifest.get("checkpoint") or {}
+        files = manifest.get("files") or {}
+        graph_hashes = {
+            name: str(entry.get("sha256", "")) for name, entry in sorted(files.items())
+        }
+        if not checkpoint.get("revision") or not graph_hashes:
+            raise FederatedDemoError(
+                "real_mode_unavailable",
+                "export manifest is missing the checkpoint revision or graph hashes",
+                status=409,
+            )
+        return {
+            "checkpoint": {
+                "repoId": checkpoint.get("repoId"),
+                "revision": checkpoint.get("revision"),
+                "weightsSha256": checkpoint.get("weightsSha256"),
+            },
+            "exportGraphHashes": graph_hashes,
+            "graphVersion": manifest.get("graphVersion"),
+            "adapterSpec": lewm_adapter_spec(),
+            "adapterParameterCount": lewm_adapter_parameter_count(),
+            "adapterHiddenDim": LEWM_ADAPTER_HIDDEN,
+            "adapterInputDim": LEWM_ADAPTER_INPUT,
+        }
 
     def create_run(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         config = DemoConfig.from_payload(payload or {})
@@ -408,6 +556,12 @@ class FederatedDemoService:
             config=config,
             created_at=_now_ms(),
         )
+        binding_payload: dict[str, Any] = {}
+        if config.mode == REAL_LEWM_MODE:
+            binding = self.lewm_binding()  # fails closed when the export is unavailable
+            run.aggregation_mode = LEWM_MODEL_RUNTIME
+            run.learner_runtime = LEWM_LEARNER_RUNTIME
+            binding_payload = {"lewmBinding": binding}
         self._runs[run.id] = run
         self._emit(
             run,
@@ -415,10 +569,11 @@ class FederatedDemoService:
             f"run {run.id} created",
             payload={
                 **config.as_payload(),
-                "claimBoundary": CLAIM_BOUNDARY,
+                "claimBoundary": run.claim_boundary,
                 "learnerRuntime": run.learner_runtime,
                 "modelRevisionId": run.current_model_revision_id,
                 "deployment": self.deployment_payload(),
+                **binding_payload,
             },
         )
         return self.snapshot(run.id)
@@ -426,9 +581,13 @@ class FederatedDemoService:
     def snapshot(self, run_id: str) -> dict[str, Any]:
         run = self._get_run(run_id)
         self.refresh_liveness(run.id)
+        lewm_binding = None
+        if run.mode == REAL_LEWM_MODE:
+            lewm_binding = self.lewm_binding()
         return {
             "schema": RUN_SCHEMA,
             "mode": "backend-api",
+            "runMode": run.mode,
             "id": run.id,
             "state": run.state,
             "round": run.round,
@@ -436,10 +595,13 @@ class FederatedDemoService:
             "joinToken": run.join_token,
             "joinUrl": self.join_url(run),
             "webSocketUrl": self.websocket_url(run),
-            "claimBoundary": CLAIM_BOUNDARY,
+            "claimBoundary": run.claim_boundary,
             "aggregationMode": run.aggregation_mode,
             "learnerRuntime": run.learner_runtime,
-            "modelRuntime": HACKATHON_MODEL_RUNTIME,
+            "modelRuntime": LEWM_MODEL_RUNTIME
+            if run.mode == REAL_LEWM_MODE
+            else HACKATHON_MODEL_RUNTIME,
+            "lewmBinding": lewm_binding,
             "currentModelRevisionId": run.current_model_revision_id,
             "deployment": self.deployment_payload(),
             "safety": self.safety.as_payload(),
@@ -495,7 +657,12 @@ class FederatedDemoService:
         run = self._get_run(run_id)
         for revision in run.model_revisions:
             if revision.get("modelRevisionId") == revision_id:
-                return deepcopy(revision)
+                payload = deepcopy(revision)
+                state = run.adapter_states.get(revision_id)
+                if state is not None:
+                    # the full global adapter parameters: served on demand, never in snapshots
+                    payload["adapterState"] = list(state)
+                return payload
         raise FederatedDemoError(
             "not_found", f"unknown model revision {revision_id}", status=404
         )
@@ -837,31 +1004,37 @@ class FederatedDemoService:
         participant.state = "submitted"
         participant.progress = 1.0
         participant.last_heartbeat_at = _now_ms()
+        event_payload = {
+            "schema": metadata["schema"],
+            "round": metadata["round"],
+            "roundId": metadata["roundId"],
+            "modelRevisionId": metadata["modelRevisionId"],
+            "shape": metadata["shape"],
+            "parameterCount": metadata["parameterCount"],
+            "hash": metadata["hash"],
+            "l2Norm": metadata["l2Norm"],
+            "clipNorm": metadata["clipNorm"],
+            "clipSaturation": metadata["clipSaturation"],
+            "loss": metadata.get("loss"),
+            "probe": metadata.get("probe"),
+            "source": metadata["source"],
+            "simulated": metadata["simulated"],
+        }
+        if metadata["schema"] == LEWM_UPDATE_SCHEMA:
+            event_payload["metrics"] = deepcopy(metadata["metrics"])
+            event_payload["participantMode"] = metadata["participantMode"]
+            event_payload["baseCheckpointRevision"] = metadata["baseCheckpointRevision"]
+        else:
+            event_payload["effectiveDim"] = metadata["effectiveDim"]
+            event_payload["effectiveDimRatio"] = metadata["effectiveDimRatio"]
+            event_payload["collapseRisk"] = metadata["collapseRisk"]
         self._emit(
             run,
             "update.submitted",
             f"{participant.id} submitted bounded browser update",
             participant_id=participant.id,
             actor="participant",
-            payload={
-                "schema": metadata["schema"],
-                "round": metadata["round"],
-                "roundId": metadata["roundId"],
-                "modelRevisionId": metadata["modelRevisionId"],
-                "shape": metadata["shape"],
-                "parameterCount": metadata["parameterCount"],
-                "hash": metadata["hash"],
-                "l2Norm": metadata["l2Norm"],
-                "clipNorm": metadata["clipNorm"],
-                "clipSaturation": metadata["clipSaturation"],
-                "loss": metadata["loss"],
-                "probe": metadata["probe"],
-                "effectiveDim": metadata["effectiveDim"],
-                "effectiveDimRatio": metadata["effectiveDimRatio"],
-                "collapseRisk": metadata["collapseRisk"],
-                "source": metadata["source"],
-                "simulated": metadata["simulated"],
-            },
+            payload=event_payload,
         )
         if self._round_ready_to_close(run):
             self._close_round(run)
@@ -923,10 +1096,17 @@ class FederatedDemoService:
             for participant in run.participants.values()
             for metadata in participant.update_metadata.values()
         ]
+        lewm_section: dict[str, Any] = {}
+        if run.mode == REAL_LEWM_MODE:
+            lewm_section = {
+                "lewmBinding": self.lewm_binding(),
+                "privacy": deepcopy(LEWM_PRIVACY_STATUS),
+            }
         return {
             "schema": EVIDENCE_SCHEMA,
             "runId": run.id,
             "mode": "backend-api",
+            "runMode": run.mode,
             "publicMode": "public" if self.public_demo else "local",
             "transportMode": self.transport_mode,
             "deploymentTarget": self.deployment_target,
@@ -936,11 +1116,14 @@ class FederatedDemoService:
             "state": run.state,
             "round": run.round,
             "config": run.config.as_payload(),
-            "claimBoundary": CLAIM_BOUNDARY,
-            "nonClaimText": CLAIM_BOUNDARY,
+            "claimBoundary": run.claim_boundary,
+            "nonClaimText": run.claim_boundary,
             "aggregationMode": run.aggregation_mode,
             "learnerRuntime": run.learner_runtime,
-            "modelRuntime": HACKATHON_MODEL_RUNTIME,
+            "modelRuntime": LEWM_MODEL_RUNTIME
+            if run.mode == REAL_LEWM_MODE
+            else HACKATHON_MODEL_RUNTIME,
+            **lewm_section,
             "currentModelRevisionId": run.current_model_revision_id,
             "eventTrace": [e.as_payload() for e in run.events],
             "participants": [p.public_payload() for p in run.participants.values()],
@@ -959,8 +1142,10 @@ class FederatedDemoService:
             ],
             "fallback": {
                 "active": False,
-                "mode": "tiny-js-vector",
-                "reason": "hackathon tiny model runtime selected",
+                "mode": "lewm-adapter" if run.mode == REAL_LEWM_MODE else "tiny-js-vector",
+                "reason": "real-lewm-tworooms adapter runtime selected"
+                if run.mode == REAL_LEWM_MODE
+                else "hackathon tiny model runtime selected",
             },
             "liveness": {
                 "participants": [
@@ -979,7 +1164,13 @@ class FederatedDemoService:
                 "rawParticipantDataIncluded": False,
                 "modelWeightsIncluded": False,
                 "participantTokensIncluded": False,
-                "updatePayload": "bounded derived tiny update vector plus shape/hash/norm/sample-count metadata",
+                "updatePayload": (
+                    "bounded clipped lewm adapter delta plus spec/hash/norm/metric-summary "
+                    "metadata bound to the pinned checkpoint and export hashes"
+                    if run.mode == REAL_LEWM_MODE
+                    else "bounded derived tiny update vector plus shape/hash/norm/sample-count "
+                    "metadata"
+                ),
             },
         }
 
@@ -1231,6 +1422,9 @@ class FederatedDemoService:
                 "quorum": run.config.quorum,
             },
         )
+        if run.mode == REAL_LEWM_MODE:
+            self._close_round_lewm(run, submitted)
+            return
         update_metadata = [p.update_metadata[run.round] for p in submitted]
         update_hashes = [metadata["hash"] for metadata in update_metadata]
         aggregate_vector = self._mean_vector(
@@ -1418,6 +1612,22 @@ class FederatedDemoService:
             raise FederatedDemoError(
                 "invalid_artifact", "update artifact must be a JSON object"
             )
+        # the run mode fixes the accepted schema — a surrogate tiny vector in a real run (or an
+        # adapter delta in a surrogate run) is rejected, never coerced
+        if run.mode == REAL_LEWM_MODE:
+            if artifact.get("schema") != LEWM_UPDATE_SCHEMA:
+                raise FederatedDemoError(
+                    "invalid_artifact",
+                    f"real-lewm-tworooms runs accept only {LEWM_UPDATE_SCHEMA} artifacts",
+                )
+            return self._validate_lewm_adapter_delta(
+                artifact, run=run, participant=participant
+            )
+        return self._validate_surrogate_update(artifact, run=run, participant=participant)
+
+    def _validate_surrogate_update(
+        self, artifact: dict[str, Any], *, run: DemoRun, participant: ParticipantState
+    ) -> dict[str, Any]:
         encoded_size = len(json.dumps(artifact, sort_keys=True).encode("utf-8"))
         if encoded_size > self.safety.max_artifact_bytes:
             raise FederatedDemoError(
@@ -1598,6 +1808,445 @@ class FederatedDemoService:
             "runtimeMs": self._optional_float(artifact.get("runtimeMs")),
             "seed": int(artifact.get("seed", 0)),
             "simulated": bool(artifact.get("simulated", source == "simulator")),
+        }
+
+    def _close_round_lewm(self, run: DemoRun, submitted: list[ParticipantState]) -> None:
+        """Deterministic adapter-delta aggregation for the real mode (gate G6).
+
+        The global adapter state is the cumulative sum of per-round deterministic means:
+        ``state[r] = state[r-1] + mean(deltas[r])``. Every revision binds the parent checkpoint
+        revision, weights hash, export graph hashes, adapter spec, and the contributing delta
+        hashes. Full parameter vectors live in ``run.adapter_states`` (served by the
+        model-revision endpoint), not in snapshots, so long runs stay light.
+        """
+        binding = self.lewm_binding()
+        update_metadata = [p.update_metadata[run.round] for p in submitted]
+        update_hashes = [metadata["hash"] for metadata in update_metadata]
+        mean_delta = self._mean_vector(
+            [metadata["delta"] for metadata in update_metadata]
+        )
+        parent_revision = run.current_model_revision_id
+        parent_state = run.adapter_states.get(parent_revision)
+        if parent_state is None:
+            parent_state = [0.0] * len(mean_delta)  # the initial adapter is identity (all-zero)
+        new_state = [
+            round(parent + delta, 8)
+            for parent, delta in zip(parent_state, mean_delta, strict=True)
+        ]
+        delta_norm = self._vector_norm(mean_delta)
+        state_norm = self._vector_norm(new_state)
+        revision_hash = _hash_json(
+            {
+                "run": run.id,
+                "round": run.round,
+                "parentRevision": parent_revision,
+                "aggregationMode": run.aggregation_mode,
+                "checkpoint": binding["checkpoint"],
+                "exportGraphHashes": binding["exportGraphHashes"],
+                "adapterSpec": binding["adapterSpec"],
+                "adapterState": new_state,
+                "updates": sorted(update_hashes),
+            }
+        )
+        model_revision_id = f"lewmrev-{revision_hash[:12]}"
+        run.adapter_states[model_revision_id] = new_state
+        checkpoint_hash = _hash_json(
+            {
+                "run": run.id,
+                "round": run.round,
+                "modelRevisionId": model_revision_id,
+                "aggregationMode": run.aggregation_mode,
+                "updates": sorted(update_hashes),
+            }
+        )
+        run.artifacts.append(
+            {
+                "schema": CHECKPOINT_SCHEMA,
+                "kind": "checkpoint",
+                "label": f"round-{run.round} lewm adapter checkpoint",
+                "round": run.round,
+                "sha256": checkpoint_hash,
+                "source": "browser-submitted bounded lewm adapter deltas",
+                "aggregationMode": run.aggregation_mode,
+                "contributingParticipants": [p.id for p in submitted],
+                "sourceUpdateHashes": sorted(update_hashes),
+                "modelRevisionId": model_revision_id,
+                "baseCheckpoint": binding["checkpoint"],
+                "simulated": False,
+                "containsModelWeights": False,
+                "containsTinyDerivedVector": False,
+            }
+        )
+        model_revision = {
+            "schema": MODEL_REVISION_SCHEMA,
+            "kind": "model-revision",
+            "label": f"round-{run.round} lewm global adapter revision",
+            "round": run.round,
+            "roundId": self._round_id(run),
+            "sha256": revision_hash,
+            "modelRevisionId": model_revision_id,
+            "parentModelRevisionId": parent_revision,
+            "runtime": LEWM_MODEL_RUNTIME,
+            "shape": [len(new_state)],
+            "parameterCount": len(new_state),
+            "adapterSpec": binding["adapterSpec"],
+            "baseCheckpoint": binding["checkpoint"],
+            "exportGraphHashes": binding["exportGraphHashes"],
+            "aggregateDeltaNorm": round(delta_norm, 8),
+            "adapterStateNorm": round(state_norm, 8),
+            "sourceUpdateHashes": sorted(update_hashes),
+            "contributingParticipants": [p.id for p in submitted],
+            "aggregationMode": run.aggregation_mode,
+            "privacy": deepcopy(LEWM_PRIVACY_STATUS),
+            "containsModelWeights": False,
+            "containsAdapterState": "via model-revision endpoint",
+            "fallback": False,
+        }
+        run.model_revisions.append(model_revision)
+        run.current_model_revision_id = model_revision_id
+        elapsed_ms = (
+            max(0, _now_ms() - run.round_started_at)
+            if run.round_started_at is not None
+            else None
+        )
+        metrics_list = [metadata["metrics"] for metadata in update_metadata]
+        run.round_metrics.append(
+            {
+                "round": run.round,
+                "roundId": self._round_id(run),
+                "submitted": len(submitted),
+                "quorum": run.config.quorum,
+                "participantCount": len(self._assigned_participants(run)),
+                "modelRevisionId": model_revision_id,
+                "sourceUpdateHashes": sorted(update_hashes),
+                "elapsedMs": elapsed_ms,
+                "aggregateDeltaNorm": round(delta_norm, 8),
+                "adapterStateNorm": round(state_norm, 8),
+                "predLossFirstMean": self._mean_optional(
+                    [metrics.get("predLossFirst") for metrics in metrics_list]
+                ),
+                "predLossLastMean": self._mean_optional(
+                    [metrics.get("predLossLast") for metrics in metrics_list]
+                ),
+                "lossDecreasedCount": sum(
+                    1 for metrics in metrics_list if metrics.get("lossDecreased")
+                ),
+                "sigregStatisticMean": self._mean_optional(
+                    [metrics.get("sigregStatistic") for metrics in metrics_list]
+                ),
+                "effectiveRankMean": self._mean_optional(
+                    [metrics.get("effectiveRank") for metrics in metrics_list]
+                ),
+                "latentStdMeanMean": self._mean_optional(
+                    [metrics.get("latentStdMean") for metrics in metrics_list]
+                ),
+                "gradClipEventsMean": self._mean_optional(
+                    [metrics.get("gradClipEvents") for metrics in metrics_list]
+                ),
+                "optimizerStepsMean": self._mean_optional(
+                    [metrics.get("optimizerSteps") for metrics in metrics_list]
+                ),
+                "pairCountMean": self._mean_optional(
+                    [metrics.get("pairCount") for metrics in metrics_list]
+                ),
+                "runtimeMsMean": self._mean_optional(
+                    [metadata.get("runtimeMs") for metadata in update_metadata]
+                ),
+                "clipSaturationRate": self._mean_optional(
+                    [metadata.get("clipSaturation") for metadata in update_metadata]
+                ),
+            }
+        )
+        # the aggregated delta is folded into the revision; drop the raw per-participant delta
+        # payloads so long runs do not hold thousands of 12.5k-float vectors in memory
+        for metadata in update_metadata:
+            metadata.pop("delta", None)
+        self._emit(
+            run,
+            "round.closed",
+            f"round {run.round} closed",
+            payload={
+                "checkpoint": checkpoint_hash,
+                "modelRevisionId": model_revision_id,
+                "revisionHash": revision_hash,
+                "contributing": len(submitted),
+                "aggregateDeltaNorm": round(delta_norm, 8),
+                "adapterStateNorm": round(state_norm, 8),
+                "predLossLastMean": run.round_metrics[-1]["predLossLastMean"],
+                "sigregStatisticMean": run.round_metrics[-1]["sigregStatisticMean"],
+                "simulated": False,
+            },
+        )
+        if run.round < run.config.rounds:
+            self._assign_round(run, run.round + 1)
+            return
+        for participant in self._active_participants(run):
+            if run.round in participant.submitted_rounds:
+                participant.state = "completed"
+                participant.connection_state = "completed"
+            elif participant.state in {"assigned", "training"}:
+                self._drop_participant(
+                    run, participant, reason="round closed before update"
+                )
+        run.state = "checkpoint_ready"
+        self._emit(run, "checkpoint.ready", "final lewm adapter revision ready")
+        inference_hash = _hash_json(
+            {
+                "modelRevision": revision_hash,
+                "schema": INFERENCE_SCHEMA,
+                "mode": REAL_LEWM_MODE,
+            }
+        )
+        run.artifacts.append(
+            {
+                "schema": INFERENCE_SCHEMA,
+                "kind": "inference-model",
+                "label": "lewm adapter revision for checkpoint-backed browser inference",
+                "round": run.round,
+                "sha256": inference_hash,
+                "sourceCheckpoint": checkpoint_hash,
+                "sourceModelRevision": revision_hash,
+                "modelRevisionId": model_revision_id,
+                "modelId": f"lensemble-demo/{run.id}",
+                "revision": inference_hash[:12],
+                "runtime": LEWM_MODEL_RUNTIME,
+                "shape": [len(new_state)],
+                "parameterCount": len(new_state),
+                "adapterSpec": binding["adapterSpec"],
+                "baseCheckpoint": binding["checkpoint"],
+                "exportGraphHashes": binding["exportGraphHashes"],
+                "adapterStateNorm": round(state_norm, 8),
+                "adapterStateVia": f"/api/runs/{run.id}/model-revisions/{model_revision_id}",
+                "simulated": False,
+                "containsModelWeights": False,
+                "fallback": False,
+            }
+        )
+        run.state = "inference_ready"
+        self._emit(run, "inference.ready", "lewm adapter inference metadata ready")
+        run.state = "completed"
+        self._emit(run, "run.completed", "run completed")
+
+    def _validate_lewm_adapter_delta(
+        self, artifact: dict[str, Any], *, run: DemoRun, participant: ParticipantState
+    ) -> dict[str, Any]:
+        """Validate a ``lewm-adapter-delta/1`` artifact (gate G6, docs/roadmap/TAPESTRY_LEWM.md).
+
+        Fail-closed on: byte budget, raw-data-like keys, run/participant/round/revision binding,
+        checkpoint/export-hash freshness, adapter-spec mismatch, dtype, non-finite or unbounded
+        deltas, hash format and replay, and fabricated/incomplete metric summaries.
+        """
+        encoded_size = len(json.dumps(artifact, sort_keys=True).encode("utf-8"))
+        if encoded_size > self.safety.max_lewm_artifact_bytes:
+            raise FederatedDemoError(
+                "artifact_too_large",
+                f"adapter delta exceeds {self.safety.max_lewm_artifact_bytes} bytes",
+                status=413,
+            )
+        forbidden = _contains_forbidden_key(artifact)
+        if forbidden is not None:
+            raise FederatedDemoError(
+                "raw_data_forbidden",
+                f"adapter delta contains forbidden raw-data key {forbidden!r}",
+            )
+        if artifact.get("runId") != run.id:
+            raise FederatedDemoError(
+                "invalid_artifact", "artifact runId does not match run"
+            )
+        if artifact.get("participantId") != participant.id:
+            raise FederatedDemoError(
+                "invalid_artifact", "artifact participantId does not match participant"
+            )
+        if int(artifact.get("round", -1)) != run.round:
+            raise FederatedDemoError(
+                "wrong_round", "artifact round does not match active round", status=409
+            )
+        expected_round_id = self._round_id(run)
+        if artifact.get("roundId", expected_round_id) != expected_round_id:
+            raise FederatedDemoError(
+                "wrong_round", "artifact roundId does not match active round", status=409
+            )
+        if artifact.get("modelRevisionId") != run.current_model_revision_id:
+            raise FederatedDemoError(
+                "stale_model_revision",
+                "artifact modelRevisionId does not match the active model revision",
+                status=409,
+            )
+
+        binding = self.lewm_binding()
+        base = artifact.get("baseCheckpoint")
+        if not isinstance(base, dict) or base.get("revision") != binding["checkpoint"]["revision"]:
+            raise FederatedDemoError(
+                "checkpoint_mismatch",
+                "artifact baseCheckpoint.revision does not match the pinned checkpoint",
+                status=409,
+            )
+        weights_sha = binding["checkpoint"].get("weightsSha256")
+        if weights_sha and base.get("weightsSha256") not in (None, weights_sha):
+            raise FederatedDemoError(
+                "checkpoint_mismatch",
+                "artifact baseCheckpoint.weightsSha256 does not match the pinned weights",
+                status=409,
+            )
+        graph_hashes = artifact.get("exportGraphHashes")
+        if not isinstance(graph_hashes, dict) or any(
+            graph_hashes.get(name) != sha
+            for name, sha in binding["exportGraphHashes"].items()
+        ):
+            raise FederatedDemoError(
+                "checkpoint_mismatch",
+                "artifact exportGraphHashes do not match the served browser export",
+                status=409,
+            )
+
+        spec = artifact.get("adapterSpec")
+        if spec != binding["adapterSpec"]:
+            raise FederatedDemoError(
+                "invalid_artifact",
+                "artifact adapterSpec does not match the run's trainable subset",
+            )
+        if str(artifact.get("dtype", "float32")) != "float32":
+            raise FederatedDemoError(
+                "invalid_artifact", "adapter deltas must be float32"
+            )
+        expected_params = binding["adapterParameterCount"]
+        if expected_params > self.safety.max_adapter_parameters:
+            raise FederatedDemoError(
+                "invalid_artifact",
+                "adapter spec exceeds the configured parameter budget",
+            )
+        delta = artifact.get("delta")
+        if not isinstance(delta, list) or len(delta) != expected_params:
+            raise FederatedDemoError(
+                "invalid_artifact",
+                f"artifact delta must list exactly {expected_params} float values",
+            )
+        if int(artifact.get("parameterCount", expected_params)) != expected_params:
+            raise FederatedDemoError(
+                "invalid_artifact", "parameterCount must match the adapter spec"
+            )
+        delta_values: list[float] = []
+        for value in delta:
+            if not isinstance(value, int | float):
+                raise FederatedDemoError(
+                    "invalid_artifact", "delta values must be numeric"
+                )
+            numeric = float(value)
+            if numeric != numeric or numeric in (float("inf"), float("-inf")):
+                raise FederatedDemoError(
+                    "invalid_artifact", "delta values must be finite"
+                )
+            delta_values.append(round(numeric, 8))
+        computed_norm = self._vector_norm(delta_values)
+        l2_norm = float(artifact.get("l2Norm", computed_norm))
+        if abs(l2_norm - computed_norm) > 1e-3:
+            raise FederatedDemoError(
+                "invalid_artifact", "l2Norm does not match the submitted delta"
+            )
+        clip_norm = float(artifact.get("clipNorm", self.safety.lewm_clip_norm))
+        if clip_norm <= 0 or clip_norm > self.safety.lewm_clip_norm:
+            raise FederatedDemoError(
+                "invalid_artifact",
+                f"clipNorm must be in (0, {self.safety.lewm_clip_norm}]",
+            )
+        if computed_norm > clip_norm + 1e-5:
+            raise FederatedDemoError(
+                "norm_bound_exceeded", "adapter delta exceeds the configured norm bound"
+            )
+        update_hash = _validate_hash(artifact.get("hash"), field_name="hash")
+        if update_hash in run.seen_update_hashes:
+            raise FederatedDemoError(
+                "duplicate_update", "this delta hash was already submitted", status=409
+            )
+
+        metrics = artifact.get("metrics")
+        if not isinstance(metrics, dict):
+            raise FederatedDemoError(
+                "invalid_artifact", "artifact must carry a metrics summary object"
+            )
+        required_metrics = (
+            "pairCount",
+            "optimizerSteps",
+            "predLossFirst",
+            "predLossLast",
+            "sigregStatistic",
+            "effectiveRank",
+            "latentStdMean",
+        )
+        clean_metrics: dict[str, Any] = {}
+        for key in required_metrics:
+            value = metrics.get(key)
+            if not isinstance(value, int | float) or value != value:
+                raise FederatedDemoError(
+                    "invalid_artifact",
+                    f"metrics.{key} must be a finite number (fabricated or incomplete "
+                    "metric payloads are rejected)",
+                )
+            clean_metrics[key] = float(value)
+        if clean_metrics["pairCount"] < 1 or clean_metrics["optimizerSteps"] < 1:
+            raise FederatedDemoError(
+                "invalid_artifact", "metrics must report real local work"
+            )
+        for key in (
+            "varLossLast",
+            "gradClipEvents",
+            "effectiveRankRatio",
+            "envSteps",
+            "episodes",
+            "trainMs",
+            "collectMs",
+            "deltaUnclippedNorm",
+        ):
+            value = self._optional_float(metrics.get(key))
+            if value is not None:
+                clean_metrics[key] = value
+        clean_metrics["lossDecreased"] = bool(
+            metrics.get(
+                "lossDecreased",
+                clean_metrics["predLossLast"] < clean_metrics["predLossFirst"],
+            )
+        )
+
+        participant_mode = str(artifact.get("participantMode", participant.automation_mode))
+        if participant_mode not in AUTOMATION_MODES:
+            raise FederatedDemoError(
+                "invalid_artifact", "participantMode must be auto or manual"
+            )
+
+        run.seen_update_hashes.add(update_hash)
+        return {
+            "schema": LEWM_UPDATE_SCHEMA,
+            "source": "browser-local-lewm-adapter",
+            "runtime": str(artifact.get("runtime", LEWM_LEARNER_RUNTIME)),
+            "runId": run.id,
+            "participantId": participant.id,
+            "round": run.round,
+            "roundId": expected_round_id,
+            "modelRevisionId": run.current_model_revision_id,
+            "baseCheckpointRevision": binding["checkpoint"]["revision"],
+            "adapterSpec": binding["adapterSpec"],
+            "dtype": "float32",
+            "shape": [expected_params],
+            "parameterCount": expected_params,
+            "delta": delta_values,
+            "hash": update_hash,
+            "l2Norm": round(computed_norm, 8),
+            "clipNorm": clip_norm,
+            "unclippedNorm": self._optional_float(artifact.get("unclippedNorm"))
+            or computed_norm,
+            "clipSaturation": 1.0
+            if (self._optional_float(artifact.get("unclippedNorm")) or computed_norm)
+            > clip_norm
+            else 0.0,
+            "metrics": clean_metrics,
+            "loss": clean_metrics["predLossLast"],
+            "probe": None,
+            "sampleCount": int(clean_metrics["pairCount"]),
+            "localSteps": int(clean_metrics["optimizerSteps"]),
+            "participantMode": participant_mode,
+            "runtimeMs": self._optional_float(metrics.get("trainMs")),
+            "seed": int(artifact.get("seed", 0)),
+            "simulated": bool(artifact.get("simulated", False)),
         }
 
     def _round_id(self, run: DemoRun) -> str:

@@ -316,6 +316,46 @@ await checkAsync("the full local continuation reports real metrics and a bounded
   assert(!summary.includes("pixels") && !("frames" in result), "no raw data in the summary");
 });
 
+await checkAsync("the delta artifact carries the binding and only bounded fields", async () => {
+  const { buildAdapterDeltaArtifact, LEWM_UPDATE_SCHEMA } = await import("./lewm_delta_artifact.mjs");
+  const runtime = fakeFrozenRuntime();
+  const result = await runLocalAdapterContinuation({
+    runtime,
+    seed: 13,
+    episodes: 2,
+    maxModelSteps: 8,
+    trainSteps: 10,
+    batchSize: 8,
+  });
+  const binding = {
+    checkpoint: { repoId: "quentinll/lewm-tworooms", revision: "77adaae0bc31deab21c93740d1f8bb947cd0bdec", weightsSha256: "ab".repeat(32) },
+    exportGraphHashes: { "lewm_tworooms_encoder.onnx": "11".repeat(32) },
+    adapterSpec: [
+      { name: "w1", shape: [4, 6] },
+      { name: "b1", shape: [4] },
+      { name: "w2", shape: [6, 4] },
+      { name: "b2", shape: [6] },
+    ],
+  };
+  const artifact = await buildAdapterDeltaArtifact({
+    result,
+    runId: "run-test1234",
+    participantId: "browser-abc123",
+    round: 1,
+    modelRevisionId: "initial",
+    binding,
+  });
+  assert(artifact.schema === LEWM_UPDATE_SCHEMA, "schema tag");
+  assert(artifact.delta.length === result.delta.parameterCount, "full delta");
+  assert(/^[0-9a-f]{64}$/.test(artifact.hash), "64-hex hash");
+  assert(artifact.baseCheckpoint.revision.length === 40, "pinned revision");
+  assert(artifact.metrics.predLossLast < artifact.metrics.predLossFirst, "honest metrics");
+  const keys = JSON.stringify(Object.keys(artifact)) + JSON.stringify(Object.keys(artifact.metrics));
+  for (const forbidden of ["frames", "pixels", "latents", "tensors", "tokens", "weights", "rollouts"]) {
+    assert(!keys.includes(`"${forbidden}"`), `no ${forbidden} key`);
+  }
+});
+
 const report = { total, passed: total - failures.length, failed: failures.length, failures };
 console.log(JSON.stringify(report));
 if (failures.length > 0) process.exit(1);

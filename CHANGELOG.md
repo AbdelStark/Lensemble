@@ -34,6 +34,23 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:federation`: **lewm-adapter-delta/1 schema, validation, aggregation, and privacy honesty
+  (gate G6)** (#320, epic #314) — the demo coordinator gains a run-level mode
+  (`surrogate-swipe-dot` default vs `real-lewm-tworooms`); real runs require the
+  `lewm-browser-export/1` manifest binding (fail-closed `real_mode_unavailable`), accept ONLY
+  `lewm-adapter-delta/1` artifacts (clipped flattened adapter delta + adapter spec +
+  checkpoint/export-hash binding + metric summary + participant mode), and reject invalid, stale,
+  oversized, raw-data-like (forbidden keys now include frame/pixel/rollout and any `raw*`),
+  shape-mismatched, checkpoint-mismatched, non-finite, fabricated-metric, over-norm, and replayed
+  updates. Aggregation is a deterministic per-round mean folded into a cumulative global adapter
+  state (`lewmrev-*` revisions bound to parent checkpoint revision, weights hash, graph hashes,
+  spec, and delta hashes; full parameters served by the model-revision endpoint, never in
+  snapshots/evidence). Evidence and revisions record secure-aggregation/DP status as
+  `absent-in-demo-path` instead of implying protection. Client side:
+  `web/federated-demo/lewm_delta_artifact.mjs` builds the bounded artifact (WebCrypto sha256).
+  Server wiring: `lensemble demo federated --lewm-manifest` (auto-detects the export dir).
+  Tests: `tests/ml/test_lewm_federation.py` (27 cases incl. 17 rejection paths).
+
 - `area:model`: **Browser-local Tapestry-like LeWM adapter continuation + SIGReg diagnostics
   (gate G3)** (#319, epic #314) — `web/federated-demo/lewm_adapter.mjs` trains a bounded
   zero-init residual adapter (12,512 params) on the FROZEN exported predictor's outputs with

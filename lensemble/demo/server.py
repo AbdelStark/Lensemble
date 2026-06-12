@@ -613,6 +613,21 @@ def make_handler(service: FederatedDemoService) -> type[BaseHTTPRequestHandler]:
     return DemoHandler
 
 
+def load_lewm_manifest(path: str | None = None) -> dict | None:
+    """Load the lewm-browser-export/1 manifest that unlocks the real-lewm-tworooms mode.
+
+    Defaults to the export location written by scripts/lewm_tworooms_export.py. A missing or
+    unreadable manifest returns None: the server starts with the real mode unavailable (creating
+    a real-mode run then fails closed with `real_mode_unavailable`).
+    """
+    candidate = Path(path) if path else Path("web/federated-demo/model/lewm-tworooms/manifest.json")
+    try:
+        manifest = json.loads(candidate.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    return manifest if isinstance(manifest, dict) else None
+
+
 def serve(
     *,
     host: str = "127.0.0.1",
@@ -623,9 +638,11 @@ def serve(
     deployment_target: str = "local",
     rate_limit_per_minute: int = 0,
     participant_rate_limit_per_minute: int = 0,
+    lewm_manifest_path: str | None = None,
 ) -> ThreadingHTTPServer:
     display_host = "127.0.0.1" if host in {"0.0.0.0", "::"} else host
     public_base = public_base_url or f"http://{display_host}:{port}/web/federated-demo"
+    lewm_manifest = load_lewm_manifest(lewm_manifest_path)
     service = FederatedDemoService(
         public_base_url=public_base,
         public_demo=public_demo,
@@ -635,6 +652,7 @@ def serve(
             rate_limit_per_minute=rate_limit_per_minute,
             participant_rate_limit_per_minute=participant_rate_limit_per_minute,
         ),
+        lewm_export_manifest=lewm_manifest,
     )
     httpd = ThreadingHTTPServer((host, port), make_handler(service))
     if public_base_url is None:
@@ -648,6 +666,14 @@ def serve(
         f"participant_join_root={service.public_base_url.rstrip('/')}/#/join/<run_id>"
     )
     print("transport_mode=websocket-primary fallback=http-polling")
+    if lewm_manifest is not None:
+        revision = str(lewm_manifest.get("checkpoint", {}).get("revision", "?"))[:12]
+        print(f"real_lewm_mode=available checkpoint_revision={revision}")
+    else:
+        print(
+            "real_lewm_mode=unavailable (run scripts/lewm_tworooms_export.py to generate "
+            "web/federated-demo/model/lewm-tworooms/)"
+        )
     print(
         f"deployment_target={deployment_target} public_demo={str(public_demo).lower()}"
     )
@@ -703,6 +729,12 @@ def main(argv: list[str] | None = None) -> None:
         default=0,
         help="participant heartbeat/progress/update limit per minute; 0 disables rate limiting",
     )
+    parser.add_argument(
+        "--lewm-manifest",
+        default=None,
+        help="path to the lewm-browser-export/1 manifest unlocking real-lewm-tworooms "
+        "(default: web/federated-demo/model/lewm-tworooms/manifest.json when present)",
+    )
     args = parser.parse_args(argv)
     if args.rate_limit_per_minute < 0 or args.participant_rate_limit_per_minute < 0:
         parser.error("rate limits must be >= 0")
@@ -715,6 +747,7 @@ def main(argv: list[str] | None = None) -> None:
         deployment_target=args.deployment_target,
         rate_limit_per_minute=args.rate_limit_per_minute,
         participant_rate_limit_per_minute=args.participant_rate_limit_per_minute,
+        lewm_manifest_path=args.lewm_manifest,
     )
 
 
