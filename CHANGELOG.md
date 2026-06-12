@@ -34,6 +34,18 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:model`: **Checkpoint-backed LeWM browser inference graphs (gate G2)** (#317, epic #314) —
+  `lensemble.model.lewm_export` exports the TwoRooms encoder (+BatchNorm projector), action
+  encoder, and AdaLN predictor (+pred_proj) as single-file ONNX graphs for ONNX Runtime Web
+  (dynamic batch/time axes; short-history predictor calls T∈{1,2,3} parity-checked).
+  `scripts/lewm_tworooms_export.py` regenerates them deterministically from the pinned checkpoint
+  into gitignored `web/federated-demo/model/lewm-tworooms/` and emits the hash-bound
+  `lewm-browser-export/1` manifest
+  (`docs/evidence/lewm_tworooms_browser_export_manifest.json`; 73.5 MB total, opset 18,
+  PyTorch-vs-onnxruntime max abs diff 4.9e-5 ≤ 1e-4). onnx/onnxscript/onnxruntime stay
+  export-time-only deps; `tests/ml/test_lewm_export.py` skips them on the blocking CPU gates and
+  rejects tampered graphs and skipped-parity manifests in claim-grade evidence.
+
 - `area:model`: **TwoRooms LeWM checkpoint ingestion + PyTorch parity (gate G1)** (#316, epic #314) —
   `lensemble.model.lewm_tworooms` reconstructs the released `quentinll/lewm-tworooms` module tree
   in plain torch, state-dict-key compatible with `weights.pt` (HF-ViT-tiny encoder schema +

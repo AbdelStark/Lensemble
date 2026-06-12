@@ -1,0 +1,192 @@
+{
+  "schema": "lewm-browser-export/1",
+  "graphVersion": 1,
+  "opset": 18,
+  "torchVersion": "2.12.0",
+  "checkpoint": {
+    "repoId": "quentinll/lewm-tworooms",
+    "revision": "77adaae0bc31deab21c93740d1f8bb947cd0bdec",
+    "weightsSha256": "566f223624ea4bfb39dbfe6ae731198dd6ea73b7b8919fed6b1ecafca810f7dd"
+  },
+  "architecture": {
+    "hiddenDim": 192,
+    "imageSize": 224,
+    "patchSize": 14,
+    "numFrames": 3,
+    "actionDim": 10
+  },
+  "files": {
+    "lewm_tworooms_encoder.onnx": {
+      "sha256": "865616c5e9686d66159619b9ab57552fd26f611fadd1e90984c6530ae51d8236",
+      "bytes": 25920451,
+      "graph": "encoder",
+      "inputs": {
+        "pixels": [
+          "batch",
+          3,
+          "image_size",
+          "image_size"
+        ]
+      },
+      "outputs": {
+        "latent": [
+          "batch",
+          "hidden_dim"
+        ]
+      },
+      "components": [
+        "encoder (HF-ViT)",
+        "projector (Linear-BN-GELU-Linear)"
+      ]
+    },
+    "lewm_tworooms_action.onnx": {
+      "sha256": "327bcf2276a5c7074d5a6fcd6a27039b99c1001842cf21ea8f0e16092b2d2d09",
+      "bytes": 639878,
+      "graph": "action_encoder",
+      "inputs": {
+        "actions": [
+          "batch",
+          "time",
+          "action_dim"
+        ]
+      },
+      "outputs": {
+        "action_embedding": [
+          "batch",
+          "time",
+          "hidden_dim"
+        ]
+      },
+      "components": [
+        "action_encoder (Conv1d-SiLU-MLP)"
+      ]
+    },
+    "lewm_tworooms_predictor.onnx": {
+      "sha256": "e458d65bfdd974c068ec4238e9a741b54221fc640947bf58f7c5c88daaf44783",
+      "bytes": 46909758,
+      "graph": "predictor",
+      "inputs": {
+        "latents": [
+          "batch",
+          "time<=num_frames",
+          "hidden_dim"
+        ],
+        "action_embeddings": [
+          "batch",
+          "time<=num_frames",
+          "hidden_dim"
+        ]
+      },
+      "outputs": {
+        "predicted_latents": [
+          "batch",
+          "time<=num_frames",
+          "hidden_dim"
+        ]
+      },
+      "components": [
+        "predictor (AdaLN causal transformer)",
+        "pred_proj (Linear-BN-GELU-Linear)"
+      ]
+    }
+  },
+  "totalBytes": 73470087,
+  "runtime": {
+    "preferred": "onnxruntime-web webgpu",
+    "fallback": "onnxruntime-web wasm",
+    "unsupported": "participants report an explicit unsupported state; no silent surrogate fallback in the real mode"
+  },
+  "parity": {
+    "onnxruntimeAvailable": true,
+    "status": "passed",
+    "atol": 0.0001,
+    "maxAbsDiff": 4.863739013671875e-05,
+    "checks": [
+      {
+        "graph": "lewm_tworooms_encoder.onnx",
+        "inputShapes": [
+          [
+            2,
+            3,
+            224,
+            224
+          ]
+        ],
+        "maxAbsDiff": 4.863739013671875e-05
+      },
+      {
+        "graph": "lewm_tworooms_action.onnx",
+        "inputShapes": [
+          [
+            2,
+            3,
+            10
+          ]
+        ],
+        "maxAbsDiff": 9.5367431640625e-07
+      },
+      {
+        "graph": "lewm_tworooms_action.onnx",
+        "inputShapes": [
+          [
+            1,
+            7,
+            10
+          ]
+        ],
+        "maxAbsDiff": 1.1920928955078125e-06
+      },
+      {
+        "graph": "lewm_tworooms_predictor.onnx",
+        "inputShapes": [
+          [
+            2,
+            3,
+            192
+          ],
+          [
+            2,
+            3,
+            192
+          ]
+        ],
+        "maxAbsDiff": 1.3113021850585938e-06
+      },
+      {
+        "graph": "lewm_tworooms_predictor.onnx",
+        "inputShapes": [
+          [
+            1,
+            1,
+            192
+          ],
+          [
+            1,
+            1,
+            192
+          ]
+        ],
+        "maxAbsDiff": 4.6193599700927734e-07
+      },
+      {
+        "graph": "lewm_tworooms_predictor.onnx",
+        "inputShapes": [
+          [
+            1,
+            2,
+            192
+          ],
+          [
+            1,
+            2,
+            192
+          ]
+        ],
+        "maxAbsDiff": 1.8477439880371094e-06
+      }
+    ]
+  },
+  "nonClaims": [
+    "Checkpoint-backed LeWorldModel inference graphs for the Tapestry-like demo; not browser training artifacts, not a paper-scale benchmark claim."
+  ]
+}
