@@ -621,6 +621,8 @@ def serve(
     public_base_url: str | None = None,
     public_demo: bool = False,
     deployment_target: str = "local",
+    rate_limit_per_minute: int = 0,
+    participant_rate_limit_per_minute: int = 0,
 ) -> ThreadingHTTPServer:
     display_host = "127.0.0.1" if host in {"0.0.0.0", "::"} else host
     public_base = public_base_url or f"http://{display_host}:{port}/web/federated-demo"
@@ -629,7 +631,10 @@ def serve(
         public_demo=public_demo,
         deployment_target=deployment_target,
         transport_mode="websocket-primary",
-        safety=DemoSafetyConfig(),
+        safety=DemoSafetyConfig(
+            rate_limit_per_minute=rate_limit_per_minute,
+            participant_rate_limit_per_minute=participant_rate_limit_per_minute,
+        ),
     )
     httpd = ThreadingHTTPServer((host, port), make_handler(service))
     if public_base_url is None:
@@ -686,7 +691,21 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--open", action="store_true", help="open the browser after starting"
     )
+    parser.add_argument(
+        "--rate-limit-per-minute",
+        type=int,
+        default=0,
+        help="shared client API request limit per minute; 0 disables rate limiting",
+    )
+    parser.add_argument(
+        "--participant-rate-limit-per-minute",
+        type=int,
+        default=0,
+        help="participant heartbeat/progress/update limit per minute; 0 disables rate limiting",
+    )
     args = parser.parse_args(argv)
+    if args.rate_limit_per_minute < 0 or args.participant_rate_limit_per_minute < 0:
+        parser.error("rate limits must be >= 0")
     serve(
         host=args.host,
         port=args.port,
@@ -694,6 +713,8 @@ def main(argv: list[str] | None = None) -> None:
         public_base_url=args.public_base_url,
         public_demo=args.public_demo,
         deployment_target=args.deployment_target,
+        rate_limit_per_minute=args.rate_limit_per_minute,
+        participant_rate_limit_per_minute=args.participant_rate_limit_per_minute,
     )
 
 

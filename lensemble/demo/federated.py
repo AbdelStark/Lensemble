@@ -250,8 +250,8 @@ class DemoSafetyConfig:
     token_ttl_ms: int = 4 * 60 * 60 * 1000
     heartbeat_stale_ms: int = 15_000
     participant_timeout_ms: int = 45_000
-    rate_limit_per_minute: int = 120
-    participant_rate_limit_per_minute: int = 10_000
+    rate_limit_per_minute: int = 0
+    participant_rate_limit_per_minute: int = 0
     clip_norm: float = DEFAULT_CLIP_NORM
 
     def as_payload(self) -> dict[str, int | float]:

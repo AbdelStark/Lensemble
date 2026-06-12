@@ -162,6 +162,8 @@ Current public-demo limits are exposed in run snapshots and evidence export:
 max artifact bytes, max message bytes, max vector length, max participants, max
 rounds, token TTL, heartbeat stale timeout, participant timeout, shared client
 rate limit, participant-scoped protocol rate limit, and clip norm.
+Rate limits default to `0` (disabled) and are only active when the server is
+started with explicit rate-limit flags.
 
 Forbidden fields include raw observations, actions, labels, latents, tensors,
 participant tokens, and model weights. Payloads with raw-data-like keys are

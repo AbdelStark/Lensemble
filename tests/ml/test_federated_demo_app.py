@@ -495,6 +495,30 @@ def test_demo_http_api_participant_protocol_uses_participant_rate_bucket() -> No
         server.server_close()
 
 
+def test_demo_http_api_rate_limits_are_disabled_by_default() -> None:
+    service = FederatedDemoService(
+        public_base_url="http://127.0.0.1:0/web/federated-demo"
+    )
+    assert service.safety.rate_limit_per_minute == 0
+    assert service.safety.participant_rate_limit_per_minute == 0
+    server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(service))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_port}"
+    try:
+        created = _post_json(
+            f"{base}/api/runs",
+            {"maxParticipants": 1, "quorum": 1, "rounds": 1},
+        )
+        for _ in range(130):
+            with urllib.request.urlopen(f"{base}/api/runs/{created['id']}") as response:
+                assert response.status == 200
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
 def test_demo_http_api_websocket_replay_and_commands() -> None:
     service = FederatedDemoService(
         public_base_url="http://127.0.0.1:0/web/federated-demo"
@@ -588,6 +612,18 @@ def test_demo_cli_exposes_one_command_server_help() -> None:
     public_demo_option = signature.parameters["public_demo"].default
     assert isinstance(public_demo_option, OptionInfo)
     assert public_demo_option.param_decls == ("--public-demo",)
+    rate_limit_option = signature.parameters["rate_limit_per_minute"].default
+    assert isinstance(rate_limit_option, OptionInfo)
+    assert rate_limit_option.param_decls == ("--rate-limit-per-minute",)
+    assert rate_limit_option.default == 0
+    participant_rate_limit_option = signature.parameters[
+        "participant_rate_limit_per_minute"
+    ].default
+    assert isinstance(participant_rate_limit_option, OptionInfo)
+    assert participant_rate_limit_option.param_decls == (
+        "--participant-rate-limit-per-minute",
+    )
+    assert participant_rate_limit_option.default == 0
     assert "Serve the browser federated demo app" in (
         inspect.getdoc(demo_federated) or ""
     )

@@ -217,6 +217,18 @@ def demo_federated(
     open_browser: bool = typer.Option(
         False, "--open", help="open the browser once the demo server starts"
     ),
+    rate_limit_per_minute: int = typer.Option(
+        0,
+        "--rate-limit-per-minute",
+        min=0,
+        help="shared client API request limit per minute; 0 disables rate limiting",
+    ),
+    participant_rate_limit_per_minute: int = typer.Option(
+        0,
+        "--participant-rate-limit-per-minute",
+        min=0,
+        help="participant heartbeat/progress/update limit per minute; 0 disables rate limiting",
+    ),
 ) -> None:
     """Serve the browser federated demo app (#294/#303).
 
@@ -235,6 +247,8 @@ def demo_federated(
         public_base_url=public_base_url,
         public_demo=public_demo,
         deployment_target=deployment_target,
+        rate_limit_per_minute=rate_limit_per_minute,
+        participant_rate_limit_per_minute=participant_rate_limit_per_minute,
     )
 
 
