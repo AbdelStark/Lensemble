@@ -1313,7 +1313,7 @@ function renderRealModeProbe(run) {
 }
 
 function renderProbeResult(container, report) {
-  container.replaceChildren(
+  const children = [
     el("div", { class: "metric-tiles" }, [
       metricTile("baseline mse", formatMetric(report.baselineMse, 6)),
       metricTile("adapted mse", formatMetric(report.adaptedMse, 6)),
@@ -1324,12 +1324,15 @@ function renderProbeResult(container, report) {
       stateBadge(report.verdict),
       ` on ${report.pairCount} fixed validation pairs (seed ${report.seed}, ${report.modelRevisionId ?? "latest"}).`,
     ]),
-    report.verdict !== "improved"
-      ? note(
-          "An honest non-positive result: the adapter revision did not beat the parent checkpoint on this probe. This blocks positive claims; it is reported, not hidden.",
-        )
-      : null,
-  );
+  ];
+  if (report.verdict !== "improved") {
+    children.push(
+      note(
+        "An honest non-positive result: the adapter revision did not beat the parent checkpoint on this probe. This blocks positive claims; it is reported, not hidden.",
+      ),
+    );
+  }
+  container.replaceChildren(...children);
 }
 
 // --------------------------------------------------------------- inference UI
