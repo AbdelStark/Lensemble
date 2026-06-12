@@ -54,6 +54,7 @@ nav:
       - Phase 3 Consortium Training: roadmap/PHASE3.md
       - Dynamic Env Evidence: roadmap/DYNAMIC_ENV.md
       - Browser Federated Demo: roadmap/BROWSER_FEDERATED_DEMO.md
+      - Tapestry-like LeWM Pivot: roadmap/TAPESTRY_LEWM.md
   - Evidence:
       - Phase 2 Model Card: evidence/phase2_model_card.md
       - Phase 3 Model Card: evidence/phase3_model_card.md

@@ -92,6 +92,7 @@ Start here:
 - [RFC-0005: evaluation protocol](docs/rfcs/RFC-0005-evaluation.md)
 - [RFC-0017: dynamic-env metric gate](docs/rfcs/RFC-0017-dynamic-env-ungameable-metrics.md)
 - [Browser federated demo roadmap](docs/roadmap/BROWSER_FEDERATED_DEMO.md)
+- [Tapestry-like LeWM TwoRooms pivot contract](docs/roadmap/TAPESTRY_LEWM.md)
 - [Dynamic-env evidence roadmap](docs/roadmap/DYNAMIC_ENV.md)
 
 ## Evidence

@@ -34,6 +34,14 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:docs`: **Tapestry-like LeWM TwoRooms pivot contract** (#315, epic #314) —
+  `docs/roadmap/TAPESTRY_LEWM.md` locks the real-checkpoint browser-federation pivot before
+  implementation widens: the accepted claim and non-claims, the `surrogate-swipe-dot` vs
+  `real-lewm-tworooms` product modes, the pinned external artifacts
+  (`quentinll/lewm-tworooms` @ `77adaae`, `lucas-maes/le-wm`, `stable_worldmodel.wm.lewm`),
+  the issue-by-issue implementation sequence (#316–#324), and the binding evidence gates
+  G1–G7. Linked from README, SPEC scope, BROWSER_FEDERATED_DEMO.md, and the mkdocs nav.
+
 - `area:docs`: **Phase 3 completion roadmap + acceptance-matrix closeout** (#248, RFC-0009) — closes
   epic #249. `docs/roadmap/PHASE3.md` (Training Run Shape, Evaluation And Controls, Observability And
   Dropout, Evidence Bundle, Acceptance Matrix, Final Claim Boundary) and the README Implementation Status

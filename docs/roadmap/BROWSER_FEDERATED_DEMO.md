@@ -4,6 +4,14 @@ Trackers: [#294](https://github.com/AbdelStark/Lensemble/issues/294) closed the
 local educational baseline. [#303](https://github.com/AbdelStark/Lensemble/issues/303)
 is the hackathon-readiness layer above it.
 
+This document describes the **surrogate** demo path (`surrogate-swipe-dot`):
+the tiny browser learner over synthetic swipe-dot trajectories. The active
+implementation queue is the Tapestry-like real-checkpoint pivot
+([#314](https://github.com/AbdelStark/Lensemble/issues/314)) specified in
+[TAPESTRY_LEWM.md](TAPESTRY_LEWM.md), which reuses this orchestration substrate
+and adds a separate `real-lewm-tworooms` mode. Nothing below claims real
+LeWorldModel training; the surrogate path stays clearly labeled as such.
+
 The browser federated demo is an educational systems showcase for Lensemble's
 Tapestry-like JEPA federation story: sovereign participants join a run, do
 resident browser-local work, submit bounded derived update artifacts, and the

@@ -103,6 +103,12 @@ Full statement of thesis, goals, non-goals, and success criteria: [00-overview.m
   publication, inference artifact attachment, and residency-safe evidence export. It is not a
   production browser-training claim and not evidence that the current dynamic-env federation materially
   beats local-only.
+- **Tapestry-like LeWM pivot** ([#314](https://github.com/AbdelStark/Lensemble/issues/314),
+  [TAPESTRY_LEWM.md](docs/roadmap/TAPESTRY_LEWM.md)) is the active demo queue above that substrate: a
+  `real-lewm-tworooms` mode with checkpoint-backed LeWorldModel browser inference, browser-local bounded
+  adapter continuation, federated adapter-delta aggregation, and claim-bounded evidence. It is a
+  Tapestry-like adaptation demo around a real TwoRooms checkpoint, not full from-scratch browser LeWM
+  pretraining and not a paper-scale benchmark claim.
 - Milestones map to the staged plan A–E:
   [conventions §12](docs/spec/conventions.md#12-milestones-and-stages). Stage E (own foundation-scale
   federated pretraining) and the Stage-D proofs are out of the v1.0 scope and tracked as future work.
