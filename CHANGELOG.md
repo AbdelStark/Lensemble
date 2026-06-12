@@ -34,6 +34,19 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:docs`: **Tapestry-like LeWM evidence card + claim audit (gate G7 surface)** (#323, epic
+  #314) — `docs/evidence/lewm_tworooms_demo_card.md` is the public evidence surface: the accepted
+  claim, the what-was-real table linking every gate artifact (G1 manifest/reference, G2
+  export/action-stats/real-data check, G3 overfit, G5 federated probe), the privacy/residency
+  statement, and the non-claims — including that the first probe configuration was honestly flat.
+  `lensemble.demo.evidence_audit` validates real-mode `demo-evidence/1` exports fail-closed:
+  required Tapestry-like claim-boundary and non-claim phrases, pinned 40-hex checkpoint revision,
+  64-hex weights/graph/revision/update hashes, parent-revision chaining, per-round health flags
+  and metric summaries, honest privacy status, no raw participant data/adapter tensors/tokens,
+  and no unnegated overclaims (`tests/ml/test_lewm_evidence_audit.py`: clean run passes, 14
+  targeted mutations rejected). Linked from README, the pivot contract gate table, and the
+  mkdocs Evidence nav.
+
 - `area:eval`: **Tapestry-like LeWM before/after probe, anti-collapse diagnostics, and honest
   failure states (gate G5)** (#322, epic #314) — `web/federated-demo/lewm_probe.mjs` scores any
   global adapter revision against the identity baseline on a FIXED seeded TwoRooms validation

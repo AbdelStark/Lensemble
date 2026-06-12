@@ -101,6 +101,7 @@ The project treats results as artifact-bound. The important public evidence surf
 
 - [Phase 3 evidence bundle](docs/evidence/phase3_evidence_bundle.json)
 - [Phase 3 model card](docs/evidence/phase3_model_card.md)
+- [Tapestry-like LeWM demo card](docs/evidence/lewm_tworooms_demo_card.md)
 - [Dynamic-env roadmap and acceptance matrix](docs/roadmap/DYNAMIC_ENV.md)
 - [Browser federated demo docs](docs/roadmap/BROWSER_FEDERATED_DEMO.md)
 

@@ -161,6 +161,16 @@ with a documented negative result instead of softening the claim.
 | G6 federated aggregation | per-round delta hashes + global revision hashes | bounded adapter deltas validate, aggregate deterministically, and bind to parent checkpoint/export hashes; invalid/stale/oversized/raw-like updates are rejected by tests |
 | G7 final rehearsal | rehearsal report + evidence bundle | a two-participant (and documented four-participant) real-mode run completes end to end and exports a residency-safe evidence bundle with the non-claim text |
 
+Gate artifacts shipped so far (all under [docs/evidence](../evidence/lewm_tworooms_demo_card.md)):
+G1 → [checkpoint manifest](../evidence/lewm_tworooms_checkpoint_manifest.json) +
+[reference report](../evidence/lewm_tworooms_reference_report.json); G2 →
+[browser export manifest](../evidence/lewm_tworooms_browser_export_manifest.json) +
+[action stats](../evidence/lewm_tworooms_action_stats.json) +
+[real-data check](../evidence/lewm_tworooms_realdata_check.json); G3 →
+[adapter overfit](../evidence/lewm_tworooms_adapter_overfit.json); G5 →
+[federated probe](../evidence/lewm_tworooms_probe_check.json); the summary card is the
+[Tapestry-like LeWM demo card](../evidence/lewm_tworooms_demo_card.md).
+
 Cross-cutting gates, inherited from the repo:
 
 ```bash
