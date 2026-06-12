@@ -32,6 +32,21 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
   could not have worked from a clean install. Updated `pyproject.toml`, `tests/unit/test_packaging.py`,
   and `conventions §11` in lockstep (#22).
 
+### Changed
+
+- `area:docs`: **Demo UI redesign: real-LeWM only, premium theme, product-voice copy** — the web
+  app now exposes only the Tapestry-like `real-lewm-tworooms` path (the surrogate learner and the
+  frontend simulator remain in the codebase/API for tests, but the host form hardcodes the real
+  mode and the simulator entry point is gone). The disclaimer banners and long claim-boundary
+  notes moved out of the UI into the footer link to the demo card; the binding claim boundary
+  stays in the server constants, every evidence export, and the claim audit (unchanged and still
+  gated). New visual system in `web/federated-demo/style.css` (Inter/JetBrains Mono, soft
+  elevation, pill badges, accent gradient buttons, refined timeline/metric tiles), a new home
+  hero with a three-step explainer, compact run-header chips, and a real-mode inference pointer
+  replacing the swipe-dot inference panel on real runs. Tests updated to pin the new contract
+  (`test_lewm_demo_integration.py`, `test_federated_demo_app.py`); all node selftests unchanged
+  and green.
+
 ### Added
 
 - `area:docs`: **End-to-end Tapestry-like rehearsal gate + researcher runbook (gate G7)** (#324,

@@ -183,18 +183,17 @@ export function mountTwoRoomsLab(container, { loadRuntime, el }) {
   container.append(
     el("section", { class: "panel" }, [
       el("h2", { text: "TwoRooms — checkpoint-backed LeWM rollout & planning" }),
-      note_(el, "Tapestry-like real-LeWM mode component: the frames below are encoded by the exported "
-        + "TwoRooms checkpoint graphs; planning samples action candidates, rolls latents forward with "
-        + "the real predictor, and picks the lowest terminal goal-latent distance. Inference only — "
-        + "browser-local adaptation is the next stage."),
-      note_(el, TWOROOMS_DEVIATIONS),
+      note_(el, "Frames are encoded by the exported checkpoint graphs; planning samples action "
+        + "candidates, rolls latents forward with the real predictor, and picks the lowest "
+        + "terminal goal-latent distance."),
+      el("p", { class: "muted", text: TWOROOMS_DEVIATIONS }),
       statusNote,
       identityNote,
       el("div", { class: "columns" }, [
         el("div", { class: "panel" }, [el("h2", { text: "Current (agent + target)" }), currentCanvas]),
         el("div", { class: "panel" }, [el("h2", { text: "Goal frame (model input)" }), goalCanvas]),
       ]),
-      el("div", {}, [resetButton, stepButton, autoButton]),
+      el("div", { class: "btn-row" }, [resetButton, stepButton, autoButton]),
       planNote,
       errorNote,
     ]),

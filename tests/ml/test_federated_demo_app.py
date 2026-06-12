@@ -34,14 +34,18 @@ from lensemble.demo.server import make_handler
 WEB_DIR = Path("web/federated-demo")
 
 
-def test_federated_demo_assets_document_simulated_scope() -> None:
+def test_federated_demo_claim_boundary_lives_server_side() -> None:
+    """The UI links the claim boundary instead of carrying disclaimer banners; the binding
+    boundary text stays in the server constants, the evidence exports, and the demo card."""
+    from lensemble.demo.federated import CLAIM_BOUNDARY, LEWM_CLAIM_BOUNDARY
+
     html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
     sim = (WEB_DIR / "sim_engine.mjs").read_text(encoding="utf-8")
 
-    assert "Simulated demo" in html
-    assert "frontend-only run simulator" in html
-    assert "No backend, no real browser training" in html
-    assert "does not materially beat local-only" in html
+    assert "lewm_tworooms_demo_card.md" in html  # the boundary is one click away
+    assert "not a benchmark win" in CLAIM_BOUNDARY
+    assert "not" in LEWM_CLAIM_BOUNDARY and "from-scratch" in LEWM_CLAIM_BOUNDARY
+    # the simulator module keeps labeling itself honestly even though the UI no longer offers it
     assert 'SIMULATOR_MODE = "frontend-simulator"' in sim
     assert "simulated: true" in sim
 

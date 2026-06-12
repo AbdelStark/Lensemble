@@ -3,33 +3,31 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Lensemble Federated Run Demo</title>
+    <title>Lensemble · Federated World-Model Adaptation</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..750&family=JetBrains+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
     <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.webgpu.min.js"></script>
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
     <main>
-      <header class="panel">
-        <h1>Lensemble Federated Run Demo</h1>
-        <p class="banner">
-          <strong>Simulated demo.</strong>
-          Includes a frontend-only run simulator and a local backend mode for QR joins,
-          WebSocket orchestration, bounded tiny browser update vectors, aggregation,
-          evidence export, and inference.
-          No backend, no real browser training, and no benchmark success is claimed for
-          the simulator slice; the dynamic-env result is an educational systems demo and
-          does not materially beat local-only training.
-        </p>
-        <p class="banner">
-          <strong>Tapestry-like real-LeWM mode.</strong>
-          The <code>real-lewm-tworooms</code> learner path adapts a real LeWorldModel
-          TwoRooms checkpoint: browsers run checkpoint-backed inference, keep rollouts
-          resident, train a bounded adapter subset, and federate clipped adapter deltas.
-          It is checkpoint adaptation, not full from-scratch LeWM browser pretraining,
-          and not a paper-scale benchmark claim.
-        </p>
+      <header class="masthead">
+        <a class="wordmark" href="#/">
+          <span class="wordmark-dot" aria-hidden="true"></span>
+          Lensemble
+        </a>
+        <span class="masthead-tag">Tapestry-like federated adaptation of a real LeWorldModel checkpoint</span>
       </header>
       <div id="app" aria-live="polite"></div>
+      <footer class="footnote">
+        Checkpoint adaptation around the frozen <span class="mono">quentinll/lewm-tworooms</span> base ·
+        rollouts never leave the browser ·
+        <a href="https://github.com/AbdelStark/Lensemble/blob/main/docs/evidence/lewm_tworooms_demo_card.md">claim boundary &amp; evidence</a>
+      </footer>
     </main>
     <script type="module" src="./app.mjs"></script>
   </body>

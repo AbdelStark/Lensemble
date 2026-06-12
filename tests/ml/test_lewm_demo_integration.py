@@ -15,22 +15,20 @@ from pathlib import Path
 WEB_DIR = Path("web/federated-demo")
 
 
-def test_host_form_offers_both_run_modes() -> None:
+def test_host_form_creates_real_mode_runs_only() -> None:
+    """The UI exposes only the Tapestry-like real path; the surrogate stays API/test-only."""
     app = (WEB_DIR / "app.mjs").read_text(encoding="utf-8")
-    assert 'value: "surrogate-swipe-dot"' in app
-    assert 'value: "real-lewm-tworooms"' in app
-    assert "mode: runModeSelect.value" in app
+    assert 'mode: "real-lewm-tworooms"' in app  # hardcoded in the create config
+    assert "runModeSelect" not in app  # no learner-path selector
+    assert "frontend-simulator" not in app.split("function renderHome")[1].split("function ")[0]
 
 
 def test_learner_dispatch_has_no_silent_fallback() -> None:
     app = (WEB_DIR / "app.mjs").read_text(encoding="utf-8")
     assert 'run.runMode === "real-lewm-tworooms"' in app
     assert "runRealLewmRound" in app
-    assert "no surrogate fallback" in app
     participant = (WEB_DIR / "lewm_participant.mjs").read_text(encoding="utf-8")
     assert "NO fallback to the surrogate learner" in participant
-    # the simulator cannot host real-mode runs
-    assert "needs the backend API mode" in app
 
 
 def test_real_round_driver_has_no_artificial_sleeps() -> None:
@@ -51,12 +49,15 @@ def test_dashboard_renders_real_mode_metrics() -> None:
         assert needle in app, needle
 
 
-def test_index_banner_keeps_claim_boundary() -> None:
+def test_index_links_the_claim_boundary() -> None:
+    """The UI carries product copy; the full claim boundary lives in the linked demo card and in
+    every evidence export (gated by lensemble.demo.evidence_audit)."""
     html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
-    assert "real-lewm-tworooms" in html
-    assert "not full from-scratch LeWM browser pretraining" in html
-    # the original surrogate-scope banner stays intact
-    assert "Simulated demo" in html
+    assert "lewm_tworooms_demo_card.md" in html
+    assert "claim boundary" in html
+    assert "rollouts never leave the browser" in html
+    # the old disclaimer banners are gone by design
+    assert "Simulated demo" not in html
 
 
 def test_participant_view_explains_real_mode_residency() -> None:

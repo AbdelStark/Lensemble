@@ -149,9 +149,9 @@ function drawQr(canvas, text) {
   canvas.width = total;
   canvas.height = total;
   const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "#fffdf7";
+  ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, total, total);
-  ctx.fillStyle = "#18221c";
+  ctx.fillStyle = "#191c22";
   for (let r = 0; r < count; r += 1) {
     for (let c = 0; c < count; c += 1) {
       if (qr.isDark(r, c)) ctx.fillRect(c + quiet, r + quiet, 1, 1);
@@ -481,26 +481,9 @@ function renderHome() {
   teardownHost();
   teardownParticipant();
 
-  const modeSelect = el("select", {}, [
-    el("option", { value: "backend-api", text: "backend API mode (local server)" }),
-    el("option", { value: "frontend-simulator", text: "frontend-only simulator" }),
-  ]);
   const maxInput = el("input", { type: "number", min: "1", max: "64", value: "4" });
   const quorumInput = el("input", { type: "number", min: "1", max: "64", value: "2" });
-  const roundsInput = el("input", { type: "number", min: "1", max: "1000", value: "1000" });
-  const presetSelect = el("select", {}, [
-    el("option", { value: "swipe-dot-tiny", text: "swipe-dot-tiny (synthetic dynamic env)" }),
-  ]);
-  const runModeSelect = el("select", {}, [
-    el("option", {
-      value: "surrogate-swipe-dot",
-      text: "surrogate-swipe-dot (educational tiny-vector path)",
-    }),
-    el("option", {
-      value: "real-lewm-tworooms",
-      text: "real-lewm-tworooms (Tapestry-like checkpoint adaptation)",
-    }),
-  ]);
+  const roundsInput = el("input", { type: "number", min: "1", max: "1000", value: "10" });
   const errorNote = el("p", { class: "note" });
 
   const createButton = el("button", {
@@ -510,22 +493,9 @@ function renderHome() {
         maxParticipants: Number(maxInput.value),
         quorum: Number(quorumInput.value),
         rounds: Number(roundsInput.value),
-        preset: presetSelect.value,
-        mode: runModeSelect.value,
+        mode: "real-lewm-tworooms",
       };
       try {
-        if (modeSelect.value === "frontend-simulator") {
-          if (config.mode === "real-lewm-tworooms") {
-            errorNote.textContent =
-              "real-lewm-tworooms needs the backend API mode (the simulator has no checkpoint runtime)";
-            return;
-          }
-          delete config.mode;
-          const run = createSimRun(config, randomSeed());
-          adoptHostRun(run);
-          window.location.hash = `#/host/${run.id}`;
-          return;
-        }
         const run = await backendClient.createRun(config);
         window.location.hash = `#/host/${run.id}`;
       } catch (error) {
@@ -535,34 +505,36 @@ function renderHome() {
   });
 
   app.append(
-    el("section", { class: "panel" }, [
-      el("h2", { text: "Host a federated browser demo run" }),
+    el("section", { class: "panel hero" }, [
+      el("h1", { text: "Federate a world model across browsers" }),
       note(
-        "Choose the backend for real browser sessions, WebSocket orchestration, bounded tiny update submission, aggregation, inference attachment, and evidence export. The simulator keeps the first slice available without a server.",
+        "Every participant adapts a real LeWorldModel TwoRooms checkpoint locally — rollouts stay on their device — and shares only a small, bounded adapter delta. Rounds aggregate into hash-bound global revisions you can probe, inspect, and export.",
       ),
+      el("p", {}, [
+        el("span", { class: "chip", text: "quentinll/lewm-tworooms · 77adaae0bc31" }),
+      ]),
+    ]),
+    el("section", { class: "panel" }, [
       el("div", { class: "columns" }, [
         el("div", { class: "panel" }, [
-          el("label", {}, ["Mode", modeSelect]),
-          el("label", {}, ["Learner path", runModeSelect]),
+          el("h2", { text: "New run" }),
           el("label", {}, ["Max participants", maxInput]),
           el("label", {}, ["Quorum (min trainers to start)", quorumInput]),
           el("label", {}, ["Rounds", roundsInput]),
-          el("label", {}, ["Demo preset", presetSelect]),
           createButton,
           errorNote,
         ]),
         el("div", { class: "panel" }, [
-          el("h2", { text: "Claim boundary" }),
-          note(
-            "This is an educational systems demo of Tapestry-like federated JEPA orchestration. It is not a benchmark win over local-only, not production browser training, not a cryptographic honest-computation proof, and not physical SO-100 success.",
-          ),
-          note(
-            "One-command backend path: uv run lensemble demo federated --port 8765, then open the printed URL.",
-          ),
+          el("h2", { text: "How it works" }),
+          el("ol", { class: "steps" }, [
+            el("li", { text: "Create a run and share the QR code — each participant joins from their own browser and trains autonomously." }),
+            el("li", { text: "Watch rounds aggregate live: prediction loss, SIGReg, effective rank, and adapter revisions update over WebSocket." }),
+            el("li", { text: "Run the before/after probe against the latest global revision, then export the evidence bundle." }),
+          ]),
           el("p", {}, [
             el("a", {
               href: "#/tworooms",
-              text: "TwoRooms LeWM lab → checkpoint-backed rollout & planning (real-lewm-tworooms component)",
+              text: "Open the TwoRooms lab → checkpoint-backed rollout & planning",
             }),
           ]),
         ]),
@@ -825,21 +797,13 @@ function renderBackendHostSnapshot(run) {
 
   app.append(
     el("section", { class: "panel" }, [
-      el("h2", {}, [
-        `Host dashboard - ${run.id} `,
-        stateBadge(run.state),
-        " ",
-        stateBadge(run.runMode ?? "surrogate-swipe-dot"),
+      el("h2", {}, [`Run ${run.id} `, stateBadge(run.state)]),
+      el("p", { class: "muted" }, [
+        run.runMode === "real-lewm-tworooms"
+          ? el("span", { class: "chip", text: `${run.lewmBinding?.checkpoint?.repoId}@${String(run.lewmBinding?.checkpoint?.revision ?? "").slice(0, 12)} · ${run.lewmBinding?.adapterParameterCount}-param adapter` })
+          : el("span", { class: "chip", text: run.learnerRuntime }),
+        ` quorum ${run.config.quorum} · up to ${run.config.maxParticipants} participants · ${run.config.rounds} rounds · ${backendPoll?.transport ?? run.deployment?.transportMode ?? "polling"}`,
       ]),
-      note(
-        `Mode: ${run.mode}; learner path: ${run.runMode ?? "surrogate-swipe-dot"}; transport: ${backendPoll?.transport ?? run.deployment?.transportMode ?? "polling"}; aggregation: ${run.aggregationMode}; learner: ${run.learnerRuntime}. Quorum ${run.config.quorum}, max ${run.config.maxParticipants}, rounds ${run.config.rounds}.`,
-      ),
-      run.runMode === "real-lewm-tworooms"
-        ? note(
-            `Tapestry-like real-LeWM run: checkpoint ${run.lewmBinding?.checkpoint?.repoId}@${String(run.lewmBinding?.checkpoint?.revision ?? "").slice(0, 12)}, ` +
-              `bounded adapter subset of ${run.lewmBinding?.adapterParameterCount} params. ${run.claimBoundary ?? ""}`,
-          )
-        : null,
       el("div", { class: "columns" }, [
         el("div", { class: "panel" }, [
           el("h2", { text: "Invite participants" }),
@@ -848,7 +812,6 @@ function renderBackendHostSnapshot(run) {
             urlInput,
             el("button", { class: "secondary", text: "Copy", onclick: () => navigator.clipboard?.writeText(joinUrl) }),
           ]),
-          note("Backend mode coordinates browser sessions through the coordinator API and WebSocket stream, with REST polling retained as fallback."),
           startButton,
           abortButton,
           timeoutButton,
@@ -871,7 +834,16 @@ function renderBackendHostSnapshot(run) {
           timelineList(run.events),
         ]),
       ]),
-      renderInferencePanel(run),
+      run.runMode === "real-lewm-tworooms"
+        ? el("section", { class: "panel compact" }, [
+            el("h2", { text: "Checkpoint-backed inference" }),
+            el("p", { class: "note" }, [
+              "Rollout and planning with the real TwoRooms model run in the ",
+              el("a", { href: "#/tworooms", text: "TwoRooms lab" }),
+              "; the before/after probe above scores the latest aggregated adapter revision.",
+            ]),
+          ])
+        : renderInferencePanel(run),
     ]),
   );
   drawQr(qrCanvas, joinUrl);
@@ -1252,13 +1224,11 @@ function renderParticipantState(run, me, simulated, participantToken = null, opt
     children.push(errorBox("The host aborted this run."));
   }
   children.push(
-    note(
+    el("p", { class: "muted" }, [
       simulated
-        ? "Local work in this slice is simulated; no data leaves your browser and no real training happens."
-        : run.runMode === "real-lewm-tworooms"
-          ? "Tapestry-like real-LeWM round: this browser generates TwoRooms rollouts locally, runs checkpoint-backed inference through the exported graphs, trains a bounded adapter, and submits only the clipped adapter delta plus metric summaries. Raw frames, actions, latents, tensors, tokens, and base checkpoint weights never leave this browser. If the runtime is unavailable the round fails visibly — there is no surrogate fallback."
-          : "This browser computes a tiny clipped update vector from resident synthetic samples in a worker. Only the derived vector and shape/hash/norm metadata are submitted; raw observations, actions, labels, latents, tensors, participant tokens, and model weights are not uploaded.",
-    ),
+        ? "Local work in this slice is simulated."
+        : "Rollouts and training never leave this browser — only a bounded adapter delta is shared. If the runtime is unavailable the round fails visibly; there is no fallback.",
+    ]),
   );
   return el("div", {}, children);
 }
