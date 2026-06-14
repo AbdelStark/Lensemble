@@ -52,6 +52,9 @@ import qrcode from "./vendor/qrcode.mjs";
 const app = document.querySelector("#app");
 const adapters = defaultAdapters();
 
+const TIMELINE_MAX_EVENTS = 80;
+const METRICS_SHOWN = 4;
+
 let hostSession = null; // { run, bus, timer }
 let participantSession = null; // frontend-simulator participant session
 let backendPoll = null; // { view, runId, timer, socket, transport }
@@ -115,21 +118,21 @@ function learnerJobKey(run, participant) {
 }
 
 function learnerTelemetryPayload(progress, telemetry) {
-  const payload = {
+  const t = telemetry ?? {};
+  return {
     progress,
-    phase: telemetry?.phase ?? null,
-    loss: telemetry?.loss ?? null,
-    probe: telemetry?.probe ?? null,
-    l2Norm: telemetry?.l2Norm ?? null,
-    clipNorm: telemetry?.clipNorm ?? null,
-    clipSaturation: telemetry?.clipSaturation ?? null,
-    effectiveDim: telemetry?.effectiveDim ?? null,
-    effectiveDimRatio: telemetry?.effectiveDimRatio ?? null,
-    collapseRisk: telemetry?.collapseRisk ?? null,
-    runtimeMs: telemetry?.runtimeMs ?? null,
-    error: telemetry?.error ?? null,
+    phase: t.phase ?? null,
+    loss: t.loss ?? null,
+    probe: t.probe ?? null,
+    l2Norm: t.l2Norm ?? null,
+    clipNorm: t.clipNorm ?? null,
+    clipSaturation: t.clipSaturation ?? null,
+    effectiveDim: t.effectiveDim ?? null,
+    effectiveDimRatio: t.effectiveDimRatio ?? null,
+    collapseRisk: t.collapseRisk ?? null,
+    runtimeMs: t.runtimeMs ?? null,
+    error: t.error ?? null,
   };
-  return payload;
 }
 
 function metricTile(label, value, detail = null) {
@@ -162,7 +165,7 @@ function drawQr(canvas, text) {
 
 function timelineList(events) {
   const items = events
-    .slice(-80)
+    .slice(-TIMELINE_MAX_EVENTS)
     .reverse()
     .map((event) =>
       el("li", { class: event.severity }, [
@@ -326,7 +329,7 @@ function metricsList(run) {
     "div",
     { class: "metrics-grid" },
     metrics
-      .slice(-4)
+      .slice(-METRICS_SHOWN)
       .reverse()
       .map((metric) =>
         el("div", { class: "metric-card" }, [
@@ -519,14 +522,12 @@ function ensureBackendPoll(view, runId, streamOptions = {}) {
 
 function downloadJson(filename, value) {
   const blob = new Blob([JSON.stringify(value, null, 2)], { type: "application/json" });
-  const link = el("a", {
-    href: URL.createObjectURL(blob),
-    download: filename,
-  });
+  const url = URL.createObjectURL(blob);
+  const link = el("a", { href: url, download: filename });
   document.body.append(link);
   link.click();
   link.remove();
-  setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
 // ------------------------------------------------------------------- router
@@ -1058,6 +1059,12 @@ function startBackendLearner(run, me, participantToken, { force = false } = {}) 
   })();
 }
 
+function joinBlockedMessage(state) {
+  if (["aborted", "failed", "completed"].includes(state)) return `This run is ${state}; joining is closed.`;
+  if (!["created", "joining", "ready"].includes(state)) return "This run already started; joining is closed.";
+  return null;
+}
+
 function renderJoin(route) {
   teardownHost();
   if (route.token) {
@@ -1113,10 +1120,9 @@ function renderLocalJoin(route) {
 
   const me = snapshot.participants.find((p) => p.id === session.participantId) ?? null;
   if (!me) {
-    if (["aborted", "failed", "completed"].includes(snapshot.state)) {
-      panel.append(errorBox(`This run is ${snapshot.state}; joining is closed.`));
-    } else if (!["created", "joining", "ready"].includes(snapshot.state)) {
-      panel.append(errorBox("This run already started; joining is closed."));
+    const blocked = joinBlockedMessage(snapshot.state);
+    if (blocked) {
+      panel.append(errorBox(blocked));
     } else {
       const nameInput = el("input", { type: "text", placeholder: "display name (optional)" });
       const joinError = el("p", { class: "note" });
@@ -1189,10 +1195,9 @@ function renderBackendJoinSnapshot(route, run) {
   ]);
 
   if (!me) {
-    if (["aborted", "failed", "completed"].includes(run.state)) {
-      panel.append(errorBox(`This run is ${run.state}; joining is closed.`));
-    } else if (!["created", "joining", "ready"].includes(run.state)) {
-      panel.append(errorBox("This run already started; joining is closed."));
+    const blocked = joinBlockedMessage(run.state);
+    if (blocked) {
+      panel.append(errorBox(blocked));
     } else {
       const nameInput = el("input", { type: "text", placeholder: "display name (optional)" });
       const modeControl = renderModeControl(run.id);
@@ -1529,6 +1534,10 @@ window.addEventListener("pagehide", () => {
   clearBackendPoll();
   teardownHost();
   teardownParticipant();
+  inferenceByRun.clear();
+  backendLearnerJobs.clear();
+  backendLearnerTelemetry.clear();
+  probeResults.clear();
 });
 
 render();

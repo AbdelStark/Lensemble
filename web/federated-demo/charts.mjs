@@ -163,8 +163,10 @@ export function lineChart({ series, title, width = 520, height = 170, yZero = fa
     svg.append(label);
   }
 
+  const colors = series.map((s, index) => s.color ?? CHART_PALETTE[index % CHART_PALETTE.length]);
+
   series.forEach((s, index) => {
-    const color = s.color ?? CHART_PALETTE[index % CHART_PALETTE.length];
+    const color = colors[index];
     const path = s.points.map((p, i) => `${i === 0 ? "M" : "L"}${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`).join(" ");
     svg.append(
       svgEl("path", {
@@ -190,7 +192,7 @@ export function lineChart({ series, title, width = 520, height = 170, yZero = fa
     item.className = "chart-legend-item";
     const swatch = document.createElement("span");
     swatch.className = "chart-swatch";
-    swatch.style.background = s.color ?? CHART_PALETTE[index % CHART_PALETTE.length];
+    swatch.style.background = colors[index];
     item.append(swatch, document.createTextNode(s.label));
     legend.append(item);
   });
