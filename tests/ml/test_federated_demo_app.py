@@ -367,7 +367,7 @@ def test_backend_demo_pauses_on_quorum_loss_and_resumes_on_reconnect() -> None:
     # Every participant goes silent → the liveness sweep drops them below quorum.
     runtime = service._runs[run["id"]]
     last_hb = max(
-        runtime.participants[j["participantId"]].last_heartbeat_at for j in joined
+        runtime.participants[j["participantId"]].last_heartbeat_at or 0 for j in joined
     )
     service.refresh_liveness(run["id"], now_ms=last_hb + 50_000)
     paused = service.snapshot(run["id"])
