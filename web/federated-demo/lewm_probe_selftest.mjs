@@ -11,8 +11,10 @@ import {
   assessRealRoundHealth,
   buildValidationSet,
   compareRevisions,
+  heldOutCollapseDiagnostics,
   scoreAdapterOnPairs,
 } from "./lewm_probe.mjs";
+import { mulberry32 } from "./rng.mjs";
 import {
   adapterFromInitAndOffset,
   flattenParams,
@@ -97,6 +99,10 @@ await check("a bias-correcting offset reads 'improved'", async () => {
   });
   assert(report.verdict === "improved", `improved, got ${report.verdict} (${report.relativeImprovement})`);
   assert(report.adaptedMse < report.baselineMse, "mse actually dropped");
+  // a pure bias-correction (constant shift on one dim) is NOT a collapse: held-out std/rank hold
+  assert(report.collapseRisk === false, "bias correction must not read as collapse");
+  assert(report.displayVerdict === "improved", "honest verdict tracks the clean improvement");
+  assert(report.diagnostics?.adapted?.latentStdMean > 0, "held-out diagnostics are populated");
 });
 
 await check("a harmful offset reads 'worse' — negative results are reported", async () => {
@@ -156,6 +162,44 @@ await check("health flags trigger on collapse and flat loss, stay quiet when hea
     predLossLastMean: 0.05,
   });
   assert(worsened.flags.some((f) => f.includes("loss-worsened")), "worsening flagged");
+});
+
+await check("a magnitude-collapsed adapter is flagged even when its held-out MSE improves", async () => {
+  // The #259 trap: an adapter that predicts the per-dim mean of the targets collapses all latent
+  // variance (std → 0) yet can score a LOWER MSE than a noisy frozen baseline. MSE alone reads
+  // "improved"; the held-out collapse diagnostics must override that to "collapse-risk".
+  const d = 4;
+  const n = 40;
+  const rng = mulberry32(7);
+  const targets = new Float32Array(n * d);
+  const baseline = new Float32Array(n * d); // frozen predictor: target + heavy noise (high MSE, healthy std)
+  const mean = new Float64Array(d);
+  for (let i = 0; i < n; i += 1) {
+    for (let k = 0; k < d; k += 1) {
+      const t = (rng() - 0.5) * 2; // moderate target variance
+      targets[i * d + k] = t;
+      baseline[i * d + k] = t + (rng() - 0.5) * 6; // large noise dominates → big baseline MSE
+      mean[k] += t;
+    }
+  }
+  for (let k = 0; k < d; k += 1) mean[k] /= n;
+  const adapted = new Float32Array(n * d); // collapsed: constant per-dim mean (zero variance)
+  for (let i = 0; i < n; i += 1) {
+    for (let k = 0; k < d; k += 1) adapted[i * d + k] = mean[k];
+  }
+  const mse = (p) => {
+    let s = 0;
+    for (let i = 0; i < n * d; i += 1) s += (p[i] - targets[i]) ** 2;
+    return s / (n * d);
+  };
+  assert(mse(adapted) < mse(baseline), "collapsed mean-predictor must beat the noisy baseline on MSE");
+  const diag = heldOutCollapseDiagnostics({ baseline, adapted, n, d });
+  assert(diag.collapseRisk === true, "magnitude collapse must be flagged");
+  assert(
+    diag.collapseFlags.some((f) => f.includes("magnitude collapse")),
+    "the std-collapse flag is raised",
+  );
+  assert(diag.adapted.latentStdMean < diag.baseline.latentStdMean, "adapted std is below baseline");
 });
 
 const report = { total, passed: total - failures.length, failed: failures.length, failures };

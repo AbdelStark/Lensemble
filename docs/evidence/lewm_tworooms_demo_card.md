@@ -28,7 +28,9 @@ Tapestry (AI Alliance), not its primitives and not its scale.
 | TwoRooms environment | A deterministic JS port of the upstream env at the released default variations, validated pixel-level against the dataset frames (max abs diff 1/255); labeled a TwoRooms-compatible probe with its deviations documented | `web/federated-demo/tworooms_env.mjs` |
 | Browser-local training | A bounded zero-init residual adapter (12,512 params) on the frozen predictor output, trained with manual-gradient Adam in the browser; SIGReg Epps–Pulley diagnostics ported exactly from `lensemble.model.sigreg` (torch parity ≤ 2e-7 rel); one-browser overfit on real latents: pred loss 0.0559 → 0.00061 | [adapter overfit](lewm_tworooms_adapter_overfit.json) |
 | Federation | `lewm-adapter-delta/1` bounded clipped deltas, validated server-side (schema, byte budget, shapes, norms, checkpoint/export-hash freshness, replay, fabricated-metric rejection) and aggregated as a deterministic per-round mean over a shared deterministic adapter init | `tests/ml/test_lewm_federation.py` |
-| Before/after probe | With the shipping federation math (2 participants × 3 rounds, disjoint real episodes), held-out validation MSE improved 0.0604 → 0.0530 (**+12.3%**, verdict `improved`); the frozen predictor's residual bias is systematic (cosine 0.97 across disjoint episodes) | [federated probe](lewm_tworooms_probe_check.json) |
+| Before/after probe (system-composed) | The headline number is produced by the **system the demo ships**: real node-trained adapter deltas flow through `FederatedDemoService.submit_update` (real validation) and `_close_round_lewm` (real deterministic-mean aggregation + hash-chained revisions), and the probe scores the **server-produced** final `modelRevisionId` — not an offline-recomputed mean. Held-out MSE improved 0.0604 → 0.0530 (**+12.3%**, verdict `improved`, 0 claim-audit violations) on the seed-`20260612` draw | [system-composed probe](lewm_tworooms_system_probe.json); offline math cross-check [federated probe](lewm_tworooms_probe_check.json) |
+| Seed robustness | The headline is not a single favorable draw: across 5 independent seeds / episode splits the system-composed probe improves on **every** seed with **no collapse** — mean +16.8%, worst case **+5.4%** (seed 2), best +32.6% | [seed sweep](lewm_tworooms_probe_seedsweep.json) |
+| Held-out collapse check | The gain is bias-correction, not the #259 held-out magnitude collapse: on the validation pairs the adapted latent std holds vs the frozen baseline (0.90 → 0.91) and effective rank is preserved (9.86 → 9.80), so an "improved" MSE cannot hide a collapse — a materially lower std/rank overrides the verdict to `collapse-risk` | held-out diagnostics in [system-composed probe](lewm_tworooms_system_probe.json) |
 | Honest failure states | Round metrics carry server-side health flags (effective-rank collapse, latent-std magnitude collapse, flat/worsened loss, SIGReg outliers); the dashboard probe reports `flat`/`worse` verdicts instead of hiding them — the first probe configuration **was** flat and is recorded as such in the development history | round metrics in every evidence export |
 
 ## Privacy and residency
@@ -46,8 +48,9 @@ This demo is **not**:
 - full from-scratch LeWorldModel base training inside every browser — it is bounded
   **checkpoint adaptation** around a frozen exported base;
 - production browser training;
-- paper-scale TwoRooms or PushT benchmark parity (the +12.3% probe result is a fixed validation
-  probe for this demo, not a benchmark win);
+- paper-scale TwoRooms or PushT benchmark parity (the +12.3% probe result is a fixed held-out
+  validation probe for this demo, single local coordinator with mean-of-clipped-deltas and no
+  robust aggregation / DP in this path, not a benchmark win);
 - a cryptographic proof of honest computation;
 - closed-loop physical robotics success;
 - evidence that raw participant data ever leaves the browser (it does not, and the audit gate
@@ -60,7 +63,9 @@ uv run python scripts/lewm_tworooms_ingest.py
 uv run --with onnx --with onnxscript --with onnxruntime python scripts/lewm_tworooms_export.py
 uv run --with onnxruntime --with hdf5plugin python scripts/lewm_tworooms_realdata_check.py --h5 <tworoom.h5>
 uv run --with onnxruntime --with hdf5plugin python scripts/lewm_adapter_overfit_check.py --h5 <tworoom.h5>
-uv run --with onnxruntime --with hdf5plugin python scripts/lewm_probe_check.py --h5 <tworoom.h5>
+uv run --with onnxruntime --with hdf5plugin python scripts/lewm_probe_check.py --h5 <tworoom.h5>     # offline math cross-check
+uv run --with onnxruntime --with hdf5plugin python scripts/lewm_system_probe.py --h5 <tworoom.h5>    # system-composed headline (#327)
+uv run --with onnxruntime --with hdf5plugin python scripts/lewm_probe_seedsweep.py --h5 <tworoom.h5> # seed robustness (#330)
 uv run lensemble demo federated --port 8765   # then create a real-lewm-tworooms run
 ```
 

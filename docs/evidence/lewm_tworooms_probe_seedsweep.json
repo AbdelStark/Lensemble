@@ -1,0 +1,101 @@
+{
+  "schema": "lewm-federated-probe-seedsweep/1",
+  "role": "system-composed-seed-robustness",
+  "protocol": "system-composed probe (real deltas through the real server aggregation path) repeated across independent seeds / episode splits; the headline cites the WORST-case draw, not the best. See docs/evidence/lewm_tworooms_system_probe.json for one full run.",
+  "checkpoint": {
+    "repoId": "quentinll/lewm-tworooms",
+    "revision": "77adaae0bc31deab21c93740d1f8bb947cd0bdec",
+    "weightsSha256": "566f223624ea4bfb39dbfe6ae731198dd6ea73b7b8919fed6b1ecafca810f7dd"
+  },
+  "seeds": [
+    20260612,
+    1,
+    2,
+    3,
+    4
+  ],
+  "distribution": {
+    "count": 5,
+    "relativeImprovementMean": 0.16787180214169914,
+    "relativeImprovementStdev": 0.10969915982049769,
+    "relativeImprovementMin": 0.054144202317108696,
+    "relativeImprovementMax": 0.32634644960379955,
+    "worstCaseSeed": 2,
+    "worstCaseRelativeImprovement": 0.054144202317108696,
+    "worstCaseVerdict": "improved",
+    "allSeedsImproved": true,
+    "anySeedCollapseRisk": false
+  },
+  "draws": [
+    {
+      "seed": 20260612,
+      "modelRevisionId": "lewmrev-ea70eb64581a",
+      "baselineMse": 0.06037891671884794,
+      "adaptedMse": 0.052967063077209414,
+      "relativeImprovement": 0.1227556578424805,
+      "verdict": "improved",
+      "displayVerdict": "improved",
+      "collapseRisk": false,
+      "validationPairs": 20,
+      "adaptedLatentStdMean": 0.9065777623713216,
+      "baselineLatentStdMean": 0.9040295390801578
+    },
+    {
+      "seed": 1,
+      "modelRevisionId": "lewmrev-9f571d11fe3f",
+      "baselineMse": 0.05465631368013404,
+      "adaptedMse": 0.03999362871562056,
+      "relativeImprovement": 0.26827065305435943,
+      "verdict": "improved",
+      "displayVerdict": "improved",
+      "collapseRisk": false,
+      "validationPairs": 20,
+      "adaptedLatentStdMean": 0.9454171562681694,
+      "baselineLatentStdMean": 0.9382769303526749
+    },
+    {
+      "seed": 2,
+      "modelRevisionId": "lewmrev-79875dc2d52d",
+      "baselineMse": 0.056426011238401186,
+      "adaptedMse": 0.05337086986996174,
+      "relativeImprovement": 0.054144202317108696,
+      "verdict": "improved",
+      "displayVerdict": "improved",
+      "collapseRisk": false,
+      "validationPairs": 20,
+      "adaptedLatentStdMean": 0.9146904239688216,
+      "baselineLatentStdMean": 0.9183200417798996
+    },
+    {
+      "seed": 3,
+      "modelRevisionId": "lewmrev-8f41f8b41e53",
+      "baselineMse": 0.07694770258859976,
+      "adaptedMse": 0.07172741286450098,
+      "relativeImprovement": 0.06784204789074755,
+      "verdict": "improved",
+      "displayVerdict": "improved",
+      "collapseRisk": false,
+      "validationPairs": 20,
+      "adaptedLatentStdMean": 1.0232354069863876,
+      "baselineLatentStdMean": 1.0168750979094572
+    },
+    {
+      "seed": 4,
+      "modelRevisionId": "lewmrev-7664fe2a8231",
+      "baselineMse": 0.07381022470165949,
+      "adaptedMse": 0.04972251992581425,
+      "relativeImprovement": 0.32634644960379955,
+      "verdict": "improved",
+      "displayVerdict": "improved",
+      "collapseRisk": false,
+      "validationPairs": 20,
+      "adaptedLatentStdMean": 0.9666895446048324,
+      "baselineLatentStdMean": 0.9658105154529578
+    }
+  ],
+  "passes": true,
+  "headline": "system-composed held-out MSE improvement across 5 seeds: mean 16.8%, worst 5.4% (seed 2); all seeds improved, no collapse.",
+  "nonClaims": [
+    "Seed-robustness of the system-composed adapter probe; not paper-scale TwoRooms benchmark parity and not production browser training."
+  ]
+}

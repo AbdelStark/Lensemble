@@ -165,6 +165,9 @@ def test_demo_card_links_every_gate_artifact() -> None:
         "lewm_tworooms_realdata_check.json",
         "lewm_tworooms_adapter_overfit.json",
         "lewm_tworooms_probe_check.json",
+        # epic #332: the system-composed headline + seed-robustness artifacts
+        "lewm_tworooms_system_probe.json",
+        "lewm_tworooms_probe_seedsweep.json",
     ):
         assert artifact in text, artifact
         assert (Path("docs/evidence") / artifact).is_file(), artifact
@@ -180,3 +183,15 @@ def test_demo_card_numbers_match_the_committed_evidence() -> None:
         Path("docs/evidence/lewm_tworooms_realdata_check.json").read_text()
     )
     assert f"{realdata['modelPredictionMse']:.3f}" in text
+    # the system-composed headline must match the committed evidence (it IS the headline now)
+    system = json.loads(
+        Path("docs/evidence/lewm_tworooms_system_probe.json").read_text()
+    )
+    assert system["role"] == "system-composed-headline"
+    assert f"+{system['result']['relativeImprovement'] * 100:.1f}%" in text
+    # the seed sweep's worst case is quoted (the headline cites the worst draw, not the best)
+    sweep = json.loads(
+        Path("docs/evidence/lewm_tworooms_probe_seedsweep.json").read_text()
+    )
+    worst = sweep["distribution"]["worstCaseRelativeImprovement"]
+    assert f"+{worst * 100:.1f}%" in text

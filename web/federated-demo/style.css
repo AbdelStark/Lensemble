@@ -739,6 +739,21 @@ canvas {
   font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
 }
 
+.claim-boundary {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  padding: 12px 14px;
+  margin: 14px 0;
+}
+
+.claim-boundary .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
 a {
   color: var(--accent-ink);
   text-decoration-thickness: 1px;

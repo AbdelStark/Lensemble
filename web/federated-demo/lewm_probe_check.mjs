@@ -17,7 +17,7 @@ import {
   trainAdapterOnPairs,
   computeAdapterDelta,
 } from "./lewm_adapter.mjs";
-import { scoreAdapterOnPairs } from "./lewm_probe.mjs";
+import { heldOutCollapseDiagnostics, predictOnPairs, scoreAdapterOnPairs } from "./lewm_probe.mjs";
 
 const path = process.argv[2];
 if (!path) {
@@ -76,6 +76,15 @@ let verdict = "flat";
 if (relativeImprovement > 0.02) verdict = "improved";
 else if (relativeImprovement < -0.02) verdict = "worse";
 
+// Held-out collapse diagnostics (#328): prove the MSE gain is bias-correction, not collapse.
+const diagnostics = heldOutCollapseDiagnostics({
+  baseline: predictOnPairs(null, validation),
+  adapted: predictOnPairs(adapted, validation),
+  n: validation.count,
+  d,
+});
+const displayVerdict = diagnostics.collapseRisk ? "collapse-risk" : verdict;
+
 console.log(
   JSON.stringify({
     rounds,
@@ -85,7 +94,11 @@ console.log(
     adaptedMse,
     relativeImprovement,
     verdict,
+    displayVerdict,
+    collapseRisk: diagnostics.collapseRisk,
+    collapseFlags: diagnostics.collapseFlags,
+    diagnostics,
     roundTelemetry,
   }),
 );
-if (verdict === "worse") process.exit(1);
+if (verdict === "worse" || diagnostics.collapseRisk) process.exit(1);

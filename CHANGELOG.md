@@ -17,6 +17,35 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ## [Unreleased]
 
+### Added
+
+- `area:eval`/`area:federation`: closed the LeWM federated-demo credibility gap (epic #332). The
+  headline probe number is now produced by the **system the demo ships**: `scripts/lewm_system_probe.py`
+  (core in `lensemble.eval.lewm_system_probe`) trains real adapter deltas in node and drives them
+  through `FederatedDemoService.submit_update` and `_close_round_lewm` (real validation + real
+  deterministic-mean aggregation + hash-chained revisions), then probes the **server-produced** final
+  `modelRevisionId` (#327, `docs/evidence/lewm_tworooms_system_probe.json`). The offline
+  `scripts/lewm_probe_check.py` is relabelled the math cross-check.
+- `area:eval`: the before/after probe now computes held-out collapse diagnostics — latent std,
+  effective rank, and SIGReg on the **validation** pairs for baseline AND adapted — and overrides a
+  naive "improved" MSE to `collapse-risk` when the adapted held-out std/rank materially drops below
+  the frozen baseline (the #259 blind spot). Surfaced in the dashboard probe and the evidence export,
+  with a node selftest asserting a magnitude-collapsed adapter is flagged even when its MSE improves
+  (#328).
+- `area:eval`/`area:ci`: `scripts/lewm_probe_seedsweep.py` runs the system-composed probe across
+  multiple seeds and reports the distribution and worst case (`docs/evidence/lewm_tworooms_probe_seedsweep.json`);
+  the demo card cites the worst draw, not the best. A dataset-free unit test exercises the composed
+  path on every CI run and a dataset-gated test regenerates the headline within tolerance to prevent
+  silent drift (#330).
+
+### Changed
+
+- `area:docs`/`area:observability`: the real-mode demo UI now renders the strict claim boundary
+  in-app (scoped chips + single-coordinator / mean-of-clipped-deltas note sourced from the run
+  snapshot), reworded the H1 to "Federate adapter updates on a real world-model checkpoint", and
+  labelled the probe badge as a held-out probe (not a benchmark) so a screenshot can no longer read
+  as full-model federated training (#329).
+
 ### Removed
 
 - `area:federation`: removed the off-spec `federation/outer.py`; `OuterOptimizer`,

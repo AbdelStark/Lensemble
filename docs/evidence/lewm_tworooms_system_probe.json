@@ -1,0 +1,104 @@
+{
+  "schema": "lewm-federated-probe/1",
+  "role": "system-composed-headline",
+  "seed": 20260612,
+  "protocol": "system-composed: server aggregation path. REAL node-trained adapter deltas -> FederatedDemoService.submit_update (real fail-closed validation) -> _close_round_lewm (real deterministic-mean aggregation + hash-chained revisions) -> held-out before/after probe on the SERVER-PRODUCED final modelRevisionId. No reimplemented coordinator mean.",
+  "checkpoint": {
+    "repoId": "quentinll/lewm-tworooms",
+    "revision": "77adaae0bc31deab21c93740d1f8bb947cd0bdec",
+    "weightsSha256": "566f223624ea4bfb39dbfe6ae731198dd6ea73b7b8919fed6b1ecafca810f7dd"
+  },
+  "runId": "run-8c2fwwza",
+  "modelRevisionId": "lewmrev-e53b75bbcb65",
+  "modelRevisionChain": [
+    "lewmrev-bda2eea17748",
+    "lewmrev-01c471ac58a4",
+    "lewmrev-e53b75bbcb65"
+  ],
+  "aggregateDeltaNorm": 0.81243194,
+  "adapterStateNorm": 2.43385238,
+  "serverOffsetParameterCount": 12512,
+  "trainPairsPerParticipant": [
+    40,
+    40
+  ],
+  "claimAuditViolations": 0,
+  "result": {
+    "probeVersion": "lewm-validation-probe/1",
+    "seed": 20260612,
+    "pairCount": 20,
+    "baselineMse": 0.06037891671884794,
+    "adaptedMse": 0.052967063077209414,
+    "relativeImprovement": 0.1227556578424805,
+    "verdict": "improved",
+    "displayVerdict": "improved",
+    "collapseRisk": false,
+    "collapseFlags": [],
+    "diagnostics": {
+      "baseline": {
+        "latentStdMean": 0.9040295390801578,
+        "effectiveRank": 9.860522985438644,
+        "effectiveRankRatio": 0.0513568905491596,
+        "sigregStatistic": 0.016371862411410806
+      },
+      "adapted": {
+        "latentStdMean": 0.9065777623713216,
+        "effectiveRank": 9.803875200771817,
+        "effectiveRankRatio": 0.05106185000401988,
+        "sigregStatistic": 0.01591906119402756
+      },
+      "collapseRisk": false,
+      "collapseFlags": []
+    },
+    "honest": true,
+    "rounds": 3,
+    "participants": 2,
+    "modelRevisionId": "lewmrev-e53b75bbcb65",
+    "roundTelemetry": [
+      {
+        "round": 1,
+        "losses": [
+          {
+            "first": 0.10105719,
+            "last": 0.05379378
+          },
+          {
+            "first": 0.06371932,
+            "last": 0.03211384
+          }
+        ]
+      },
+      {
+        "round": 2,
+        "losses": [
+          {
+            "first": 0.05429388,
+            "last": 0.03896894
+          },
+          {
+            "first": 0.05440327,
+            "last": 0.02523767
+          }
+        ]
+      },
+      {
+        "round": 3,
+        "losses": [
+          {
+            "first": 0.04709869,
+            "last": 0.02300809
+          },
+          {
+            "first": 0.03596551,
+            "last": 0.01568157
+          }
+        ]
+      }
+    ]
+  },
+  "passes": true,
+  "crossCheck": "docs/evidence/lewm_tworooms_probe_check.json (offline math cross-check; same protocol, reimplemented coordinator mean)",
+  "nonClaims": [
+    "System-composed before/after validation probe for the Tapestry-like demo's federated adapter path through the real server aggregation/validation code. Single local coordinator, mean-of-clipped-deltas (no robust aggregation / DP in this path); not paper-scale TwoRooms benchmark parity and not production browser training."
+  ]
+}

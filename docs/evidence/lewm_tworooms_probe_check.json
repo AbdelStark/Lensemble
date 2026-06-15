@@ -1,7 +1,8 @@
 {
   "schema": "lewm-federated-probe/1",
+  "role": "offline-math-cross-check",
   "seed": 20260612,
-  "protocol": "disjoint per-participant expert episodes -> shipping JS federation (shared init + offset, clipped deltas, deterministic mean) -> held-out validation pairs; before = identity adapter (frozen predictor), after = final global revision",
+  "protocol": "offline math cross-check: disjoint per-participant expert episodes -> shipping JS federation reimplemented inline (shared init + offset, clipped deltas, deterministic mean) -> held-out validation pairs; before = identity adapter (frozen predictor), after = final global revision. The system-composed headline is docs/evidence/lewm_tworooms_system_probe.json (scripts/lewm_system_probe.py).",
   "checkpoint": {
     "repoId": "quentinll/lewm-tworooms",
     "revision": "77adaae0bc31deab21c93740d1f8bb947cd0bdec",
@@ -19,6 +20,25 @@
     "adaptedMse": 0.05296706380249468,
     "relativeImprovement": 0.12275564583025336,
     "verdict": "improved",
+    "displayVerdict": "improved",
+    "collapseRisk": false,
+    "collapseFlags": [],
+    "diagnostics": {
+      "baseline": {
+        "latentStdMean": 0.9040295390801578,
+        "effectiveRank": 9.860522985438644,
+        "effectiveRankRatio": 0.0513568905491596,
+        "sigregStatistic": 0.016371862411410806
+      },
+      "adapted": {
+        "latentStdMean": 0.9065777602546818,
+        "effectiveRank": 9.803875214332578,
+        "effectiveRankRatio": 0.05106185007464884,
+        "sigregStatistic": 0.01591906086748467
+      },
+      "collapseRisk": false,
+      "collapseFlags": []
+    },
     "roundTelemetry": [
       {
         "round": 1,
@@ -63,6 +83,6 @@
   },
   "passes": true,
   "nonClaims": [
-    "Before/after validation probe for the Tapestry-like demo's federated adapter path; not paper-scale TwoRooms benchmark parity and not evidence of production browser training."
+    "Offline math cross-check for the Tapestry-like demo's federated adapter path; not the system-composed artifact, not paper-scale TwoRooms benchmark parity, and not evidence of production browser training."
   ]
 }

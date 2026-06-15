@@ -663,9 +663,9 @@ function renderHome() {
 
   app.append(
     el("section", { class: "panel hero" }, [
-      el("h1", { text: "Federate a world model across browsers" }),
+      el("h1", { text: "Federate adapter updates on a real world-model checkpoint" }),
       note(
-        "Each participant adapts a real LeWorldModel checkpoint right in their browser. Rollouts stay on the device, and only a small, bounded adapter update is shared. Rounds aggregate into hash-bound global revisions you can probe, inspect, and export.",
+        "Each participant adapts a real LeWorldModel checkpoint right in their browser: the world model stays frozen and only a small, bounded residual adapter on its predictor output trains and federates. Rollouts stay on the device; only the bounded adapter delta is shared. Rounds aggregate into hash-bound global revisions you can probe, inspect, and export.",
       ),
       el("p", {}, [
         el("span", { class: "chip", text: "quentinll/lewm-tworooms · 77adaae0bc31" }),
@@ -1039,6 +1039,7 @@ function buildBackendHostTree(run) {
         keyed("round-head", el("h2", { text: run.round > 0 ? `Round ${run.round} of ${run.config.rounds}` : "Waiting for participants" })),
         keyed("participant-slots", participantSlots(run)),
         ...runAnalytics(run),
+        run.runMode === "real-lewm-tworooms" ? keyed("claim-boundary", renderClaimBoundary(run)) : null,
         run.runMode === "real-lewm-tworooms" ? keyed("probe-head", el("h2", { text: "Before/after validation probe" })) : null,
         keyed("probe", renderRealModeProbe(run)),
         keyed("diag-head", el("h2", { text: "Training diagnostics" })),
@@ -1545,6 +1546,30 @@ const probeResults = new Map();
 // mid-probe rebuilds the button already-disabled and the reconciler preserves it.
 const probeInFlight = new Set();
 
+// Render the strict claim boundary IN the running UI (#329) — not just a footer link. The scoped
+// chips and the single-coordinator note make a screenshot of the H1 + probe badge read as what the
+// mechanics actually are: a bounded adapter on a frozen base, scored by a fixed held-out probe,
+// aggregated by one local coordinator. The full boundary text is sourced from the run snapshot
+// (run.claimBoundary === LEWM_CLAIM_BOUNDARY), never hardcoded divergently here.
+function renderClaimBoundary(run) {
+  if (run.runMode !== "real-lewm-tworooms") return null;
+  const chips = [
+    "bounded adapter on a frozen base",
+    "fixed held-out probe, not a benchmark",
+    "single local coordinator",
+  ];
+  return el("div", { class: "claim-boundary" }, [
+    el("div", { class: "chips" }, chips.map((text) => el("span", { class: "chip", text }))),
+    el("p", {
+      class: "note",
+      text: "Single local coordinator · mean-of-clipped-deltas (no robust aggregation / DP in this path). Only a 12,512-param (0.069%) zero-init residual adapter on the frozen predictor output trains and federates.",
+    }),
+    run.claimBoundary
+      ? el("p", { class: "note", text: run.claimBoundary })
+      : null,
+  ]);
+}
+
 function renderRealModeProbe(run) {
   if (run.runMode !== "real-lewm-tworooms") return null;
   const revisions = run.modelRevisions ?? [];
@@ -1601,6 +1626,8 @@ function renderRealModeProbe(run) {
 }
 
 function renderProbeResult(container, report) {
+  const diag = report.diagnostics ?? null;
+  const headlineVerdict = report.displayVerdict ?? report.verdict;
   const children = [
     el("div", { class: "metric-tiles" }, [
       metricTile("baseline mse", formatMetric(report.baselineMse, 6)),
@@ -1609,11 +1636,39 @@ function renderProbeResult(container, report) {
     ]),
     el("p", {}, [
       "Verdict: ",
-      stateBadge(report.verdict),
-      ` on ${report.pairCount} fixed validation pairs (seed ${report.seed}, ${report.modelRevisionId ?? "latest"}).`,
+      stateBadge(headlineVerdict),
+      ` on ${report.pairCount} fixed validation pairs (seed ${report.seed}, ${report.modelRevisionId ?? "latest"}). Held-out probe, not a benchmark.`,
     ]),
   ];
-  if (report.verdict !== "improved") {
+  // Held-out collapse diagnostics (#328): the same latent-std / effective-rank / SIGReg checks that
+  // #259 needed, now on the VALIDATION set for baseline vs adapted — proving the gain is
+  // bias-correction, not a magnitude/rank collapse that MSE alone cannot see.
+  if (diag) {
+    children.push(
+      el("p", { class: "note", text: "Held-out collapse diagnostics (baseline → adapted):" }),
+      el("div", { class: "metric-tiles" }, [
+        metricTile(
+          "latent std",
+          `${formatMetric(diag.baseline.latentStdMean, 3)} → ${formatMetric(diag.adapted.latentStdMean, 3)}`,
+        ),
+        metricTile(
+          "effective rank",
+          `${formatMetric(diag.baseline.effectiveRank, 2)} → ${formatMetric(diag.adapted.effectiveRank, 2)}`,
+        ),
+        metricTile(
+          "SIGReg",
+          `${formatMetric(diag.baseline.sigregStatistic, 3)} → ${formatMetric(diag.adapted.sigregStatistic, 3)}`,
+        ),
+      ]),
+    );
+  }
+  if (report.collapseRisk) {
+    children.push(
+      errorBox(
+        `Collapse risk overrides the MSE verdict: ${(report.collapseFlags ?? []).join("; ")}. An improved MSE under latent collapse is not a real win (the #259 failure mode).`,
+      ),
+    );
+  } else if (report.verdict !== "improved") {
     children.push(
       note(
         "The adapter revision did not beat the parent checkpoint on this probe. The result stands as reported, not hidden.",
