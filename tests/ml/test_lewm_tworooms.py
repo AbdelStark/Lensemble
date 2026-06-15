@@ -324,7 +324,7 @@ def test_rollout_truncates_history_to_predictor_window() -> None:
 
 def _cached_snapshot() -> Path | None:
     try:
-        from huggingface_hub import snapshot_download
+        from huggingface_hub import snapshot_download  # type: ignore
 
         return Path(
             snapshot_download(

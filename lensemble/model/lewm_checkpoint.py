@@ -97,7 +97,7 @@ def resolve_checkpoint(
         base = Path(local_dir)
     else:
         try:
-            from huggingface_hub import snapshot_download
+            from huggingface_hub import snapshot_download  # type: ignore
         except ImportError as exc:  # pragma: no cover - environment-dependent
             raise ArtifactError(
                 "huggingface_hub is required to download the TwoRooms checkpoint",
