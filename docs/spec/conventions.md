@@ -57,8 +57,8 @@ lensemble/
     secure_agg.py  masking.py
   privacy/                # DP clip+noise, (eps,delta) accountant                [RFC-0012]
     dp.py  accountant.py
-  data/                   # data layer, loaders, adapters, residency, probe      [RFC-0004]
-    dataset.py  loaders.py  adapters/  residency.py  probe.py
+  data/                   # data layer, window loader, adapters, residency, probe [RFC-0004]
+    dataset.py  adapters/  residency.py  probe.py
   provenance/             # episode hashing, Merkle, contribution ledger         [RFC-0014]
     merkle.py  commit.py  ledger.py
   eval/                   # latent MPC planner, eval harness, metrics            [RFC-0005]

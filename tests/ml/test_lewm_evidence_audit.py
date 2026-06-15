@@ -30,10 +30,16 @@ def _completed_real_evidence() -> dict[str, Any]:
     run = state["run"]
     p0, p1 = state["joins"]
     _submit(service, run, p0, _delta_artifact(run, p0, fill=2e-4, hash_suffix="aa"))
-    result = _submit(service, run, p1, _delta_artifact(run, p1, fill=4e-4, hash_suffix="bb"))
+    result = _submit(
+        service, run, p1, _delta_artifact(run, p1, fill=4e-4, hash_suffix="bb")
+    )
     round2 = result["run"]
-    _submit(service, round2, p0, _delta_artifact(round2, p0, fill=1e-4, hash_suffix="cc"))
-    _submit(service, round2, p1, _delta_artifact(round2, p1, fill=1e-4, hash_suffix="dd"))
+    _submit(
+        service, round2, p0, _delta_artifact(round2, p0, fill=1e-4, hash_suffix="cc")
+    )
+    _submit(
+        service, round2, p1, _delta_artifact(round2, p1, fill=1e-4, hash_suffix="dd")
+    )
     return service.export_evidence(run["id"])
 
 
@@ -47,19 +53,59 @@ def test_clean_real_run_evidence_passes_the_audit() -> None:
 @pytest.mark.parametrize(
     ("mutate", "needle"),
     [
-        (lambda e: e.__setitem__("nonClaimText", "A great Tapestry-like bounded demo."), "negate"),
-        (lambda e: e.__setitem__("nonClaimText", e["claimBoundary"].replace("Tapestry-like", "fancy")), "Tapestry-like"),
-        (lambda e: e["lewmBinding"]["checkpoint"].__setitem__("revision", "main"), "pinned 40-hex"),
-        (lambda e: e["lewmBinding"]["checkpoint"].__setitem__("weightsSha256", None), "weightsSha256"),
-        (lambda e: e["lewmBinding"].__setitem__("exportGraphHashes", {}), "exportGraphHashes"),
+        (
+            lambda e: e.__setitem__(
+                "nonClaimText", "A great Tapestry-like bounded demo."
+            ),
+            "negate",
+        ),
+        (
+            lambda e: e.__setitem__(
+                "nonClaimText", e["claimBoundary"].replace("Tapestry-like", "fancy")
+            ),
+            "Tapestry-like",
+        ),
+        (
+            lambda e: e["lewmBinding"]["checkpoint"].__setitem__("revision", "main"),
+            "pinned 40-hex",
+        ),
+        (
+            lambda e: e["lewmBinding"]["checkpoint"].__setitem__("weightsSha256", None),
+            "weightsSha256",
+        ),
+        (
+            lambda e: e["lewmBinding"].__setitem__("exportGraphHashes", {}),
+            "exportGraphHashes",
+        ),
         (lambda e: e["modelRevisions"][0].__setitem__("sha256", "short"), "sha256"),
-        (lambda e: e["modelRevisions"][1].__setitem__("parentModelRevisionId", "rev-unknown"), "unbound parent"),
-        (lambda e: e["modelRevisions"][0]["baseCheckpoint"].__setitem__("revision", "f" * 40), "not bound to the pinned checkpoint"),
+        (
+            lambda e: e["modelRevisions"][1].__setitem__(
+                "parentModelRevisionId", "rev-unknown"
+            ),
+            "unbound parent",
+        ),
+        (
+            lambda e: e["modelRevisions"][0]["baseCheckpoint"].__setitem__(
+                "revision", "f" * 40
+            ),
+            "not bound to the pinned checkpoint",
+        ),
         (lambda e: e["roundMetrics"][0].pop("healthFlags"), "health flags"),
-        (lambda e: e["roundMetrics"][0].pop("sigregStatisticMean"), "sigregStatisticMean"),
-        (lambda e: e["privacy"].__setitem__("secureAggregation", "secure aggregation protects all updates"), "privacy.secureAggregation"),
+        (
+            lambda e: e["roundMetrics"][0].pop("sigregStatisticMean"),
+            "sigregStatisticMean",
+        ),
+        (
+            lambda e: e["privacy"].__setitem__(
+                "secureAggregation", "secure aggregation protects all updates"
+            ),
+            "privacy.secureAggregation",
+        ),
         (lambda e: e.__setitem__("leak", {"delta": [1.0, 2.0]}), "forbidden content"),
-        (lambda e: e.__setitem__("note", "this is a benchmark win over local-only"), "overclaim"),
+        (
+            lambda e: e.__setitem__("note", "this is a benchmark win over local-only"),
+            "overclaim",
+        ),
         (lambda e: e.__setitem__("runMode", "surrogate-swipe-dot"), "runMode"),
     ],
 )
@@ -130,5 +176,7 @@ def test_demo_card_numbers_match_the_committed_evidence() -> None:
     assert probe["result"]["verdict"] == "improved"
     rel = probe["result"]["relativeImprovement"]
     assert f"+{rel * 100:.1f}%" in text
-    realdata = json.loads(Path("docs/evidence/lewm_tworooms_realdata_check.json").read_text())
+    realdata = json.loads(
+        Path("docs/evidence/lewm_tworooms_realdata_check.json").read_text()
+    )
     assert f"{realdata['modelPredictionMse']:.3f}" in text

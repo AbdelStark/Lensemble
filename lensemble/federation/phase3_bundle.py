@@ -12,6 +12,7 @@ from typing import Any, Literal, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from lensemble.artifacts.hashing import sha256_file
 from lensemble.config.consortium import (
     Phase3ConsortiumManifest,
     write_consortium_manifest,
@@ -657,12 +658,6 @@ def validate_phase3_bundle_residency(raw: dict[str, Any]) -> None:
     """Reject obvious private fields, secrets, and host-local paths in bundle JSON."""
 
     _scan_bundle(raw, path="bundle")
-
-
-def sha256_file(path: Path) -> str:
-    """Return the SHA-256 digest of a local file."""
-
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def _manifest_summary(

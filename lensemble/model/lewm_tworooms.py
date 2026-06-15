@@ -113,7 +113,9 @@ class LeWMTwoRoomsConfig:
 
         for key, expected in _EXPECTED_TARGETS.items():
             actual = (
-                config.get("_target_") if key == "_target_" else _section(key).get("_target_")
+                config.get("_target_")
+                if key == "_target_"
+                else _section(key).get("_target_")
             )
             if actual != expected:
                 raise ConfigError(
@@ -281,13 +283,17 @@ class HFViT(nn.Module):
     class _PatchEmbeddings(nn.Module):
         def __init__(self, dim: int, patch_size: int) -> None:
             super().__init__()
-            self.projection = nn.Conv2d(3, dim, kernel_size=patch_size, stride=patch_size)
+            self.projection = nn.Conv2d(
+                3, dim, kernel_size=patch_size, stride=patch_size
+            )
 
     class _Embeddings(nn.Module):
         def __init__(self, dim: int, patch_size: int, num_patches: int) -> None:
             super().__init__()
             self.cls_token = nn.Parameter(torch.zeros(1, 1, dim))
-            self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, dim))
+            self.position_embeddings = nn.Parameter(
+                torch.zeros(1, num_patches + 1, dim)
+            )
             self.patch_embeddings = HFViT._PatchEmbeddings(dim, patch_size)
 
     class _LayerStack(nn.Module):
@@ -296,7 +302,9 @@ class HFViT(nn.Module):
             super().__init__()
             self.layer = nn.ModuleList(_HFViTLayer(dim, heads) for _ in range(layers))
 
-    def __init__(self, image_size: int, patch_size: int, dim: int, layers: int, heads: int) -> None:
+    def __init__(
+        self, image_size: int, patch_size: int, dim: int, layers: int, heads: int
+    ) -> None:
         super().__init__()
         side = image_size // patch_size
         num_patches = side * side
@@ -379,7 +387,9 @@ class _LeWMFeedForward(nn.Module):
 class _LeWMConditionalBlock(nn.Module):
     """Upstream ``module.ConditionalBlock``: AdaLN-zero conditioning on the action embedding."""
 
-    def __init__(self, dim: int, heads: int, dim_head: int, mlp_dim: int, dropout: float) -> None:
+    def __init__(
+        self, dim: int, heads: int, dim_head: int, mlp_dim: int, dropout: float
+    ) -> None:
         super().__init__()
         self.attn = _LeWMAttention(dim, heads, dim_head, dropout)
         self.mlp = _LeWMFeedForward(dim, mlp_dim, dropout)
@@ -416,13 +426,19 @@ class _LeWMTransformer(nn.Module):
         super().__init__()
         self.norm = nn.LayerNorm(hidden_dim)
         self.input_proj = (
-            nn.Linear(input_dim, hidden_dim) if input_dim != hidden_dim else nn.Identity()
+            nn.Linear(input_dim, hidden_dim)
+            if input_dim != hidden_dim
+            else nn.Identity()
         )
         self.cond_proj = (
-            nn.Linear(input_dim, hidden_dim) if input_dim != hidden_dim else nn.Identity()
+            nn.Linear(input_dim, hidden_dim)
+            if input_dim != hidden_dim
+            else nn.Identity()
         )
         self.output_proj = (
-            nn.Linear(hidden_dim, output_dim) if hidden_dim != output_dim else nn.Identity()
+            nn.Linear(hidden_dim, output_dim)
+            if hidden_dim != output_dim
+            else nn.Identity()
         )
         self.layers = nn.ModuleList(
             _LeWMConditionalBlock(hidden_dim, heads, dim_head, mlp_dim, dropout)
@@ -523,12 +539,20 @@ class LeWMTwoRooms(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.encoder = HFViT(
-            cfg.image_size, cfg.patch_size, cfg.hidden_dim, cfg.vit_layers, cfg.vit_heads
+            cfg.image_size,
+            cfg.patch_size,
+            cfg.hidden_dim,
+            cfg.vit_layers,
+            cfg.vit_heads,
         )
         self.predictor = LeWMPredictor(cfg)
         self.action_encoder = ActionEmbedder(cfg.action_input_dim, cfg.action_emb_dim)
-        self.projector = ProjectionMLP(cfg.hidden_dim, cfg.proj_hidden_dim, cfg.hidden_dim)
-        self.pred_proj = ProjectionMLP(cfg.hidden_dim, cfg.proj_hidden_dim, cfg.hidden_dim)
+        self.projector = ProjectionMLP(
+            cfg.hidden_dim, cfg.proj_hidden_dim, cfg.hidden_dim
+        )
+        self.pred_proj = ProjectionMLP(
+            cfg.hidden_dim, cfg.proj_hidden_dim, cfg.hidden_dim
+        )
 
     def encode_frames(self, pixels: Tensor) -> Tensor:
         """``(B, T, 3, H, W)`` pixels → projected CLS latents ``(B, T, D)``."""
@@ -586,7 +610,9 @@ def build_lewm_tworooms(config: dict[str, Any] | LeWMTwoRoomsConfig) -> LeWMTwoR
     return model
 
 
-def load_lewm_state_dict(model: LeWMTwoRooms, state_dict: dict[str, Tensor]) -> LeWMTwoRooms:
+def load_lewm_state_dict(
+    model: LeWMTwoRooms, state_dict: dict[str, Tensor]
+) -> LeWMTwoRooms:
     """Strictly load the released ``weights.pt`` state dict into the reconstruction.
 
     Unknown tensor names, missing tensor names, and shape mismatches each raise
@@ -604,9 +630,7 @@ def load_lewm_state_dict(model: LeWMTwoRooms, state_dict: dict[str, Tensor]) -> 
             code=LensembleErrorCode.CHECKPOINT_INTEGRITY,
             remediation="use the unmodified weights.pt from the pinned checkpoint revision",
         )
-    mismatched = sorted(
-        name for name in expected if expected[name] != provided[name]
-    )
+    mismatched = sorted(name for name in expected if expected[name] != provided[name])
     if mismatched:
         raise CheckpointIntegrityError(
             f"tensor shape mismatch for {mismatched[:5]} (and {max(0, len(mismatched) - 5)} more)",

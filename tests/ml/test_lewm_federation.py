@@ -53,7 +53,12 @@ def _service() -> FederatedDemoService:
 
 def _real_run(service: FederatedDemoService, participants: int = 2) -> dict[str, Any]:
     run = service.create_run(
-        {"maxParticipants": participants, "quorum": participants, "rounds": 2, "mode": REAL_LEWM_MODE}
+        {
+            "maxParticipants": participants,
+            "quorum": participants,
+            "rounds": 2,
+            "mode": REAL_LEWM_MODE,
+        }
     )
     joins = []
     for index in range(participants):
@@ -81,7 +86,11 @@ def _delta_artifact(
         "round": run["round"],
         "roundId": f"{run['id']}:round-{run['round']}",
         "modelRevisionId": run["currentModelRevisionId"],
-        "baseCheckpoint": {"repoId": "quentinll/lewm-tworooms", "revision": REVISION, "weightsSha256": WEIGHTS_SHA},
+        "baseCheckpoint": {
+            "repoId": "quentinll/lewm-tworooms",
+            "revision": REVISION,
+            "weightsSha256": WEIGHTS_SHA,
+        },
         "exportGraphHashes": {name: entry["sha256"] for name, entry in GRAPHS.items()},
         "adapterSpec": lewm_adapter_spec(),
         "dtype": "float32",
@@ -109,7 +118,12 @@ def _delta_artifact(
     return artifact
 
 
-def _submit(service: FederatedDemoService, run: dict[str, Any], join: dict[str, Any], artifact: dict[str, Any]) -> dict[str, Any]:
+def _submit(
+    service: FederatedDemoService,
+    run: dict[str, Any],
+    join: dict[str, Any],
+    artifact: dict[str, Any],
+) -> dict[str, Any]:
     return service.submit_update(
         run["id"],
         join["participantId"],
@@ -126,7 +140,9 @@ def _submit(service: FederatedDemoService, run: dict[str, Any], join: dict[str, 
 def test_real_mode_requires_export_manifest() -> None:
     bare = FederatedDemoService()
     with pytest.raises(FederatedDemoError, match="real_mode_unavailable|export"):
-        bare.create_run({"maxParticipants": 2, "quorum": 1, "rounds": 1, "mode": REAL_LEWM_MODE})
+        bare.create_run(
+            {"maxParticipants": 2, "quorum": 1, "rounds": 1, "mode": REAL_LEWM_MODE}
+        )
     # surrogate mode stays available without the manifest
     run = bare.create_run({"maxParticipants": 2, "quorum": 1, "rounds": 1})
     assert run["runMode"] == "surrogate-swipe-dot"
@@ -146,7 +162,14 @@ def test_real_run_snapshot_carries_binding_and_claim_boundary() -> None:
 
 def test_unknown_mode_rejected() -> None:
     with pytest.raises(FederatedDemoError, match="unknown run mode"):
-        _service().create_run({"maxParticipants": 2, "quorum": 1, "rounds": 1, "mode": "surrogate-vector-2"})
+        _service().create_run(
+            {
+                "maxParticipants": 2,
+                "quorum": 1,
+                "rounds": 1,
+                "mode": "surrogate-vector-2",
+            }
+        )
 
 
 def test_real_run_rejects_surrogate_schema() -> None:
@@ -182,11 +205,25 @@ def test_surrogate_run_rejects_adapter_schema() -> None:
         (lambda a: a.__setitem__("delta", a["delta"][:-1]), "exactly"),
         (lambda a: a.__setitem__("parameterCount", PARAMS - 1), "parameterCount"),
         (lambda a: a.__setitem__("dtype", "float64"), "float32"),
-        (lambda a: a.__setitem__("adapterSpec", [{"name": "w1", "shape": [1, 1]}]), "adapterSpec"),
-        (lambda a: a.__setitem__("modelRevisionId", "lewmrev-deadbeef"), "stale_model_revision|active model revision"),
+        (
+            lambda a: a.__setitem__("adapterSpec", [{"name": "w1", "shape": [1, 1]}]),
+            "adapterSpec",
+        ),
+        (
+            lambda a: a.__setitem__("modelRevisionId", "lewmrev-deadbeef"),
+            "stale_model_revision|active model revision",
+        ),
         (lambda a: a.__setitem__("round", 99), "round"),
-        (lambda a: a["baseCheckpoint"].__setitem__("revision", "f" * 40), "pinned checkpoint"),
-        (lambda a: a["exportGraphHashes"].__setitem__("lewm_tworooms_encoder.onnx", "ee" * 32), "exportGraphHashes"),
+        (
+            lambda a: a["baseCheckpoint"].__setitem__("revision", "f" * 40),
+            "pinned checkpoint",
+        ),
+        (
+            lambda a: a["exportGraphHashes"].__setitem__(
+                "lewm_tworooms_encoder.onnx", "ee" * 32
+            ),
+            "exportGraphHashes",
+        ),
         (lambda a: a.__setitem__("hash", "zz"), "hex"),
         (lambda a: a.__setitem__("rawFrames", [1, 2, 3]), "raw"),
         (lambda a: a.__setitem__("delta", [float("nan")] * PARAMS), "finite|numeric"),
@@ -244,7 +281,9 @@ def test_round_aggregates_deltas_into_bound_adapter_revision() -> None:
     run = state["run"]
     p0, p1 = state["joins"]
     _submit(service, run, p0, _delta_artifact(run, p0, fill=2e-4, hash_suffix="aa"))
-    result = _submit(service, run, p1, _delta_artifact(run, p1, fill=4e-4, hash_suffix="bb"))
+    result = _submit(
+        service, run, p1, _delta_artifact(run, p1, fill=4e-4, hash_suffix="bb")
+    )
 
     snapshot = result["run"]
     assert snapshot["round"] == 2  # round 1 closed, round 2 assigned
@@ -273,14 +312,22 @@ def test_adapter_state_accumulates_across_rounds() -> None:
     run = state["run"]
     p0, p1 = state["joins"]
     _submit(service, run, p0, _delta_artifact(run, p0, fill=2e-4, hash_suffix="aa"))
-    result = _submit(service, run, p1, _delta_artifact(run, p1, fill=4e-4, hash_suffix="bb"))
+    result = _submit(
+        service, run, p1, _delta_artifact(run, p1, fill=4e-4, hash_suffix="bb")
+    )
     round2 = result["run"]
-    _submit(service, round2, p0, _delta_artifact(round2, p0, fill=1e-4, hash_suffix="cc"))
-    result = _submit(service, round2, p1, _delta_artifact(round2, p1, fill=1e-4, hash_suffix="dd"))
+    _submit(
+        service, round2, p0, _delta_artifact(round2, p0, fill=1e-4, hash_suffix="cc")
+    )
+    result = _submit(
+        service, round2, p1, _delta_artifact(round2, p1, fill=1e-4, hash_suffix="dd")
+    )
     final = result["run"]
     assert final["state"] == "completed"
     last = final["modelRevisions"][-1]
-    assert last["parentModelRevisionId"] == final["modelRevisions"][0]["modelRevisionId"]
+    assert (
+        last["parentModelRevisionId"] == final["modelRevisions"][0]["modelRevisionId"]
+    )
     served = service.model_revision(final["id"], last["modelRevisionId"])
     assert served["adapterState"][0] == pytest.approx(3e-4 + 1e-4, abs=1e-9)
     metrics = final["roundMetrics"]
@@ -340,7 +387,8 @@ def test_full_size_delta_passes_the_http_transport() -> None:
             {"maxParticipants": 1, "quorum": 1, "rounds": 1, "mode": REAL_LEWM_MODE},
         )
         join = post(
-            f"/api/runs/{run['id']}/join", {"joinToken": run["joinToken"], "displayName": "p"}
+            f"/api/runs/{run['id']}/join",
+            {"joinToken": run["joinToken"], "displayName": "p"},
         )
         post(f"/api/runs/{run['id']}/control", {"action": "start"})
         snapshot = service.snapshot(run["id"])
@@ -373,7 +421,9 @@ def test_progress_and_manual_mode_flow_unchanged_in_real_mode() -> None:
         participant_token=join["participantToken"],
         progress=0.4,
     )
-    artifact = _delta_artifact(snapshot, join, hash_suffix="ee", participantMode="manual")
+    artifact = _delta_artifact(
+        snapshot, join, hash_suffix="ee", participantMode="manual"
+    )
     result = _submit(service, snapshot, join, artifact)
     assert result["run"]["state"] == "completed"
     participant = result["run"]["participants"][0]

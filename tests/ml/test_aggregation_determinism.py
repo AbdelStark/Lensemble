@@ -21,7 +21,7 @@ from lensemble.federation import (
     assert_bitwise_reproducible,
     build_pseudogradient,
 )
-from lensemble.federation.outer import _content_hash
+from lensemble.federation.outer_optimizer import _content_hash
 
 # A delta-build reproducible in this process and in a subprocess (seeded, fixed shapes/order).
 _BUILD = """

@@ -46,7 +46,9 @@ def test_dashboard_mounts_analytics_above_probe_and_timeline() -> None:
         dashboard.index("metricsList(run)"),
         dashboard.index("timelineList(run.events)"),
     ]
-    assert order == sorted(order), "analytics → probe → diagnostics → metrics → timeline"
+    assert order == sorted(order), (
+        "analytics → probe → diagnostics → metrics → timeline"
+    )
     assert "runStatusStrip(run)" in app
     assert "participantLossSeries" in app
 
@@ -56,7 +58,10 @@ def test_host_form_creates_real_mode_runs_only() -> None:
     app = (WEB_DIR / "app.mjs").read_text(encoding="utf-8")
     assert 'mode: "real-lewm-tworooms"' in app  # hardcoded in the create config
     assert "runModeSelect" not in app  # no learner-path selector
-    assert "frontend-simulator" not in app.split("function renderHome")[1].split("function ")[0]
+    assert (
+        "frontend-simulator"
+        not in app.split("function renderHome")[1].split("function ")[0]
+    )
 
 
 def test_learner_dispatch_has_no_silent_fallback() -> None:

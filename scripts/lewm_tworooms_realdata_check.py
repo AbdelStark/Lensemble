@@ -33,7 +33,9 @@ def _args() -> argparse.Namespace:
         "--model-dir", type=Path, default=Path("web/federated-demo/model/lewm-tworooms")
     )
     parser.add_argument(
-        "--out", type=Path, default=Path("docs/evidence/lewm_tworooms_realdata_check.json")
+        "--out",
+        type=Path,
+        default=Path("docs/evidence/lewm_tworooms_realdata_check.json"),
     )
     parser.add_argument("--episodes", type=int, default=24)
     parser.add_argument("--seed", type=int, default=20260612)
@@ -47,8 +49,12 @@ def main() -> None:
 
     args = _args()
     providers = ["CPUExecutionProvider"]
-    enc = ort.InferenceSession(args.model_dir / "lewm_tworooms_encoder.onnx", providers=providers)
-    act = ort.InferenceSession(args.model_dir / "lewm_tworooms_action.onnx", providers=providers)
+    enc = ort.InferenceSession(
+        args.model_dir / "lewm_tworooms_encoder.onnx", providers=providers
+    )
+    act = ort.InferenceSession(
+        args.model_dir / "lewm_tworooms_action.onnx", providers=providers
+    )
     pred = ort.InferenceSession(
         args.model_dir / "lewm_tworooms_predictor.onnx", providers=providers
     )
@@ -63,13 +69,17 @@ def main() -> None:
         pixels_ds = cast(h5py.Dataset, f["pixels"])
         actions_ds = cast(h5py.Dataset, f["action"])
         candidates = np.flatnonzero(lengths >= 21)
-        chosen = rng.choice(candidates, size=min(args.episodes, len(candidates)), replace=False)
+        chosen = rng.choice(
+            candidates, size=min(args.episodes, len(candidates)), replace=False
+        )
         for ep in sorted(int(e) for e in chosen):
             start = int(offsets[ep])
             idx = [start, start + 5, start + 10, start + 15]
             frames = (pixels_ds[idx].astype(np.float32) / 255.0).transpose(0, 3, 1, 2)
             latents = enc.run(None, {"pixels": frames})[0]  # (4, D)
-            actions = actions_ds[start : start + 15].astype(np.float32).reshape(1, 3, 10)
+            actions = (
+                actions_ds[start : start + 15].astype(np.float32).reshape(1, 3, 10)
+            )
             act_emb = act.run(None, {"actions": actions})[0]
             preds = pred.run(
                 None, {"latents": latents[:3][None], "action_embeddings": act_emb}
@@ -98,9 +108,25 @@ def main() -> None:
         ],
     }
     args.out.write_text(json.dumps(report, indent=2) + "\n")
-    print(json.dumps({k: report[k] for k in ("episodes", "modelPredictionMse", "copyLastBaselineMse", "modelOverBaselineRatio", "passes")}, indent=2))
+    print(
+        json.dumps(
+            {
+                k: report[k]
+                for k in (
+                    "episodes",
+                    "modelPredictionMse",
+                    "copyLastBaselineMse",
+                    "modelOverBaselineRatio",
+                    "passes",
+                )
+            },
+            indent=2,
+        )
+    )
     if not report["passes"]:
-        raise SystemExit("real-data check FAILED: the exported pipeline does not beat copy-last")
+        raise SystemExit(
+            "real-data check FAILED: the exported pipeline does not beat copy-last"
+        )
 
 
 if __name__ == "__main__":

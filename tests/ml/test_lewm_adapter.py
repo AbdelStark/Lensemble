@@ -67,7 +67,9 @@ def test_js_sigreg_port_matches_torch_reference() -> None:
 def test_adapter_overfit_evidence_passes() -> None:
     committed = Path("docs/evidence/lewm_tworooms_adapter_overfit.json")
     if not committed.is_file():
-        pytest.skip("overfit evidence not generated yet (scripts/lewm_adapter_overfit_check.py)")
+        pytest.skip(
+            "overfit evidence not generated yet (scripts/lewm_adapter_overfit_check.py)"
+        )
     evidence = json.loads(committed.read_text())
     assert evidence["schema"] == "lewm-adapter-overfit/1"
     assert evidence["passes"] is True

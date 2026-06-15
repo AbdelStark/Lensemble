@@ -343,9 +343,7 @@ def make_handler(service: FederatedDemoService) -> type[BaseHTTPRequestHandler]:
                 while True:
                     text: str | None = ""
                     try:
-                        text = _read_ws_text(
-                            self.connection, max_bytes=ws_max_bytes
-                        )
+                        text = _read_ws_text(self.connection, max_bytes=ws_max_bytes)
                     except socket.timeout:
                         text = ""
                     if text is None:
@@ -539,7 +537,9 @@ def make_handler(service: FederatedDemoService) -> type[BaseHTTPRequestHandler]:
             return None
 
         def _read_json(self, max_bytes: int | None = None) -> dict[str, Any]:
-            limit = max_bytes if max_bytes is not None else service.safety.max_message_bytes
+            limit = (
+                max_bytes if max_bytes is not None else service.safety.max_message_bytes
+            )
             length = int(self.headers.get("Content-Length", "0"))
             if length > limit:
                 raise FederatedDemoError(
@@ -640,7 +640,11 @@ def load_lewm_manifest(path: str | None = None) -> dict | None:
     unreadable manifest returns None: the server starts with the real mode unavailable (creating
     a real-mode run then fails closed with `real_mode_unavailable`).
     """
-    candidate = Path(path) if path else Path("web/federated-demo/model/lewm-tworooms/manifest.json")
+    candidate = (
+        Path(path)
+        if path
+        else Path("web/federated-demo/model/lewm-tworooms/manifest.json")
+    )
     try:
         manifest = json.loads(candidate.read_text())
     except (OSError, json.JSONDecodeError):

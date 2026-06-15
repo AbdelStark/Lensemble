@@ -98,7 +98,11 @@ def main() -> None:
         model, args.out_dir, opset=args.opset, action_stats=action_stats
     )
     parity = onnxruntime_parity(
-        model, paths, atol=args.atol, require=not args.skip_parity, action_stats=action_stats
+        model,
+        paths,
+        atol=args.atol,
+        require=not args.skip_parity,
+        action_stats=action_stats,
     )
     import hashlib
 

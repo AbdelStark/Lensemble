@@ -17,8 +17,22 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ## [Unreleased]
 
+### Removed
+
+- `area:federation`: removed the off-spec `federation/outer.py`; `OuterOptimizer`,
+  `assert_bitwise_reproducible`, and the `INV-AGG-DETERMINISM` content-hash helper now live in the
+  spec-mandated `federation/outer_optimizer.py` ([01-architecture](docs/spec/01-architecture.md),
+  [RFC-0013](docs/rfcs/RFC-0013-coordinator-runtime.md)). The `lensemble.federation` public
+  re-exports are unchanged.
+- `area:data`: removed the empty `data/loaders.py` scaffold stub; the fixed-`num_steps` `Window`
+  loader (RFC-0004) is provided by `data.dataset.EpisodeDataset`. Dropped from the `data/` file list
+  in [01-architecture](docs/spec/01-architecture.md) and [conventions §1](docs/spec/conventions.md).
+
 ### Changed
 
+- `area:artifacts`: consolidated six duplicate file-SHA-256 helpers into one chunked
+  `artifacts.hashing.sha256_file`; the Phase 3 evidence/bundle paths now stream large checkpoint
+  weight files instead of reading them whole into memory (`INV-CHECKPOINT-HASH` output unchanged).
 - `area:federation`: Require Phase 3 evidence-bundle validation to bind the
   run-manifest, final checkpoint header, and final checkpoint weights artifact
   checks to the same SHA-256 hashes recorded in the training summary, while

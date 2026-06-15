@@ -117,6 +117,20 @@ def content_hash(weights: Mapping[str, "Tensor"], fields: StructuralFields) -> s
     return h.hexdigest()
 
 
+def sha256_file(path: Path) -> str:
+    """SHA-256 hex digest of a file's raw bytes, read in 1 MiB chunks.
+
+    Streaming keeps the digest memory-bounded for large weight shards; the result
+    is identical to hashing the whole byte string at once. Distinct from
+    :func:`content_hash`, which hashes the structural weight frame (RFC-0010 4).
+    """
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def read_header(artifact_dir: Path) -> CheckpointHeader:
     """Read and validate ``header.json`` (``schema_version`` first); fail closed (RFC-0010 7)."""
     path = Path(artifact_dir) / _HEADER

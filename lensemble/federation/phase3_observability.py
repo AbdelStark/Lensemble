@@ -9,7 +9,6 @@ weights, tokens, secrets, or sensitive host-local paths.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import shutil
@@ -19,6 +18,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from lensemble.artifacts.hashing import sha256_file
 from lensemble.data.phase3 import (
     phase3_registry_from_consortium_manifest,
     validate_phase3_registry_against_manifest,
@@ -396,8 +396,8 @@ def build_phase3_observability_report(
     eval_path = Path(eval_report_path)
     long_run = load_phase3_long_run_report(long_run_path)
     eval_report = load_phase3_eval_report(eval_path)
-    long_run_sha = _sha256_file(long_run_path)
-    eval_sha = _sha256_file(eval_path)
+    long_run_sha = sha256_file(long_run_path)
+    eval_sha = sha256_file(eval_path)
     dropout = _run_induced_dropout_smoke(run_dir=Path(run_dir))
     participant_ids = tuple(
         participant.participant_id for participant in long_run.participants
@@ -635,7 +635,7 @@ def _run_induced_dropout_smoke(*, run_dir: Path) -> _DropoutArtifacts:
         round_summary=round_summary,
         decision=decision,
         trace_exists=trace_path.exists(),
-        trace_sha256=_sha256_file(trace_path),
+        trace_sha256=sha256_file(trace_path),
         checkpoint_dir_exists=(run_dir / "coordinator-artifacts").exists(),
     )
 
@@ -822,7 +822,7 @@ def _artifact_status(
         uri=uri,
         status="available" if exists else "declared",
         exists=exists,
-        sha256=_sha256_file(path) if exists and Path(path).is_file() else None,
+        sha256=sha256_file(path) if exists and Path(path).is_file() else None,
         notes=notes,
     )
 
@@ -939,10 +939,6 @@ def _scan_for_sensitive_surfaces(value: Any, *, path: str) -> None:
                 code=LensembleErrorCode.CONFIG_INVALID,
                 remediation="publish artifact URIs or repo-relative evidence paths instead",
             )
-
-
-def _sha256_file(path: Path) -> str:
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 __all__ = [

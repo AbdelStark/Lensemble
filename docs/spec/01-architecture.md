@@ -34,7 +34,7 @@ under a module named `_internal` or prefixed with `_` is private and unversioned
 | `federation/` | DiLoCo outer loop, round state machine, roles. Files: `coordinator.py`, `participant.py`, `round.py`, `outer_optimizer.py`. | [RFC-0003](../rfcs/RFC-0003-federated-protocol.md), [RFC-0013](../rfcs/RFC-0013-coordinator-runtime.md) | public |
 | `aggregation/` | Secure aggregation (pairwise masking / TEE) and the deterministic summation. Files: `secure_agg.py`, `masking.py`. | [RFC-0011](../rfcs/RFC-0011-secure-aggregation.md) | internal |
 | `privacy/` | DP clip+noise mechanism and the $(\varepsilon,\delta)$ accountant. Files: `dp.py`, `accountant.py`. | [RFC-0012](../rfcs/RFC-0012-differential-privacy.md) | public (accountant), internal (mechanism) |
-| `data/` | Data layer, loaders, embodiment adapters, residency enforcement, public probe. Files: `dataset.py`, `loaders.py`, `adapters/`, `residency.py`, `probe.py`. | [RFC-0004](../rfcs/RFC-0004-data-provenance.md) | public |
+| `data/` | Data layer, window loader, embodiment adapters, residency enforcement, public probe. Files: `dataset.py` (the `EpisodeDataset` window loader), `adapters/`, `residency.py`, `probe.py`. | [RFC-0004](../rfcs/RFC-0004-data-provenance.md) | public |
 | `provenance/` | Episode hashing, Merkle tree, contribution ledger. Files: `merkle.py`, `commit.py`, `ledger.py`. | [RFC-0014](../rfcs/RFC-0014-provenance-commitments.md) | public |
 | `eval/` | Latent MPC planner, eval harness, metrics. Files: `mpc.py`, `harness.py`, `metrics.py`. | [RFC-0005](../rfcs/RFC-0005-evaluation.md) | public |
 | `config/` | Structured config schema, run manifest, seeding. Files: `schema.py`, `manifest.py`, `seed.py`. | [RFC-0009](../rfcs/RFC-0009-configuration-reproducibility.md) | public |

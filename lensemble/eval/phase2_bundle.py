@@ -7,7 +7,6 @@ that referenced Hub artifacts exist before it emits the final model-card text.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import urllib.error
 import urllib.parse
@@ -510,12 +509,6 @@ def write_phase2_bundle_outputs(
         encoding="utf-8",
     )
     model_card_path.write_text(bundle.model_card_markdown, encoding="utf-8")
-
-
-def sha256_file(path: Path) -> str:
-    """Return the SHA-256 digest of a local file."""
-
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def _dataset_summary(

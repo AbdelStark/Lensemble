@@ -78,7 +78,9 @@ def test_server_health_flags_mirror_probe_semantics() -> None:
 def test_federated_probe_evidence_improved() -> None:
     committed = Path("docs/evidence/lewm_tworooms_probe_check.json")
     if not committed.is_file():
-        pytest.skip("federated probe evidence not generated yet (scripts/lewm_probe_check.py)")
+        pytest.skip(
+            "federated probe evidence not generated yet (scripts/lewm_probe_check.py)"
+        )
     evidence = json.loads(committed.read_text())
     assert evidence["schema"] == "lewm-federated-probe/1"
     result = evidence["result"]
