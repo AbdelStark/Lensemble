@@ -25,6 +25,44 @@ async function requestJson(path, { method = "GET", body = null } = {}) {
   return payload;
 }
 
+// Runs `tick()` every intervalMs from inside a Web Worker, whose timers are not
+// subject to the aggressive background-tab throttling that freezes main-thread
+// setInterval (and would otherwise stall a backgrounded participant's heartbeat
+// past the server's drop window). Falls back to a main-thread timer when Workers
+// are unavailable. Returns a stop function.
+function startBackgroundKeepalive(tick, intervalMs) {
+  if (
+    typeof Worker === "function"
+    && typeof Blob === "function"
+    && typeof URL !== "undefined"
+    && typeof URL.createObjectURL === "function"
+  ) {
+    try {
+      const src =
+        "let id=null;self.onmessage=function(e){var d=e.data||{};"
+        + "if(d.type==='start'){if(id===null)id=setInterval(function(){self.postMessage('tick')},d.intervalMs);}"
+        + "else if(d.type==='stop'){if(id!==null){clearInterval(id);id=null;}}};";
+      const blobUrl = URL.createObjectURL(new Blob([src], { type: "text/javascript" }));
+      const worker = new Worker(blobUrl);
+      worker.onmessage = () => tick();
+      worker.postMessage({ type: "start", intervalMs });
+      return () => {
+        try {
+          worker.postMessage({ type: "stop" });
+          worker.terminate();
+        } catch {
+          // worker already gone
+        }
+        URL.revokeObjectURL(blobUrl);
+      };
+    } catch {
+      // fall through to the main-thread timer
+    }
+  }
+  const timer = setInterval(tick, intervalMs);
+  return () => clearInterval(timer);
+}
+
 export class BackendClient {
   constructor(basePath = "/api") {
     this.basePath = basePath.replace(/\/$/, "");
@@ -139,11 +177,16 @@ export class BackendClient {
     const protocols = this.webSocketProtocols(options);
     const url = this.webSocketUrl(runId, options);
     const socket = protocols.length > 0 ? new WebSocket(url, protocols) : new WebSocket(url);
-    let heartbeatTimer = null;
-    const clearHeartbeat = () => {
-      if (heartbeatTimer !== null) {
-        clearInterval(heartbeatTimer);
-        heartbeatTimer = null;
+    let stopKeepalive = null;
+    let onVisible = null;
+    const teardownKeepalive = () => {
+      if (stopKeepalive) {
+        stopKeepalive();
+        stopKeepalive = null;
+      }
+      if (onVisible && typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisible);
+        onVisible = null;
       }
     };
     const sendKeepalive = () => {
@@ -161,14 +204,24 @@ export class BackendClient {
       options.onOpen?.();
       const intervalMs = options.role === "participant" ? 5000 : 15000;
       sendKeepalive();
-      heartbeatTimer = setInterval(sendKeepalive, intervalMs);
+      // Drive the keepalive from a worker so it survives background-tab timer
+      // throttling (a backgrounded participant would otherwise miss the 45s
+      // liveness window and be dropped, losing quorum).
+      stopKeepalive = startBackgroundKeepalive(sendKeepalive, intervalMs);
+      // Returning to a throttled/asleep tab: refresh liveness immediately.
+      if (typeof document !== "undefined") {
+        onVisible = () => {
+          if (!document.hidden) sendKeepalive();
+        };
+        document.addEventListener("visibilitychange", onVisible);
+      }
     });
     socket.addEventListener("close", () => {
-      clearHeartbeat();
+      teardownKeepalive();
       options.onClose?.();
     });
     socket.addEventListener("error", () => {
-      clearHeartbeat();
+      teardownKeepalive();
       options.onError?.(new Error("WebSocket connection failed"));
     });
     return socket;

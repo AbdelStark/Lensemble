@@ -35,6 +35,12 @@ export async function collectResidentPairs({
   episodes = 2,
   maxModelSteps = 12,
   policyOptions = {},
+  // TwoRooms episodes terminate when the agent reaches the goal, so a run of short
+  // episodes can yield too few resident pairs. Keep sampling extra (deterministic,
+  // rng-seeded) episodes until at least `minPairs` are collected, bounded by
+  // `maxEpisodes` so a pathological seed can never run unboundedly.
+  minPairs = 0,
+  maxEpisodes = null,
   now = () => (typeof performance !== "undefined" ? performance.now() : Date.now()),
 } = {}) {
   const rng = mulberry32(seed >>> 0);
@@ -43,9 +49,11 @@ export async function collectResidentPairs({
   const xs = [];
   const targets = [];
   let envSteps = 0;
+  let episodesRun = 0;
   const started = now();
+  const episodeCap = maxEpisodes ?? (minPairs > 0 ? episodes + 6 : episodes);
 
-  for (let ep = 0; ep < episodes; ep += 1) {
+  while (episodesRun < episodes || (xs.length < minPairs && episodesRun < episodeCap)) {
     const expert = createExpertPolicy(policyOptions);
     let episode = sampleEpisode(rng);
     // roll the episode at frameskip granularity, recording one frame per model step
@@ -62,6 +70,7 @@ export async function collectResidentPairs({
       blocks.push(packActionBlock(subActions));
       frames.push(renderFrameRGB(episode.agent));
     }
+    episodesRun += 1;
     if (blocks.length < window) continue; // too short to form a full history window
 
     // encode all frames in one batch through the frozen encoder
@@ -100,11 +109,14 @@ export async function collectResidentPairs({
   }
   return {
     pairs: { x, target, count },
-    episodes,
+    episodes: episodesRun,
     envSteps,
     encodeMs: now() - started,
   };
 }
+
+// Comfortable margin above the 4-pair training floor so a bad seed never starves a round.
+export const MIN_RESIDENT_PAIRS = 8;
 
 // The full local continuation: collect -> train -> bounded delta + honest metric summary.
 export async function runLocalAdapterContinuation({
@@ -121,10 +133,18 @@ export async function runLocalAdapterContinuation({
   onProgress = () => {},
 } = {}) {
   onProgress(0.05, { phase: "rollout-collection" });
-  const collected = await collectResidentPairs({ runtime, seed, episodes, maxModelSteps });
+  const collected = await collectResidentPairs({
+    runtime,
+    seed,
+    episodes,
+    maxModelSteps,
+    minPairs: MIN_RESIDENT_PAIRS,
+  });
   if (collected.pairs.count < 4) {
+    // Unreachable in practice now (the collector resamples up to its episode cap);
+    // kept as a last-resort guard so training never runs on a starved batch.
     throw new Error(
-      `insufficient resident pairs (${collected.pairs.count}). Episodes ended too early`,
+      `insufficient resident pairs (${collected.pairs.count}) after ${collected.episodes} episodes`,
     );
   }
   onProgress(0.35, { phase: "adapter-training", pairs: collected.pairs.count });

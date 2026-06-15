@@ -25,6 +25,7 @@ export async function buildValidationSet({ runtime, seed = DEFAULT_PROBE_SEED, e
     episodes,
     maxModelSteps,
     policyOptions: { actionNoise: 1.0, actionRepeatProb: 0 },
+    minPairs: 4,
   });
   if (collected.pairs.count < 2) {
     throw new Error("validation episodes ended too early to form a probe set");

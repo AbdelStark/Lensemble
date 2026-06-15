@@ -279,7 +279,8 @@ button:disabled {
 .badge.state-manual,
 .badge.state-flat,
 .badge.state-training,
-.badge.state-assigned {
+.badge.state-assigned,
+.badge.state-paused {
   background: var(--warn-soft);
   color: var(--warn);
 }
