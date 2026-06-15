@@ -96,9 +96,45 @@ def test_federated_probe_evidence_improved() -> None:
     assert result["participants"] >= 2
 
 
+def test_federated_probe_evidence_carries_heldout_collapse_diagnostics() -> None:
+    """#328: the probe evidence must carry held-out collapse diagnostics (the #259 blind spot)."""
+    committed = Path("docs/evidence/lewm_tworooms_probe_check.json")
+    if not committed.is_file():
+        pytest.skip("federated probe evidence not generated yet")
+    evidence = json.loads(committed.read_text())
+    result = evidence["result"]
+    assert result["collapseRisk"] is False
+    diag = result["diagnostics"]
+    for side in ("baseline", "adapted"):
+        assert diag[side]["latentStdMean"] > 0
+        assert diag[side]["effectiveRank"] > 0
+        assert "sigregStatistic" in diag[side]
+    # the gain is bias-correction, not magnitude/rank collapse on held-out
+    assert diag["adapted"]["latentStdMean"] >= 0.7 * diag["baseline"]["latentStdMean"]
+    assert diag["adapted"]["effectiveRank"] >= 0.7 * diag["baseline"]["effectiveRank"]
+
+
 def test_dashboard_probe_reports_negative_results() -> None:
     app = (WEB_DIR / "app.mjs").read_text(encoding="utf-8")
     assert "compareRevisions" in app
     assert "did not beat the parent checkpoint" in app
     assert "reported, not hidden" in app
     assert "healthFlags" in app
+
+
+def test_dashboard_renders_scoped_claim_boundary() -> None:
+    """#329: the strict claim boundary is rendered in-UI and the H1 / probe badge don't oversell."""
+    app = (WEB_DIR / "app.mjs").read_text(encoding="utf-8")
+    # H1 names adaptation of a frozen checkpoint, not "federate a world model"
+    assert "Federate adapter updates on a real world-model checkpoint" in app
+    assert "Federate a world model across browsers" not in app
+    # the scoped chips + single-coordinator note render near the probe, sourced from the snapshot
+    assert "renderClaimBoundary" in app
+    assert "bounded adapter on a frozen base" in app
+    assert "fixed held-out probe, not a benchmark" in app
+    assert "single local coordinator" in app.lower()
+    assert "mean-of-clipped-deltas (no robust aggregation / DP in this path)" in app
+    assert "run.claimBoundary" in app  # full boundary text comes from the run snapshot
+    # the probe badge carries the "held-out probe, not a benchmark" caveat and a collapse override
+    assert "Held-out probe, not a benchmark" in app
+    assert "Collapse risk overrides the MSE verdict" in app
