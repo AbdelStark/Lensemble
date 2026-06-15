@@ -31,6 +31,21 @@ comments as public claim surfaces, not scratch notes.
   secure aggregation/DP plumbing, artifact contracts, and browser inference
   demo. Do not present the current dynamic-env run as evidence that federation
   materially outperforms local-only.
+- The `real-lewm-tworooms` browser mode is federated adapter adaptation on a
+  frozen LeWorldModel TwoRooms checkpoint, not federated training of the world
+  model. Only a 12,512 parameter (0.069%) residual adapter on the frozen
+  predictor output trains and federates. The headline before/after probe is
+  system-composed: real adapter deltas pass `FederatedDemoService.submit_update`
+  and `_close_round_lewm`, and the probe scores the server-produced revision
+  (`docs/evidence/lewm_tworooms_system_probe.json`). The held-out gain is
+  collapse-checked (latent std, effective rank, SIGReg on the validation pairs)
+  and seed-robust (`docs/evidence/lewm_tworooms_probe_seedsweep.json`, 5 seeds,
+  worst +5.4%). When describing it, say "federated adapter continuation on a
+  frozen checkpoint", not "federated world-model training". It runs through a
+  single local coordinator with mean of clipped deltas, and does not wire secure
+  aggregation or DP in that path. The offline
+  `scripts/lewm_probe_check.py` is a math cross-check, not the headline; a live
+  multi-operator decentralized run is not done (issue #331, deferred).
 - Keep non-claims explicit: no cryptographic honest-computation proof, no
   paper-scale LeWorldModel performance claim, no closed-loop physical SO-100
   success claim, and no browser training claim.
@@ -47,11 +62,17 @@ comments as public claim surfaces, not scratch notes.
 - `deploy/hfjobs/` contains launchers and HF Jobs run documentation.
 - `web/dynamic-env-demo/` is an ONNX inference and JS/Canvas environment demo
   only.
-- `web/federated-demo/` is the browser federated demo. It has a frontend-only
-  simulator plus a local backend path served by
-  `uv run lensemble demo federated --port 8765`. The backend accepts
-  metadata-only browser-surrogate update artifacts; do not describe this as
-  production browser training.
+- `web/federated-demo/` is the browser federated demo, served by
+  `uv run lensemble demo federated --port 8765`. It has two modes. The surrogate
+  orchestration mode accepts metadata-only browser-surrogate update artifacts.
+  The `real-lewm-tworooms` mode runs the pinned checkpoint via hash-checked ONNX
+  and trains a real bounded residual adapter in the browser with real gradients,
+  federating only the clipped adapter delta while the world model stays frozen.
+  Do not describe either mode as production or full-model browser training. The
+  system-composed probe driver is `lensemble/demo/system_probe.py`
+  (`scripts/lewm_system_probe.py`), the ONNX pair builder is
+  `lensemble/eval/lewm_tworooms_probe_pairs.py`, and the in-browser adapter and
+  probe live in `web/federated-demo/lewm_adapter.mjs` and `lewm_probe.mjs`.
 
 ## Useful Validation Commands
 
@@ -60,5 +81,7 @@ uv run python scripts/check_docs_links.py docs SPEC.md README.md
 uv run python -m mkdocs build --strict
 uv run pytest tests/ml/test_dynamic_env_browser_demo.py tests/ml/test_dynamic_env_evidence_bundle.py
 uv run pytest tests/ml/test_federated_demo_app.py
+uv run pytest tests/ml/test_lewm_probe.py tests/ml/test_lewm_system_probe.py tests/ml/test_lewm_evidence_audit.py
+node web/federated-demo/lewm_probe_selftest.mjs
 git diff --check
 ```
