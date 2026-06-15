@@ -392,7 +392,9 @@ def test_backend_demo_pauses_on_quorum_loss_and_resumes_on_reconnect() -> None:
     assert resumed["round"] == 1, "resumes the same in-flight round"
     assert resumed["pausedReason"] is None
     assert any(e["kind"] == "run.resumed" for e in service.events(run["id"]))
-    active = [p for p in resumed["participants"] if p["state"] not in {"dropped", "error"}]
+    active = [
+        p for p in resumed["participants"] if p["state"] not in {"dropped", "error"}
+    ]
     assert len(active) >= run["config"]["quorum"]
 
     # The revived participants finish the round and the run advances past the pause.

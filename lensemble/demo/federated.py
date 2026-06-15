@@ -1487,7 +1487,10 @@ class FederatedDemoService:
             run,
             "run.resumed",
             f"run resumed at round {run.round} (quorum restored)",
-            payload={"round": run.round, "modelRevisionId": run.current_model_revision_id},
+            payload={
+                "round": run.round,
+                "modelRevisionId": run.current_model_revision_id,
+            },
         )
         for participant in self._active_participants(run):
             if run.round in participant.submitted_rounds:
