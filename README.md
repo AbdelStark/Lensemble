@@ -28,7 +28,8 @@ The central problem is the JEPA latent gauge. In self-supervised representation 
 |---|---|
 | SO-100 federation | Gauge-only result. Anchored federation controls the latent frame where naive FedAvg fails. It does not prove downstream robotics usefulness. |
 | Dynamic env | Educational systems demo. Federated scratch reaches `state_probe_r2=0.8885337114`, but local-only reaches `0.8838405609`; the `0.0046931505` margin misses the required `0.05`. |
-| Browser demo | Implemented as local/public-demo orchestration with WebSocket primary transport, REST polling fallback, bounded tiny browser update vectors, aggregation, inference UI, and evidence export. This is not production browser training. |
+| Browser demo (orchestration) | Local and public-demo orchestration with WebSocket primary transport, REST polling fallback, bounded update vectors, aggregation, inference UI, and evidence export. Not production browser training. |
+| Browser demo (`real-lewm-tworooms`) | Runs the pinned LeWorldModel TwoRooms checkpoint in the browser via hash-checked ONNX and trains a bounded 12,512 parameter (0.069%) residual adapter on the frozen predictor output. Only the adapter trains and federates; the world model stays frozen. The before/after probe is system-composed (real adapter deltas go through the real server validation and aggregation path, then the probe scores the server-produced revision), collapse-checked on held-out pairs, and seed-robust across 5 seeds (mean +16.8%, worst +5.4%). Single local coordinator, mean of clipped deltas, no robust aggregation or DP in this path. Not full-model or production browser training. |
 | Proof layer | Artifact and provenance contracts exist. There is no cryptographic proof of honest participant computation yet. |
 | Clinical, safety, or deployment claim | None. This is a research codebase. |
 
@@ -102,10 +103,14 @@ The project treats results as artifact-bound. The important public evidence surf
 - [Phase 3 evidence bundle](docs/evidence/phase3_evidence_bundle.json)
 - [Phase 3 model card](docs/evidence/phase3_model_card.md)
 - [Tapestry-like LeWM demo card](docs/evidence/lewm_tworooms_demo_card.md)
+- [LeWM TwoRooms system-composed probe](docs/evidence/lewm_tworooms_system_probe.json)
+- [LeWM TwoRooms probe seed sweep](docs/evidence/lewm_tworooms_probe_seedsweep.json)
 - [Dynamic-env roadmap and acceptance matrix](docs/roadmap/DYNAMIC_ENV.md)
 - [Browser federated demo docs](docs/roadmap/BROWSER_FEDERATED_DEMO.md)
 
 The short read: Lensemble has credible systems and gauge-control evidence. It does not yet have a claim-grade result that federated training materially beats local-only on the binding dynamic-env metric.
+
+The LeWM TwoRooms browser demo has a credible result for a narrow claim: federated adaptation of a bounded adapter on a frozen checkpoint. The headline probe number is produced by the shipped system, not offline math. Real adapter deltas pass the server validation and aggregation path, and the probe scores the server-produced revision. The held-out gain (+12.3% MSE on the committed seed) is checked to be bias-correction, not latent collapse, and holds across 5 seeds (worst +5.4%). It is not full-model federated training, runs through a single local coordinator, and does not wire secure aggregation or DP in that path.
 
 SO-100 is not a downstream-useful world model: held-out latent magnitude collapse (`~7.5e-6`; `thoughts/collapse_fix_probe.py`), the central ceiling probe (`thoughts/central_ceiling_probe.py`), `skill_vs_identity is gameable`, and `effective_rank is scale-invariant`.
 
