@@ -31,6 +31,7 @@ import {
   loadRunSnapshot,
 } from "./local_bus.mjs";
 import { lineChart, participantLossSeries, roundSeries } from "./charts.mjs";
+import { morph } from "./morph.mjs";
 import { loadLewmRuntime } from "./lewm_runtime.mjs";
 import { compareRevisions } from "./lewm_probe.mjs";
 import { runRealLewmRound } from "./lewm_participant.mjs";
@@ -75,6 +76,42 @@ function el(tag, attrs = {}, children = []) {
   for (const child of [].concat(children)) {
     if (child === null || child === undefined) continue;
     node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+  }
+  return node;
+}
+
+// --------------------------------------------------- reactive update plumbing
+//
+// Data updates (rounds, polls, socket messages) reconcile a freshly-built tree
+// into the live DOM via morph() instead of tearing #app down — graphs and
+// metrics update in place, the QR/inference panels and scroll/focus survive.
+//
+// runRef is the single source of truth every interactive handler reads at click
+// time, so no event listener kept alive by morph ever acts on a stale snapshot.
+const runRef = { current: null };
+let currentRoute = null; // routeKey of the currently mounted view
+
+function routeKey(route) {
+  return [route.view, route.runId ?? "", Boolean(route.token)].join("|");
+}
+
+// keyed(): stable identity for the reconciler. preserve(): never reconcile while
+// it exists (an input mid-typing). markStatic(): opaque subtree (QR, inference).
+function keyed(name, node) {
+  if (node && node.dataset) node.dataset.key = name;
+  return node;
+}
+function preserve(name, node) {
+  if (node && node.dataset) {
+    node.dataset.key = name;
+    node.dataset.preserve = "";
+  }
+  return node;
+}
+function markStatic(name, node) {
+  if (node && node.dataset) {
+    node.dataset.key = name;
+    node.dataset.static = "";
   }
   return node;
 }
@@ -316,7 +353,10 @@ function runAnalytics(run) {
     );
   }
   if (charts.length === 0) return [];
-  return [el("h2", { text: "Run analytics" }), el("div", { class: "charts-grid" }, charts)];
+  return [
+    keyed("analytics-head", el("h2", { text: "Run analytics" })),
+    keyed("analytics-grid", el("div", { class: "charts-grid" }, charts)),
+  ];
 }
 
 function metricsList(run) {
@@ -426,9 +466,8 @@ async function refreshBackendRoute(view, runId) {
   try {
     const run = await backendClient.getRun(runId);
     if (!currentRouteStill(view, runId) || shouldDeferAutoRefreshForDocument()) return;
-    app.replaceChildren();
-    if (view === "host") renderBackendHostSnapshot(run);
-    else if (view === "join") renderBackendJoinSnapshot(parseRoute(window.location.hash), run);
+    if (view === "host") morphHostSnapshot(run);
+    else if (view === "join") morphJoinSnapshot(parseRoute(window.location.hash), run);
   } catch {
     if (currentRouteStill(view, runId) && !shouldDeferAutoRefreshForDocument()) render();
   } finally {
@@ -465,9 +504,8 @@ function attachBackendSocket(poll) {
       }
       const run = message.run;
       if (run && !shouldDeferAutoRefreshForDocument()) {
-        app.replaceChildren();
-        if (view === "host") renderBackendHostSnapshot(run);
-        else if (view === "join") renderBackendJoinSnapshot(parseRoute(window.location.hash), run);
+        if (view === "host") morphHostSnapshot(run);
+        else if (view === "join") morphJoinSnapshot(parseRoute(window.location.hash), run);
       } else if (events.length > 0) {
         void refreshBackendRoute(view, runId);
       }
@@ -532,8 +570,20 @@ function downloadJson(filename, value) {
 
 // ------------------------------------------------------------------- router
 
+// render() is route-only: a genuine route change (or empty #app) MOUNTS a view
+// (the one place #app is torn down); same-route ticks/polls go through morph.
 function render() {
   const route = parseRoute(window.location.hash);
+  const key = routeKey(route);
+  if (key !== currentRoute || !app.firstElementChild) {
+    currentRoute = key;
+    mountRoute(route);
+  } else {
+    updateRoute(route);
+  }
+}
+
+function mountRoute(route) {
   app.replaceChildren();
   if (route.view === "home") renderHome();
   else if (route.view === "host") renderHost(route.runId);
@@ -548,6 +598,22 @@ function render() {
         el("p", {}, el("a", { href: "#/", text: "Back to home" })),
       ]),
     );
+  }
+}
+
+// Same-route data update: reconcile in place, never replaceChildren.
+function updateRoute(route) {
+  if (shouldDeferAutoRefreshForDocument()) return;
+  if (!app.firstElementChild) {
+    mountRoute(route);
+    return;
+  }
+  if (route.view === "host") {
+    if (hostSession?.run.id === route.runId) updateLocalHost(hostSession.run);
+    else if (runRef.current) morphHostSnapshot(runRef.current);
+  } else if (route.view === "join") {
+    if (!route.token) morphLocalJoin();
+    else if (runRef.current) morphJoinSnapshot(route, runRef.current);
   }
 }
 
@@ -664,10 +730,11 @@ function applyHostIntent(run, intent) {
 function scheduleHostRefresh() {
   setTimeout(() => {
     if (
-      parseRoute(window.location.hash).view === "host"
+      hostSession
+      && parseRoute(window.location.hash).view === "host"
       && !shouldDeferAutoRefreshForDocument()
     ) {
-      render();
+      updateLocalHost(hostSession.run);
     }
   }, 0);
 }
@@ -691,7 +758,7 @@ function ensureHostTicker() {
         parseRoute(window.location.hash).view === "host"
         && !shouldDeferAutoRefreshForDocument()
       ) {
-        render();
+        updateLocalHost(run);
       }
     }
   }, 700);
@@ -701,7 +768,7 @@ function renderHost(runId) {
   teardownParticipant();
   if (hostSession?.run.id === runId) {
     clearBackendPoll();
-    renderLocalHost(runId);
+    mountLocalHost();
     return;
   }
   const snapshot = loadRunSnapshot(adapters.storage, runId);
@@ -709,97 +776,127 @@ function renderHost(runId) {
   if (restored) {
     adoptHostRun(restored);
     clearBackendPoll();
-    renderLocalHost(runId);
+    mountLocalHost();
     return;
   }
   renderBackendHost(runId);
 }
 
-function renderLocalHost(runId) {
-  const { run, bus } = hostSession;
-  ensureHostTicker();
+function localHostQrUrl(run) {
+  return buildJoinUrl(window.location.href, run.id);
+}
 
-  const joinUrl = buildJoinUrl(window.location.href, run.id);
-  const qrCanvas = el("canvas", { id: "qr", "aria-label": "Join URL QR code" });
+function drawLocalHostQr(run) {
+  const canvas = app.querySelector("#qr");
+  if (!canvas) return;
+  const url = localHostQrUrl(run);
+  if (canvas.dataset.qrUrl !== url || !canvas.width) {
+    canvas.dataset.qrUrl = url;
+    drawQr(canvas, url);
+  }
+}
+
+function mountLocalHost() {
+  const { run } = hostSession;
+  ensureHostTicker();
+  runRef.current = run;
+  app.append(buildLocalHostTree(run));
+  drawLocalHostQr(run);
+}
+
+function updateLocalHost(run) {
+  if (!hostSession) return;
+  ensureHostTicker();
+  runRef.current = run;
+  if (!app.firstElementChild) {
+    app.append(buildLocalHostTree(run));
+    drawLocalHostQr(run);
+    return;
+  }
+  morph(app.firstElementChild, buildLocalHostTree(run));
+  drawLocalHostQr(run);
+}
+
+function buildLocalHostTree(run) {
+  const runId = run.id;
+  const joinUrl = localHostQrUrl(run);
+  const qrCanvas = markStatic("qr", el("canvas", { id: "qr", "aria-label": "Join URL QR code" }));
   const urlInput = el("input", { type: "text", readonly: "readonly", value: joinUrl });
   const copyButton = el("button", {
     class: "secondary",
     text: "Copy",
-    onclick: () => navigator.clipboard?.writeText(joinUrl),
+    onclick: () => navigator.clipboard?.writeText(localHostQrUrl(runRef.current ?? run)),
   });
 
   const active = activeParticipants(run);
-  const startButton = el("button", {
+  const startButton = keyed("lhost-start", el("button", {
     text: run.state === "ready" ? "Start run" : `Start run (${active.length}/${run.config.quorum})`,
     onclick: () => {
       try {
-        startSimRun(run);
-        bus.publish();
-        render();
+        startSimRun(hostSession.run);
+        hostSession.bus.publish();
+        updateLocalHost(hostSession.run);
       } catch (error) {
         window.alert(error.message);
       }
     },
-  });
+  }));
   if (run.state !== "ready") startButton.disabled = true;
 
-  const abortButton = el("button", {
+  const abortButton = keyed("lhost-abort", el("button", {
     class: "danger",
     text: "Abort run",
     onclick: () => {
       try {
-        abortSimRun(run, "host abort");
-        bus.publish();
-        render();
+        abortSimRun(hostSession.run, "host abort");
+        hostSession.bus.publish();
+        updateLocalHost(hostSession.run);
       } catch (error) {
         window.alert(error.message);
       }
     },
-  });
+  }));
   if (["completed", "aborted", "failed"].includes(run.state)) abortButton.disabled = true;
 
-  const failButton = el("button", {
+  const failButton = keyed("lhost-fail", el("button", {
     class: "secondary",
     text: "Simulate failure",
     onclick: () => {
       try {
-        failSimRun(run, "simulated infrastructure failure");
-        bus.publish();
-        render();
+        failSimRun(hostSession.run, "simulated infrastructure failure");
+        hostSession.bus.publish();
+        updateLocalHost(hostSession.run);
       } catch (error) {
         window.alert(error.message);
       }
     },
-  });
+  }));
   if (["completed", "aborted", "failed"].includes(run.state)) failButton.disabled = true;
 
-  app.append(
-    el("section", { class: "panel" }, [
-      el("h2", {}, [`Host dashboard - ${runId} `, stateBadge(run.state)]),
-      note(`Mode: ${run.mode}. Quorum ${run.config.quorum}, max ${run.config.maxParticipants}, rounds ${run.config.rounds}.`),
-      el("div", { class: "columns" }, [
-        el("div", { class: "panel" }, [
-          el("h2", { text: "Invite participants" }),
-          qrCanvas,
-          el("div", { class: "join-url" }, [urlInput, copyButton]),
-          note("Frontend-only mode shares state between tabs of the same browser."),
-          startButton,
-          abortButton,
-          failButton,
-          el("p", {}, el("a", { href: "#/", text: "New run" })),
-        ]),
-        el("div", { class: "panel" }, [
-          el("h2", { text: run.round > 0 ? `Round ${run.round} of ${run.config.rounds}` : "Waiting for participants" }),
-          participantSlots(run),
-          el("h2", { text: "Artifacts" }),
-          artifactList(run),
-          el("h2", { text: "Event timeline (simulated)" }),
-          timelineList(run.events),
-        ]),
+  return el("section", { class: "panel" }, [
+    keyed("lhost-head", el("h2", {}, [`Host dashboard - ${runId} `, stateBadge(run.state)])),
+    keyed("lhost-mode", note(`Mode: ${run.mode}. Quorum ${run.config.quorum}, max ${run.config.maxParticipants}, rounds ${run.config.rounds}.`)),
+    el("div", { class: "columns" }, [
+      el("div", { class: "panel" }, [
+        el("h2", { text: "Invite participants" }),
+        qrCanvas,
+        el("div", { class: "join-url" }, [urlInput, copyButton]),
+        note("Frontend-only mode shares state between tabs of the same browser."),
+        startButton,
+        abortButton,
+        failButton,
+        el("p", {}, el("a", { href: "#/", text: "New run" })),
+      ]),
+      el("div", { class: "panel" }, [
+        keyed("lhost-round", el("h2", { text: run.round > 0 ? `Round ${run.round} of ${run.config.rounds}` : "Waiting for participants" })),
+        keyed("lhost-slots", participantSlots(run)),
+        keyed("lhost-art-head", el("h2", { text: "Artifacts" })),
+        keyed("lhost-artifacts", artifactList(run)),
+        keyed("lhost-tl-head", el("h2", { text: "Event timeline (simulated)" })),
+        keyed("lhost-timeline", timelineList(run.events)),
       ]),
     ]),
-  );
-  drawQr(qrCanvas, joinUrl);
+  ]);
 }
 
 // ---------------------------------------------------------- backend host mode
@@ -811,8 +908,7 @@ async function renderBackendHost(runId) {
     const run = await backendClient.getRun(runId);
     if (!currentRouteStill("host", runId)) return;
     app.replaceChildren();
-    ensureBackendPoll("host", runId, { role: "host" });
-    renderBackendHostSnapshot(run);
+    mountBackendHostSnapshot(run);
   } catch (error) {
     if (!currentRouteStill("host", runId)) return;
     app.replaceChildren(
@@ -826,120 +922,174 @@ async function renderBackendHost(runId) {
   }
 }
 
-function renderBackendHostSnapshot(run) {
-  ensureBackendPoll("host", run.id, { role: "host" });
-  const joinUrl = run.joinUrl || buildJoinUrl(window.location.href, run.id, run.joinToken);
-  const qrCanvas = el("canvas", { id: "qr", "aria-label": "Join URL QR code" });
+// Refetch + morph after an explicit host action (transport-agnostic, unlike the
+// websocket-gated refreshBackendRoute) so the dashboard reflects the action at once.
+async function pullBackendHost(runId) {
+  if (!currentRouteStill("host", runId)) return;
+  try {
+    const run = await backendClient.getRun(runId);
+    if (currentRouteStill("host", runId)) morphHostSnapshot(run);
+  } catch {
+    // The poll / socket stream will reconcile shortly.
+  }
+}
+
+function hostQrUrl(run) {
+  return run.joinUrl || buildJoinUrl(window.location.href, run.id, run.joinToken);
+}
+
+// Pure builder: returns the detached host dashboard <section>. Shared by mount
+// and morph so the live tree and the freshly-built tree always have the same
+// shape. Handlers read runRef.current (never the captured run) so a node kept by
+// the reconciler never acts on a stale snapshot.
+function buildBackendHostTree(run) {
+  const joinUrl = hostQrUrl(run);
+  const qrCanvas = markStatic("qr", el("canvas", { id: "qr", "aria-label": "Join URL QR code" }));
   const urlInput = el("input", { type: "text", readonly: "readonly", value: joinUrl });
-  const statusNote = el("p", { class: "note" });
-  const startButton = el("button", {
+  const statusNote = keyed("status-note", el("p", { class: "note" }));
+
+  const startButton = keyed("btn-start", el("button", {
     text: run.controls.canStart ? "Start run" : `Start run (${run.participants.length}/${run.config.quorum})`,
     onclick: async () => {
+      const live = runRef.current;
       try {
-        await backendClient.control(run.id, "start");
-        render();
+        await backendClient.control(live.id, "start");
+        void pullBackendHost(live.id);
       } catch (error) {
         statusNote.textContent = error.message;
       }
     },
-  });
+  }));
   startButton.disabled = !run.controls.canStart;
 
-  const abortButton = el("button", {
+  const abortButton = keyed("btn-abort", el("button", {
     class: "danger",
     text: "Abort run",
     onclick: async () => {
+      const live = runRef.current;
       try {
-        await backendClient.control(run.id, "abort", { reason: "host abort" });
-        render();
+        await backendClient.control(live.id, "abort", { reason: "host abort" });
+        void pullBackendHost(live.id);
       } catch (error) {
         statusNote.textContent = error.message;
       }
     },
-  });
+  }));
   abortButton.disabled = !run.controls.canAbort;
 
-  const timeoutButton = el("button", {
+  const timeoutButton = keyed("btn-timeout", el("button", {
     class: "secondary",
     text: "Drop timed-out participants",
     onclick: async () => {
+      const live = runRef.current;
       try {
-        await backendClient.control(run.id, "timeout-missing", { reason: "host timeout" });
-        render();
+        await backendClient.control(live.id, "timeout-missing", { reason: "host timeout" });
+        void pullBackendHost(live.id);
       } catch (error) {
         statusNote.textContent = error.message;
       }
     },
-  });
+  }));
   timeoutButton.disabled = run.state !== "running_round";
 
-  const exportButton = el("button", {
+  const exportButton = keyed("btn-export", el("button", {
     class: "secondary",
     text: "Export evidence JSON",
     onclick: async () => {
+      const live = runRef.current;
       try {
-        const evidence = await backendClient.exportEvidence(run.id);
-        downloadJson(`${run.id}-evidence.json`, evidence);
+        const evidence = await backendClient.exportEvidence(live.id);
+        downloadJson(`${live.id}-evidence.json`, evidence);
       } catch (error) {
         statusNote.textContent = error.message;
       }
     },
-  });
+  }));
 
-  app.append(
-    el("section", { class: "panel" }, [
-      el("h2", {}, [`Run ${run.id} `, stateBadge(run.state)]),
-      el("p", { class: "muted" }, [
-        run.runMode === "real-lewm-tworooms"
-          ? el("span", { class: "chip", text: `${run.lewmBinding?.checkpoint?.repoId}@${String(run.lewmBinding?.checkpoint?.revision ?? "").slice(0, 12)} · ${run.lewmBinding?.adapterParameterCount}-param adapter` })
-          : el("span", { class: "chip", text: run.learnerRuntime }),
-        ` quorum ${run.config.quorum} · up to ${run.config.maxParticipants} participants · ${run.config.rounds} rounds · ${backendPoll?.transport ?? run.deployment?.transportMode ?? "polling"}`,
-      ]),
-      runStatusStrip(run),
-      el("div", { class: "columns" }, [
-        el("div", { class: "panel" }, [
-          el("h2", { text: "Invite participants" }),
-          qrCanvas,
-          el("div", { class: "join-url" }, [
-            urlInput,
-            el("button", { class: "secondary", text: "Copy", onclick: () => navigator.clipboard?.writeText(joinUrl) }),
-          ]),
-          startButton,
-          abortButton,
-          timeoutButton,
-          exportButton,
-          statusNote,
-          el("p", {}, el("a", { href: "#/", text: "New run" })),
-        ]),
-        el("div", { class: "panel" }, [
-          el("h2", { text: run.round > 0 ? `Round ${run.round} of ${run.config.rounds}` : "Waiting for participants" }),
-          participantSlots(run),
-          ...runAnalytics(run),
-          run.runMode === "real-lewm-tworooms" ? el("h2", { text: "Before/after validation probe" }) : null,
-          renderRealModeProbe(run),
-          el("h2", { text: "Training diagnostics" }),
-          trainingDiagnostics(run),
-          el("h2", { text: "Round metrics" }),
-          metricsList(run),
-          el("h2", { text: "Artifacts" }),
-          artifactList(run),
-          el("h2", { text: "Event timeline" }),
-          timelineList(run.events),
-        ]),
-      ]),
+  return el("section", { class: "panel" }, [
+    keyed("run-head", el("h2", {}, [`Run ${run.id} `, stateBadge(run.state)])),
+    keyed("run-meta", el("p", { class: "muted" }, [
       run.runMode === "real-lewm-tworooms"
-        ? el("section", { class: "panel compact" }, [
-            el("h2", { text: "Checkpoint-backed inference" }),
-            el("p", { class: "note" }, [
-              "Watch the real model roll out and plan in the ",
-              el("a", { href: "#/tworooms", text: "TwoRooms lab" }),
-              ". The probe above scores the latest aggregated revision.",
-            ]),
-          ])
-        : renderInferencePanel(run),
+        ? el("span", { class: "chip", text: `${run.lewmBinding?.checkpoint?.repoId}@${String(run.lewmBinding?.checkpoint?.revision ?? "").slice(0, 12)} · ${run.lewmBinding?.adapterParameterCount}-param adapter` })
+        : el("span", { class: "chip", text: run.learnerRuntime }),
+      ` quorum ${run.config.quorum} · up to ${run.config.maxParticipants} participants · ${run.config.rounds} rounds · ${backendPoll?.transport ?? run.deployment?.transportMode ?? "polling"}`,
+    ])),
+    run.state === "paused"
+      ? keyed("paused-banner", el("p", { class: "error-box" }, [
+          `Paused — quorum dropped${run.pausedReason ? ` (${run.pausedReason})` : ""}. The run resumes automatically when enough participants reconnect; their progress is kept.`,
+        ]))
+      : null,
+    keyed("status-strip", runStatusStrip(run)),
+    el("div", { class: "columns" }, [
+      el("div", { class: "panel" }, [
+        el("h2", { text: "Invite participants" }),
+        qrCanvas,
+        el("div", { class: "join-url" }, [
+          urlInput,
+          el("button", { class: "secondary", text: "Copy", onclick: () => navigator.clipboard?.writeText(runRef.current ? hostQrUrl(runRef.current) : joinUrl) }),
+        ]),
+        startButton,
+        abortButton,
+        timeoutButton,
+        exportButton,
+        statusNote,
+        el("p", {}, el("a", { href: "#/", text: "New run" })),
+      ]),
+      el("div", { class: "panel" }, [
+        keyed("round-head", el("h2", { text: run.round > 0 ? `Round ${run.round} of ${run.config.rounds}` : "Waiting for participants" })),
+        keyed("participant-slots", participantSlots(run)),
+        ...runAnalytics(run),
+        run.runMode === "real-lewm-tworooms" ? keyed("probe-head", el("h2", { text: "Before/after validation probe" })) : null,
+        keyed("probe", renderRealModeProbe(run)),
+        keyed("diag-head", el("h2", { text: "Training diagnostics" })),
+        keyed("diagnostics", trainingDiagnostics(run)),
+        keyed("metrics-head", el("h2", { text: "Round metrics" })),
+        keyed("metrics", metricsList(run)),
+        keyed("artifacts-head", el("h2", { text: "Artifacts" })),
+        keyed("artifacts", artifactList(run)),
+        keyed("timeline-head", el("h2", { text: "Event timeline" })),
+        keyed("timeline", timelineList(run.events)),
+      ]),
     ]),
-  );
-  drawQr(qrCanvas, joinUrl);
+    run.runMode === "real-lewm-tworooms"
+      ? keyed("checkpoint-note", el("section", { class: "panel compact" }, [
+          el("h2", { text: "Checkpoint-backed inference" }),
+          el("p", { class: "note" }, [
+            "Watch the real model roll out and plan in the ",
+            el("a", { href: "#/tworooms", text: "TwoRooms lab" }),
+            ". The probe above scores the latest aggregated revision.",
+          ]),
+        ]))
+      : markStatic("inference", renderInferencePanel(run)),
+  ]);
+}
+
+function drawHostQr(run) {
+  const canvas = app.querySelector("#qr");
+  if (!canvas) return;
+  const url = hostQrUrl(run);
+  if (canvas.dataset.qrUrl !== url || !canvas.width) {
+    canvas.dataset.qrUrl = url;
+    drawQr(canvas, url);
+  }
+}
+
+function mountBackendHostSnapshot(run) {
+  runRef.current = run;
+  ensureBackendPoll("host", run.id, { role: "host" });
+  app.append(buildBackendHostTree(run));
+  drawHostQr(run);
+}
+
+function morphHostSnapshot(run) {
+  runRef.current = run;
+  ensureBackendPoll("host", run.id, { role: "host" });
+  if (!app.firstElementChild) {
+    mountBackendHostSnapshot(run);
+    return;
+  }
+  morph(app.firstElementChild, buildBackendHostTree(run));
+  drawHostQr(run);
 }
 
 // -------------------------------------------------------------- participants
@@ -1047,14 +1197,18 @@ function startBackendLearner(run, me, participantToken, { force = false } = {}) 
         await backendClient.submitUpdate(run.id, me.id, participantToken, artifact);
       }
       backendLearnerJobs.set(key, { status: "submitted" });
-      if (currentRouteStill("join", run.id) && !shouldDeferAutoRefreshForDocument()) render();
+      if (currentRouteStill("join", run.id) && !shouldDeferAutoRefreshForDocument()) {
+        updateRoute(parseRoute(window.location.hash));
+      }
     } catch (error) {
       backendLearnerJobs.set(key, { status: "error", error: error.message });
       backendLearnerTelemetry.set(
         key,
         learnerTelemetryPayload(me.progress ?? 0, { error: error.message, phase: "error" }),
       );
-      if (currentRouteStill("join", run.id) && !shouldDeferAutoRefreshForDocument()) render();
+      if (currentRouteStill("join", run.id) && !shouldDeferAutoRefreshForDocument()) {
+        updateRoute(parseRoute(window.location.hash));
+      }
     }
   })();
 }
@@ -1094,39 +1248,53 @@ function renderLocalJoin(route) {
           parseRoute(window.location.hash).view === "join"
           && !shouldDeferAutoRefreshForDocument()
         ) {
-          render();
+          morphLocalJoin();
         }
       },
       adapters,
     );
   }
-  const session = participantSession;
-  const snapshot = session.snapshot;
-  const panel = el("section", { class: "panel participant-stage" }, [el("h2", { text: `Participant room - ${runId}` })]);
+  app.append(buildLocalJoinTree(route, participantSession.snapshot));
+}
 
-  if (!snapshot) {
-    panel.append(note("Waiting for the host tab. Frontend-only simulator joins require the host dashboard to stay open in this browser."));
-    app.append(panel);
+function morphLocalJoin() {
+  if (!participantSession) return;
+  const route = parseRoute(window.location.hash);
+  runRef.current = participantSession.snapshot;
+  if (!app.firstElementChild) {
+    app.append(buildLocalJoinTree(route, participantSession.snapshot));
     return;
   }
+  morph(app.firstElementChild, buildLocalJoinTree(route, participantSession.snapshot));
+}
 
-  panel.append(
-    el("p", { class: "note" }, [
+function buildLocalJoinTree(route, snapshot) {
+  const runId = route.runId;
+  const session = participantSession;
+  const children = [keyed("ljoin-head", el("h2", { text: `Participant room - ${runId}` }))];
+
+  if (!snapshot) {
+    children.push(keyed("ljoin-wait", note("Waiting for the host tab. Frontend-only simulator joins require the host dashboard to stay open in this browser.")));
+    return el("section", { class: "panel participant-stage" }, children);
+  }
+
+  children.push(
+    keyed("ljoin-state", el("p", { class: "note" }, [
       "Run state: ",
       stateBadge(snapshot.state),
       ` · round ${snapshot.round}/${snapshot.config.rounds} · mode ${snapshot.mode}`,
-    ]),
+    ])),
   );
 
   const me = snapshot.participants.find((p) => p.id === session.participantId) ?? null;
   if (!me) {
     const blocked = joinBlockedMessage(snapshot.state);
     if (blocked) {
-      panel.append(errorBox(blocked));
+      children.push(keyed("ljoin-blocked", errorBox(blocked)));
     } else {
       const nameInput = el("input", { type: "text", placeholder: "display name (optional)" });
       const joinError = el("p", { class: "note" });
-      panel.append(
+      children.push(preserve("ljoin-form", el("div", {}, [
         el("label", {}, ["Display name", nameInput]),
         el("button", {
           text: "Join run",
@@ -1145,18 +1313,17 @@ function renderLocalJoin(route) {
             } catch (error) {
               joinError.textContent = error.message;
             }
-            render();
+            morphLocalJoin();
           },
         }),
         joinError,
-      );
+      ])));
     }
-    app.append(panel);
-    return;
+    return el("section", { class: "panel participant-stage" }, children);
   }
 
-  panel.append(renderParticipantState(snapshot, me, true));
-  app.append(panel);
+  children.push(keyed("ljoin-body", renderParticipantState(snapshot, me, true)));
+  return el("section", { class: "panel participant-stage" }, children);
 }
 
 async function renderBackendJoin(route) {
@@ -1166,14 +1333,25 @@ async function renderBackendJoin(route) {
     const run = await backendClient.getRun(route.runId);
     if (!currentRouteStill("join", route.runId)) return;
     app.replaceChildren();
-    renderBackendJoinSnapshot(route, run);
+    mountBackendJoinSnapshot(route, run);
   } catch (error) {
     if (!currentRouteStill("join", route.runId)) return;
     app.replaceChildren(el("section", { class: "panel" }, [el("h2", { text: "Join failed" }), errorBox(error.message)]));
   }
 }
 
-function renderBackendJoinSnapshot(route, run) {
+// Refetch + morph after the participant joins (membership change) for immediate feedback.
+async function pullBackendJoin(route) {
+  if (!currentRouteStill("join", route.runId)) return;
+  try {
+    const run = await backendClient.getRun(route.runId);
+    if (currentRouteStill("join", route.runId)) morphJoinSnapshot(route, run);
+  } catch {
+    // The poll / socket stream will reconcile shortly.
+  }
+}
+
+function ensureJoinPoll(run) {
   const stored = readBackendParticipant(run.id);
   const me = stored ? run.participants.find((p) => p.id === stored.participantId) : null;
   if (stored && me) {
@@ -1185,61 +1363,88 @@ function renderBackendJoinSnapshot(route, run) {
   } else {
     ensureBackendPoll("join", run.id, { role: "host" });
   }
-  const panel = el("section", { class: "panel participant-stage" }, [
-    el("h2", { text: `Participant room - ${run.id}` }),
-    el("p", { class: "note" }, [
+}
+
+function mountBackendJoinSnapshot(route, run) {
+  runRef.current = run;
+  ensureJoinPoll(run);
+  app.append(buildBackendJoinTree(route, run));
+}
+
+function morphJoinSnapshot(route, run) {
+  runRef.current = run;
+  ensureJoinPoll(run);
+  if (!app.firstElementChild) {
+    mountBackendJoinSnapshot(route, run);
+    return;
+  }
+  morph(app.firstElementChild, buildBackendJoinTree(route, run));
+}
+
+function buildBackendJoinTree(route, run) {
+  const stored = readBackendParticipant(run.id);
+  const me = stored ? run.participants.find((p) => p.id === stored.participantId) : null;
+  const children = [
+    keyed("bjoin-head", el("h2", { text: `Participant room - ${run.id}` })),
+    keyed("bjoin-state", el("p", { class: "note" }, [
       "Run state: ",
       stateBadge(run.state),
       ` · round ${run.round}/${run.config.rounds} · ${backendPoll?.transport ?? "polling"}`,
-    ]),
-  ]);
+    ])),
+  ];
+  if (run.state === "paused") {
+    children.push(
+      keyed("bjoin-paused", el("p", { class: "error-box" }, [
+        "Run paused — waiting for quorum to return. Keep this tab open; it rejoins and resumes automatically.",
+      ])),
+    );
+  }
 
   if (!me) {
     const blocked = joinBlockedMessage(run.state);
     if (blocked) {
-      panel.append(errorBox(blocked));
+      children.push(keyed("bjoin-blocked", errorBox(blocked)));
     } else {
       const nameInput = el("input", { type: "text", placeholder: "display name (optional)" });
       const modeControl = renderModeControl(run.id);
       const joinError = el("p", { class: "note" });
-      panel.append(
+      children.push(preserve("bjoin-form", el("div", {}, [
         el("label", {}, ["Display name", nameInput]),
         el("label", {}, ["Run mode", modeControl]),
         el("button", {
           text: "Join run",
           onclick: async () => {
+            const liveRoute = parseRoute(window.location.hash);
+            const liveRun = runRef.current ?? run;
             try {
               const automationMode = selectedMode(modeControl);
-              const reply = await backendClient.joinRun(run.id, {
-                joinToken: route.token,
+              const reply = await backendClient.joinRun(liveRun.id, {
+                joinToken: liveRoute.token,
                 displayName: nameInput.value.trim() || null,
-                sessionId: sessionIdForRun(run.id),
+                sessionId: sessionIdForRun(liveRun.id),
                 automationMode,
               });
-              writeBackendParticipant(run.id, {
+              writeBackendParticipant(liveRun.id, {
                 participantId: reply.participantId,
                 participantToken: reply.participantToken,
                 automationMode,
               });
-              render();
+              void pullBackendJoin(liveRoute);
             } catch (error) {
               joinError.textContent = error.message;
             }
           },
         }),
         joinError,
-      );
+      ])));
     }
-    app.append(panel);
-    return;
+    return el("section", { class: "panel participant-stage" }, children);
   }
 
-  panel.append(
-    renderParticipantState(run, me, false, stored.participantToken, {
-      automationMode: me.automationMode ?? stored.automationMode ?? "auto",
-    }),
-  );
-  app.append(panel);
+  children.push(keyed("bjoin-body", renderParticipantState(run, me, false, stored.participantToken, {
+    automationMode: me.automationMode ?? stored.automationMode ?? "auto",
+  })));
+  return el("section", { class: "panel participant-stage" }, children);
 }
 
 function renderLearnerTelemetry(run, me, telemetry) {
@@ -1305,7 +1510,10 @@ function renderParticipantState(run, me, simulated, participantToken = null, opt
       class: automationMode === "auto" ? "secondary" : null,
       text: automationMode === "auto" ? "Retry local learner" : "Run local learner and submit update",
       onclick: () => {
-        startBackendLearner(run, me, participantToken, { force: true });
+        // Resolve the freshest run + participant at click time, never the captured snapshot.
+        const liveRun = runRef.current ?? run;
+        const liveMe = (liveRun.participants ?? []).find((p) => p.id === me.id) ?? me;
+        startBackendLearner(liveRun, liveMe, participantToken, { force: true });
       },
     });
     if (job?.status === "running" || job?.status === "submitted") button.disabled = true;
@@ -1333,6 +1541,9 @@ function renderParticipantState(run, me, simulated, participantToken = null, opt
 // --------------------------------------------------- real-mode validation probe
 
 const probeResults = new Map();
+// Probe runs are tracked here (not just on the DOM node) so a poll landing
+// mid-probe rebuilds the button already-disabled and the reconciler preserves it.
+const probeInFlight = new Set();
 
 function renderRealModeProbe(run) {
   if (run.runMode !== "real-lewm-tworooms") return null;
@@ -1341,7 +1552,8 @@ function renderRealModeProbe(run) {
     return note("The probe unlocks once the first adapter revision aggregates.");
   }
   const last = revisions[revisions.length - 1];
-  const cached = probeResults.get(`${run.id}:${last.modelRevisionId}`);
+  const probeKey = `${run.id}:${last.modelRevisionId}`;
+  const cached = probeResults.get(probeKey);
   const statusNote = el("p", { class: "note", text: cached ? "" : "Scores the latest global adapter against the plain checkpoint on a fixed validation set, right here in your browser." });
   const resultBox = el("div", {});
   if (cached) renderProbeResult(resultBox, cached);
@@ -1350,32 +1562,41 @@ function renderRealModeProbe(run) {
     class: "secondary",
     text: `Run before/after probe against ${last.modelRevisionId}`,
     onclick: async () => {
+      // Read the latest run + revision at click time, never the captured snapshot.
+      const liveRun = runRef.current ?? run;
+      const liveRevisions = liveRun.modelRevisions ?? [];
+      const liveLast = liveRevisions[liveRevisions.length - 1];
+      if (!liveLast) return;
+      const key = `${liveRun.id}:${liveLast.modelRevisionId}`;
+      probeInFlight.add(key);
       button.disabled = true;
       statusNote.textContent = "Loading the runtime and scoring both revisions on the fixed validation set…";
       try {
         const runtime = await loadLewmRuntime();
-        const revision = await backendClient.modelRevision(run.id, last.modelRevisionId);
+        const revision = await backendClient.modelRevision(liveRun.id, liveLast.modelRevisionId);
         if (!Array.isArray(revision.adapterState)) {
           throw new Error("revision carries no adapter state");
         }
         const report = await compareRevisions({
           runtime,
           adaptedState: revision.adapterState,
-          adapterHiddenDim: run.lewmBinding?.adapterHiddenDim ?? 32,
-          adapterInitSeed: run.lewmBinding?.adapterInitSeed ?? 42,
+          adapterHiddenDim: liveRun.lewmBinding?.adapterHiddenDim ?? 32,
+          adapterInitSeed: liveRun.lewmBinding?.adapterInitSeed ?? 42,
         });
-        report.modelRevisionId = last.modelRevisionId;
-        probeResults.set(`${run.id}:${last.modelRevisionId}`, report);
+        report.modelRevisionId = liveLast.modelRevisionId;
+        probeResults.set(key, report);
         statusNote.textContent = "";
         renderProbeResult(resultBox, report);
       } catch (error) {
         statusNote.textContent = "";
         resultBox.replaceChildren(errorBox(`Probe failed: ${error.message}`));
       } finally {
+        probeInFlight.delete(key);
         button.disabled = false;
       }
     },
   });
+  button.disabled = probeInFlight.has(probeKey);
   return el("div", {}, [button, statusNote, resultBox]);
 }
 
@@ -1512,12 +1733,21 @@ function renderInferencePanel(run) {
   return panel;
 }
 
+// Coming back to the tab: repaint from in-memory state at once (no teardown),
+// then pull a fresh backend snapshot if a run stream is active.
+function refreshActiveView() {
+  if (shouldDeferAutoRefreshForDocument()) return;
+  updateRoute(parseRoute(window.location.hash));
+  if (backendPoll) {
+    attachBackendSocket(backendPoll);
+    void refreshBackendRoute(backendPoll.view, backendPoll.runId);
+  }
+}
+
 window.addEventListener("hashchange", render);
-window.addEventListener("focus", () => {
-  if (!shouldDeferAutoRefreshForDocument()) render();
-});
+window.addEventListener("focus", refreshActiveView);
 window.addEventListener("visibilitychange", () => {
-  if (!shouldDeferAutoRefreshForDocument()) render();
+  if (!document.hidden) refreshActiveView();
 });
 window.addEventListener("pagehide", () => {
   if (participantSession?.participantId) {

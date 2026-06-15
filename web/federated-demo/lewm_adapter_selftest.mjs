@@ -292,6 +292,50 @@ await checkAsync("resident pair collection produces aligned (prediction, next-la
   assert(collected.envSteps % 5 === 0, "frameskip-5 env stepping");
 });
 
+// Regression: short TwoRooms episodes used to starve a round (the "insufficient
+// resident pairs" throw) and silently drop a participant → quorum loss over a long
+// run. minPairs makes the collector resample (bounded) until the floor is met.
+await checkAsync("minPairs guarantees enough resident pairs on short-episode seeds", async () => {
+  const runtime = fakeFrozenRuntime();
+  const EPISODES = 3;
+  const MAX = 10;
+  // These seeds yield < 4 pairs with the original fixed-episode collection (2155 -> 0).
+  const starvedSeeds = [667, 1642, 2080, 2155];
+  for (const seed of starvedSeeds) {
+    const before = await collectResidentPairs({ runtime, seed, episodes: EPISODES, maxModelSteps: MAX });
+    assert(before.pairs.count < 4, `seed ${seed} is a genuine starved case (got ${before.pairs.count})`);
+    const after = await collectResidentPairs({
+      runtime,
+      seed,
+      episodes: EPISODES,
+      maxModelSteps: MAX,
+      minPairs: 8,
+    });
+    assert(after.pairs.count >= 4, `seed ${seed} now meets the training floor (got ${after.pairs.count})`);
+    assert(after.episodes > EPISODES, `seed ${seed} resampled extra episodes (ran ${after.episodes})`);
+  }
+});
+
+await checkAsync("minPairs default preserves the fixed-episode behavior", async () => {
+  const runtime = fakeFrozenRuntime();
+  const a = await collectResidentPairs({ runtime, seed: 5, episodes: 2, maxModelSteps: 8 });
+  assert(a.episodes === 2, "no extra episodes when minPairs is unset");
+});
+
+await checkAsync("the local continuation no longer throws on a starved seed", async () => {
+  const runtime = fakeFrozenRuntime();
+  const result = await runLocalAdapterContinuation({
+    runtime,
+    seed: 2155, // 0 pairs under the old fixed-episode collection
+    episodes: 3,
+    maxModelSteps: 10,
+    trainSteps: 20,
+    batchSize: 16,
+    clipNorm: 2.0,
+  });
+  assert(result.metrics.pairCount >= 4, `trained on a real batch (${result.metrics.pairCount} pairs)`);
+});
+
 await checkAsync("the full local continuation reports real metrics and a bounded delta", async () => {
   const runtime = fakeFrozenRuntime();
   const result = await runLocalAdapterContinuation({

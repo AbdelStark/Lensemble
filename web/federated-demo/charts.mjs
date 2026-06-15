@@ -110,23 +110,11 @@ function svgEl(tag, attrs) {
   return node;
 }
 
-export function lineChart({ series, title, width = 520, height = 170, yZero = false }) {
-  const wrap = document.createElement("div");
-  wrap.className = "chart";
-  if (title) {
-    const heading = document.createElement("div");
-    heading.className = "chart-title";
-    heading.textContent = title;
-    wrap.append(heading);
-  }
+// Shared geometry so the initial render and every in-place update compute the
+// exact same scales (no one-frame jump when a chart updates).
+function buildScales({ series, width = 520, height = 170, yZero = false }) {
   const extent = seriesExtent(series);
-  if (!extent) {
-    const empty = document.createElement("p");
-    empty.className = "muted";
-    empty.textContent = "No data yet.";
-    wrap.append(empty);
-    return wrap;
-  }
+  if (!extent) return { extent: null };
   const yMin = yZero ? Math.min(0, extent.yMin) : extent.yMin;
   const yMax = extent.yMax;
   const pad = { top: 10, right: 12, bottom: 22, left: 44 };
@@ -134,68 +122,173 @@ export function lineChart({ series, title, width = 520, height = 170, yZero = fa
   const innerH = height - pad.top - pad.bottom;
   const sx = (x) => pad.left + ((x - extent.xMin) / (extent.xMax - extent.xMin)) * innerW;
   const sy = (y) => pad.top + (1 - (y - yMin) / (yMax - yMin || 1)) * innerH;
+  return { extent, yMin, yMax, pad, innerW, innerH, sx, sy, width, height };
+}
 
+function seriesColor(s, index) {
+  return s.color ?? CHART_PALETTE[index % CHART_PALETTE.length];
+}
+
+function pathD(points, sc) {
+  return points
+    .map((p, i) => `${i === 0 ? "M" : "L"}${sc.sx(p.x).toFixed(1)},${sc.sy(p.y).toFixed(1)}`)
+    .join(" ");
+}
+
+// Renders grid + axis ticks into their layer. Cheap (a handful of nodes); cleared
+// and rebuilt each update so tick counts can change without leftovers.
+function renderAxes(layer, sc) {
+  while (layer.firstChild) layer.removeChild(layer.firstChild);
+  for (const tick of niceTicks(sc.yMin, sc.yMax)) {
+    const y = sc.sy(tick);
+    layer.append(
+      svgEl("line", { x1: sc.pad.left, x2: sc.width - sc.pad.right, y1: y, y2: y, class: "chart-grid" }),
+    );
+    const label = svgEl("text", { x: sc.pad.left - 6, y: y + 3.5, class: "chart-tick", "text-anchor": "end" });
+    label.textContent = formatTick(tick);
+    layer.append(label);
+  }
+  for (const tick of niceTicks(sc.extent.xMin, sc.extent.xMax, 6).filter(Number.isInteger)) {
+    const label = svgEl("text", { x: sc.sx(tick), y: sc.height - 6, class: "chart-tick", "text-anchor": "middle" });
+    label.textContent = String(tick);
+    layer.append(label);
+  }
+}
+
+// Reconciles one series' <path> + point <circle>s inside its <g>, reusing
+// existing nodes so the line grows in place (no teardown / flash).
+function renderSeriesGroup(group, s, color, sc) {
+  let path = group.querySelector("path");
+  if (!path) {
+    path = svgEl("path", { fill: "none", "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round" });
+    group.append(path);
+  }
+  path.setAttribute("d", pathD(s.points, sc));
+  path.setAttribute("stroke", color);
+  if (s.dashed) path.setAttribute("stroke-dasharray", "5 4");
+  else path.removeAttribute("stroke-dasharray");
+
+  const circles = group.querySelectorAll("circle");
+  s.points.forEach((p, i) => {
+    let dot = circles[i];
+    if (!dot) {
+      dot = svgEl("circle", { r: 2.6 });
+      group.append(dot);
+    }
+    dot.setAttribute("cx", sc.sx(p.x));
+    dot.setAttribute("cy", sc.sy(p.y));
+    dot.setAttribute("fill", color);
+  });
+  for (let i = circles.length - 1; i >= s.points.length; i -= 1) circles[i].remove();
+}
+
+function renderLegend(legend, series) {
+  const items = legend.querySelectorAll(".chart-legend-item");
+  series.forEach((s, index) => {
+    let item = items[index];
+    if (!item) {
+      item = document.createElement("span");
+      item.className = "chart-legend-item";
+      const swatch = document.createElement("span");
+      swatch.className = "chart-swatch";
+      item.append(swatch, document.createTextNode(s.label));
+      legend.append(item);
+    }
+    item.querySelector(".chart-swatch").style.background = seriesColor(s, index);
+    item.lastChild.nodeValue = s.label;
+  });
+  const stale = legend.querySelectorAll(".chart-legend-item");
+  for (let i = stale.length - 1; i >= series.length; i -= 1) stale[i].remove();
+}
+
+// Patches a previously-built chart node to match new series data in place. The
+// generic morph() reconciler routes here via node.__chartUpdate, so the <svg> is
+// never torn down — only changed geometry repaints.
+function updateChart(wrap, opts) {
+  const sc = buildScales(opts);
+  const svg = wrap.querySelector("svg");
+  const empty = wrap.querySelector(".chart-empty");
+  if (!sc.extent) {
+    if (svg) svg.remove();
+    if (wrap.querySelector(".chart-legend")) wrap.querySelector(".chart-legend").remove();
+    if (!empty) {
+      const note = document.createElement("p");
+      note.className = "muted chart-empty";
+      note.textContent = "No data yet.";
+      wrap.append(note);
+    }
+    wrap.__series = opts.series;
+    return;
+  }
+  if (!svg) {
+    // empty → has-data transition: build the body fresh once.
+    if (empty) empty.remove();
+    buildChartBody(wrap, opts, sc);
+    wrap.__series = opts.series;
+    return;
+  }
+  renderAxes(svg.querySelector(".chart-axes"), sc);
+  const layer = svg.querySelector(".chart-series");
+  const groups = layer.querySelectorAll("g[data-series]");
+  opts.series.forEach((s, index) => {
+    let group = groups[index];
+    if (!group) {
+      group = svgEl("g", { "data-series": String(index) });
+      layer.append(group);
+    }
+    renderSeriesGroup(group, s, seriesColor(s, index), sc);
+  });
+  for (let i = groups.length - 1; i >= opts.series.length; i -= 1) groups[i].remove();
+  renderLegend(wrap.querySelector(".chart-legend"), opts.series);
+  wrap.__series = opts.series;
+}
+
+function buildChartBody(wrap, opts, sc) {
   const svg = svgEl("svg", {
-    viewBox: `0 0 ${width} ${height}`,
+    viewBox: `0 0 ${sc.width} ${sc.height}`,
     class: "chart-svg",
     role: "img",
-    "aria-label": title ?? "chart",
+    "aria-label": opts.title ?? "chart",
   });
-
-  for (const tick of niceTicks(yMin, yMax)) {
-    const y = sy(tick);
-    svg.append(
-      svgEl("line", { x1: pad.left, x2: width - pad.right, y1: y, y2: y, class: "chart-grid" }),
-    );
-    const label = svgEl("text", { x: pad.left - 6, y: y + 3.5, class: "chart-tick", "text-anchor": "end" });
-    label.textContent = formatTick(tick);
-    svg.append(label);
-  }
-  const xTicks = niceTicks(extent.xMin, extent.xMax, 6).filter(Number.isInteger);
-  for (const tick of xTicks) {
-    const label = svgEl("text", {
-      x: sx(tick),
-      y: height - 6,
-      class: "chart-tick",
-      "text-anchor": "middle",
-    });
-    label.textContent = String(tick);
-    svg.append(label);
-  }
-
-  const colors = series.map((s, index) => s.color ?? CHART_PALETTE[index % CHART_PALETTE.length]);
-
-  series.forEach((s, index) => {
-    const color = colors[index];
-    const path = s.points.map((p, i) => `${i === 0 ? "M" : "L"}${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`).join(" ");
-    svg.append(
-      svgEl("path", {
-        d: path,
-        fill: "none",
-        stroke: color,
-        "stroke-width": 2,
-        "stroke-linecap": "round",
-        "stroke-linejoin": "round",
-        ...(s.dashed ? { "stroke-dasharray": "5 4" } : {}),
-      }),
-    );
-    for (const p of s.points) {
-      svg.append(svgEl("circle", { cx: sx(p.x), cy: sy(p.y), r: 2.6, fill: color }));
-    }
+  const axes = svgEl("g", { class: "chart-axes" });
+  const seriesLayer = svgEl("g", { class: "chart-series" });
+  svg.append(axes, seriesLayer);
+  renderAxes(axes, sc);
+  opts.series.forEach((s, index) => {
+    const group = svgEl("g", { "data-series": String(index) });
+    seriesLayer.append(group);
+    renderSeriesGroup(group, s, seriesColor(s, index), sc);
   });
   wrap.append(svg);
 
   const legend = document.createElement("div");
   legend.className = "chart-legend";
-  series.forEach((s, index) => {
-    const item = document.createElement("span");
-    item.className = "chart-legend-item";
-    const swatch = document.createElement("span");
-    swatch.className = "chart-swatch";
-    swatch.style.background = colors[index];
-    item.append(swatch, document.createTextNode(s.label));
-    legend.append(item);
-  });
   wrap.append(legend);
+  renderLegend(legend, opts.series);
+}
+
+export function lineChart(opts) {
+  const { series, title } = opts;
+  const wrap = document.createElement("div");
+  wrap.className = "chart";
+  if (title) {
+    wrap.dataset.key = title; // stable identity for the keyed reconciler
+    const heading = document.createElement("div");
+    heading.className = "chart-title";
+    heading.textContent = title;
+    wrap.append(heading);
+  }
+  const sc = buildScales(opts);
+  if (!sc.extent) {
+    const empty = document.createElement("p");
+    empty.className = "muted chart-empty";
+    empty.textContent = "No data yet.";
+    wrap.append(empty);
+  } else {
+    buildChartBody(wrap, opts, sc);
+  }
+  // morph() routes here via __chartUpdate instead of descending into the <svg>.
+  wrap.__series = series;
+  wrap.__chartUpdate = (nextSeries) => updateChart(wrap, { ...opts, series: nextSeries });
   return wrap;
 }

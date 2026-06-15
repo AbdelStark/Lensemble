@@ -30,10 +30,13 @@ RUN_STATES = (
     "aggregating",
     "checkpoint_ready",
     "inference_ready",
+    "paused",
     "completed",
     "aborted",
     "failed",
 )
+# "paused" is recoverable: a run drops here when quorum is lost mid-run (instead of
+# terminally failing) and resumes when enough participants reconnect.
 TERMINAL_RUN_STATES = frozenset({"completed", "aborted", "failed"})
 PARTICIPANT_STATES = (
     "joined",
@@ -472,6 +475,7 @@ class DemoRun:
     artifacts: list[dict[str, Any]] = field(default_factory=list)
     abort_reason: str | None = None
     failure_reason: str | None = None
+    paused_reason: str | None = None
     aggregation_mode: str = "tiny-vector-mean"
     learner_runtime: str = "js-worker-tiny-jepa-v1"
     current_model_revision_id: str = INITIAL_REVISION_ID
@@ -625,10 +629,11 @@ class FederatedDemoService:
             "roundMetrics": deepcopy(run.round_metrics),
             "abortReason": run.abort_reason,
             "failureReason": run.failure_reason,
+            "pausedReason": run.paused_reason if run.state == "paused" else None,
             "controls": {
                 "canStart": run.state == "ready",
                 "canAbort": run.state not in TERMINAL_RUN_STATES,
-                "pauseSupported": False,
+                "pauseSupported": True,
                 "canDropParticipant": run.state not in TERMINAL_RUN_STATES,
                 "canExport": True,
             },
@@ -696,7 +701,8 @@ class FederatedDemoService:
         )
         if run.state in TERMINAL_RUN_STATES:
             raise FederatedDemoError("run_closed", f"run is {run.state}", status=409)
-        if run.state not in {"created", "joining", "ready"}:
+        # "paused" accepts reconnects so a quorum-lost run can recover.
+        if run.state not in {"created", "joining", "ready", "paused"}:
             raise FederatedDemoError(
                 "already_started", "run already started; joining is closed", status=409
             )
@@ -705,11 +711,20 @@ class FederatedDemoService:
                 participant.last_heartbeat_at = _now_ms()
                 participant.last_connection_at = _now_ms()
                 participant.last_seen_seq = run.next_event_seq - 1
+                if automation_mode is not None:
+                    participant.automation_mode = selected_automation_mode
+                if run.state == "paused" and participant.state == "dropped":
+                    # the browser that timed out is back — readmit it and try to resume
+                    self._revive_participant(run, participant)
+                    self._maybe_resume(run)
+                    return {
+                        "participantId": participant.id,
+                        "participantToken": participant.token,
+                        "run": self.snapshot(run.id),
+                    }
                 if participant.connection_state in {"reconnecting", "stale"}:
                     participant.reconnect_count += 1
                 participant.connection_state = "connected"
-                if automation_mode is not None:
-                    participant.automation_mode = selected_automation_mode
                 self._emit(
                     run,
                     "participant.resumed",
@@ -760,7 +775,8 @@ class FederatedDemoService:
                 "automationMode": participant.automation_mode,
             },
         )
-        self._transition_run(run, "joining", "first participant joined")
+        if run.state == "created":
+            self._transition_run(run, "joining", "first participant joined")
         self._set_participant_state(run, participant, "ready")
         self._emit(
             run,
@@ -774,6 +790,9 @@ class FederatedDemoService:
             and len(self._active_participants(run)) >= run.config.quorum
         ):
             self._transition_run(run, "ready", f"quorum of {run.config.quorum} reached")
+        elif run.state == "paused":
+            # a fresh participant can restore quorum on a paused run
+            self._maybe_resume(run)
         return {
             "participantId": participant.id,
             "participantToken": participant.token,
@@ -786,6 +805,9 @@ class FederatedDemoService:
         run, participant = self._participant(run_id, participant_id, participant_token)
         participant.last_heartbeat_at = _now_ms()
         participant.last_seen_seq = run.next_event_seq - 1
+        if run.state == "paused" and participant.state == "dropped":
+            self._revive_participant(run, participant)
+            self._maybe_resume(run)
         if participant.state not in {"completed", "dropped", "error"}:
             participant.connection_state = "connected"
         if run.state not in TERMINAL_RUN_STATES and participant.state not in {
@@ -835,6 +857,9 @@ class FederatedDemoService:
             participant.last_connection_at = _now_ms()
             participant.last_heartbeat_at = _now_ms()
             participant.last_seen_seq = after
+            if run.state == "paused" and participant.state == "dropped":
+                self._revive_participant(run, participant)
+                self._maybe_resume(run)
         self._emit(
             run,
             "connection.opened",
@@ -1070,7 +1095,7 @@ class FederatedDemoService:
         if self._round_ready_to_close(run):
             self._close_round(run)
         else:
-            self.fail_run(run.id, reason="quorum lost after participant timeout")
+            self._pause_run(run, reason="quorum lost after participant timeout")
         return self.snapshot(run.id)
 
     def drop_participant(
@@ -1089,7 +1114,7 @@ class FederatedDemoService:
             run.state == "running_round"
             and len(self._active_participants(run)) < run.config.quorum
         ):
-            self.fail_run(run.id, reason="quorum lost after participant drop")
+            self._pause_run(run, reason="quorum lost after participant drop")
         elif run.state == "running_round" and self._round_ready_to_close(run):
             self._close_round(run)
         elif (
@@ -1251,7 +1276,7 @@ class FederatedDemoService:
             and len(self._active_participants(run)) < run.config.quorum
             and self._submitted_count(run) < run.config.quorum
         ):
-            self.fail_run(run.id, reason="quorum lost after participant timeout")
+            self._pause_run(run, reason="quorum lost after participant timeout")
 
     def _require_join_token(self, run: DemoRun, join_token: str) -> None:
         if _now_ms() - run.created_at > self.safety.token_ttl_ms:
@@ -1413,6 +1438,77 @@ class FederatedDemoService:
             severity="warn",
             payload={"reason": reason, "round": run.round},
         )
+
+    def _pause_run(self, run: DemoRun, *, reason: str) -> None:
+        """Suspend a run that lost quorum mid-flight, preserving round progress so it
+        can resume when participants reconnect (instead of terminally failing)."""
+        if run.state in TERMINAL_RUN_STATES or run.state == "paused":
+            return
+        run.paused_reason = reason
+        run.state = "paused"
+        self._emit(
+            run,
+            "run.paused",
+            f"run paused: {reason}; waiting for quorum to return",
+            severity="warn",
+            payload={"round": run.round, "quorum": run.config.quorum},
+        )
+
+    def _revive_participant(self, run: DemoRun, participant: ParticipantState) -> None:
+        """Bring a participant that was dropped while the run is paused back to ready so
+        it can rejoin the quorum and resume contributing."""
+        participant.state = "ready"
+        participant.connection_state = "connected"
+        participant.error = None
+        participant.last_heartbeat_at = _now_ms()
+        participant.last_connection_at = _now_ms()
+        participant.reconnect_count += 1
+        self._emit(
+            run,
+            "participant.resumed",
+            f"{participant.id} reconnected and rejoined the quorum",
+            participant_id=participant.id,
+            actor="participant",
+            payload={"state": participant.state},
+        )
+
+    def _maybe_resume(self, run: DemoRun) -> None:
+        if run.state != "paused":
+            return
+        if len(self._active_participants(run)) < run.config.quorum:
+            return
+        self._resume_round(run)
+
+    def _resume_round(self, run: DemoRun) -> None:
+        run.paused_reason = None
+        run.state = "running_round"
+        run.round_started_at = _now_ms()
+        self._emit(
+            run,
+            "run.resumed",
+            f"run resumed at round {run.round} (quorum restored)",
+            payload={"round": run.round, "modelRevisionId": run.current_model_revision_id},
+        )
+        for participant in self._active_participants(run):
+            if run.round in participant.submitted_rounds:
+                continue  # already contributed this round; keep its submission
+            if participant.state in {"ready", "assigned", "training", "submitted"}:
+                participant.state = "assigned"
+                participant.round = run.round
+                participant.progress = 0.0
+                self._emit(
+                    run,
+                    "round.assigned",
+                    f"round {run.round} re-assigned to {participant.id}",
+                    participant_id=participant.id,
+                    payload={
+                        "round": run.round,
+                        "roundId": self._round_id(run),
+                        "modelRevisionId": run.current_model_revision_id,
+                    },
+                )
+        if self._round_ready_to_close(run):
+            self._close_round(run)
 
     def _close_round(self, run: DemoRun) -> None:
         submitted = [

@@ -74,6 +74,27 @@ def test_federated_demo_selftest_passes_under_node() -> None:
     assert report["total"] >= 25
 
 
+def test_federated_demo_morph_selftest_passes_under_node() -> None:
+    """The dashboard updates reactively (graphs/metrics patch in place) instead of
+    rebuilding #app on every round; morph.mjs is the keyed DOM reconciler that makes
+    that safe. Its invariants (identity preservation, data-static/data-preserve
+    opt-outs, in-flight disabled + focus preservation) are node-tested here."""
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not installed")
+
+    result = subprocess.run(
+        [node, str(WEB_DIR / "morph_selftest.mjs")],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    report = json.loads(result.stdout.strip().splitlines()[-1])
+    assert report["failed"] == 0
+    assert report["passed"] == report["total"]
+    assert report["total"] >= 10
+
+
 def _update_artifact(
     run_id: str,
     participant_id: str,
@@ -324,6 +345,77 @@ def test_backend_demo_timeout_abort_and_ndjson_event_stream() -> None:
     failed = service.fail_run(failed_run["id"], reason="test failure")
     assert failed["state"] == "failed"
     assert failed["participants"][0]["state"] == "error"
+
+
+def test_backend_demo_pauses_on_quorum_loss_and_resumes_on_reconnect() -> None:
+    """Losing quorum mid-run pauses (recoverable) instead of terminally failing, and the
+    run resumes the in-flight round when participants reconnect (issue: long runs died on
+    a transient backgrounded-tab heartbeat gap)."""
+    service = FederatedDemoService()
+    run = service.create_run({"maxParticipants": 4, "quorum": 2, "rounds": 2})
+    sessions = ["sess-a", "sess-b"]
+    joined = [
+        service.join_run(
+            run["id"], join_token=run["joinToken"], session_id=s, display_name=s
+        )
+        for s in sessions
+    ]
+    started = service.start_run(run["id"])
+    assert started["state"] == "running_round"
+    assert started["round"] == 1
+
+    # Every participant goes silent → the liveness sweep drops them below quorum.
+    runtime = service._runs[run["id"]]
+    last_hb = max(
+        runtime.participants[j["participantId"]].last_heartbeat_at for j in joined
+    )
+    service.refresh_liveness(run["id"], now_ms=last_hb + 50_000)
+    paused = service.snapshot(run["id"])
+    assert paused["state"] == "paused", "quorum loss pauses instead of failing"
+    assert paused["pausedReason"] and "quorum" in paused["pausedReason"]
+    assert paused["round"] == 1, "round progress is preserved across the pause"
+    assert paused["failureReason"] is None
+    assert any(e["kind"] == "run.paused" for e in service.events(run["id"]))
+
+    # One participant returns — still below quorum, so the run stays paused.
+    service.heartbeat(
+        run["id"],
+        joined[0]["participantId"],
+        participant_token=joined[0]["participantToken"],
+    )
+    assert service.snapshot(run["id"])["state"] == "paused"
+
+    # The second returns (reconnect via session match) → quorum restored → resume.
+    service.join_run(run["id"], join_token=run["joinToken"], session_id=sessions[1])
+    resumed = service.snapshot(run["id"])
+    assert resumed["state"] == "running_round"
+    assert resumed["round"] == 1, "resumes the same in-flight round"
+    assert resumed["pausedReason"] is None
+    assert any(e["kind"] == "run.resumed" for e in service.events(run["id"]))
+    active = [p for p in resumed["participants"] if p["state"] not in {"dropped", "error"}]
+    assert len(active) >= run["config"]["quorum"]
+
+    # The revived participants finish the round and the run advances past the pause.
+    for j in joined:
+        service.update_progress(
+            run["id"],
+            j["participantId"],
+            participant_token=j["participantToken"],
+            progress=1.0,
+        )
+        service.submit_update(
+            run["id"],
+            j["participantId"],
+            participant_token=j["participantToken"],
+            artifact=_update_artifact(run["id"], j["participantId"], 1),
+        )
+    advanced = service.snapshot(run["id"])
+    assert advanced["state"] not in {"failed", "paused"}
+    assert advanced["round"] >= 2 or advanced["state"] in {
+        "checkpoint_ready",
+        "inference_ready",
+        "completed",
+    }
 
 
 def test_backend_demo_public_urls_safety_and_liveness() -> None:

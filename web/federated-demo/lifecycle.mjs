@@ -14,6 +14,8 @@ export const RUN_STATES = Object.freeze([
   "aggregating",
   "checkpoint_ready",
   "inference_ready",
+  // recoverable: quorum lost mid-run parks here and resumes on reconnect
+  "paused",
   "completed",
   "aborted",
   "failed",
@@ -23,10 +25,11 @@ export const RUN_TRANSITIONS = Object.freeze({
   created: ["joining", "aborted", "failed"],
   joining: ["ready", "aborted", "failed"],
   ready: ["running_round", "aborted", "failed"],
-  running_round: ["aggregating", "aborted", "failed"],
-  aggregating: ["running_round", "checkpoint_ready", "aborted", "failed"],
+  running_round: ["aggregating", "paused", "aborted", "failed"],
+  aggregating: ["running_round", "checkpoint_ready", "paused", "aborted", "failed"],
   checkpoint_ready: ["inference_ready", "aborted", "failed"],
   inference_ready: ["completed", "aborted", "failed"],
+  paused: ["running_round", "ready", "aborted", "failed"],
   completed: [],
   aborted: [],
   failed: [],
@@ -52,7 +55,8 @@ export const PARTICIPANT_TRANSITIONS = Object.freeze({
   training: ["submitted", "dropped", "error"],
   submitted: ["assigned", "completed", "dropped", "error"],
   completed: [],
-  dropped: [],
+  // a participant dropped while the run is paused can be revived on reconnect
+  dropped: ["ready"],
   error: [],
 });
 
@@ -62,6 +66,8 @@ export const PARTICIPANT_TRANSITIONS = Object.freeze({
 export const EVENT_KINDS = Object.freeze([
   "run.created",
   "run.state",
+  "run.paused",
+  "run.resumed",
   "run.aborted",
   "run.failed",
   "connection.opened",
