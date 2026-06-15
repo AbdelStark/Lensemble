@@ -56,7 +56,9 @@ def test_lewm_runtime_refuses_silent_fallback() -> None:
 def test_realdata_check_evidence_passes() -> None:
     committed = Path("docs/evidence/lewm_tworooms_realdata_check.json")
     if not committed.is_file():
-        pytest.skip("real-data check not generated yet (scripts/lewm_tworooms_realdata_check.py)")
+        pytest.skip(
+            "real-data check not generated yet (scripts/lewm_tworooms_realdata_check.py)"
+        )
     report = json.loads(committed.read_text())
     assert report["schema"] == "lewm-realdata-check/1"
     assert report["passes"] is True

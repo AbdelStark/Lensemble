@@ -600,8 +600,8 @@ claim. The following limitations are stated as-is and must not be softened:
   `thoughts/collapse_fix_probe.py`), the central ceiling probe
   (`thoughts/central_ceiling_probe.py`) does not clear, `skill_vs_identity` is
   gameable, and `effective_rank` is scale-invariant. In plain text:
-  skill_vs_identity is gameable; effective_rank is scale-invariant. See the corrected MVP
-  Benchmarks / Results section in the README and
+  skill_vs_identity is gameable; effective_rank is scale-invariant. See the
+  corrected MVP model card (`docs/evidence/phase3_mvp_model_card.md`) and
   `docs/evidence/phase3_mvp_benchmark_report.json`
   (`abdelstark/lensemble-phase3-converged-checkpoint` @ `a6f5a961…`). The
   dynamic-env RFC-0017 pivot is the binding ground-truth usefulness path.

@@ -48,7 +48,11 @@ def _args() -> argparse.Namespace:
 
 
 def _pairs_from_episodes(
-    sessions: dict[str, Any], f: Any, episodes: list[int], offsets: np.ndarray, lengths: np.ndarray
+    sessions: dict[str, Any],
+    f: Any,
+    episodes: list[int],
+    offsets: np.ndarray,
+    lengths: np.ndarray,
 ) -> dict[str, Any]:
     xs: list[np.ndarray] = []
     targets: list[np.ndarray] = []
@@ -56,9 +60,13 @@ def _pairs_from_episodes(
         start = int(offsets[ep])
         n_model_steps = min(7, (int(lengths[ep]) - 1) // 5)
         idx = [start + 5 * i for i in range(n_model_steps + 1)]
-        frames = (sessions["pixels"][idx].astype(np.float32) / 255.0).transpose(0, 3, 1, 2)
+        frames = (sessions["pixels"][idx].astype(np.float32) / 255.0).transpose(
+            0, 3, 1, 2
+        )
         latents = sessions["enc"].run(None, {"pixels": frames})[0]
-        raw_actions = sessions["actions"][start : start + 5 * n_model_steps].astype(np.float32)
+        raw_actions = sessions["actions"][start : start + 5 * n_model_steps].astype(
+            np.float32
+        )
         blocks = raw_actions.reshape(1, n_model_steps, 10)
         act_emb = sessions["act"].run(None, {"actions": blocks})[0][0]
         for t in range(2, n_model_steps):
@@ -90,21 +98,33 @@ def main() -> None:
         offsets = np.asarray(cast(h5py.Dataset, f["ep_offset"])[:])
         lengths = np.asarray(cast(h5py.Dataset, f["ep_len"])[:])
         candidates = np.flatnonzero(lengths >= 41)
-        total_needed = args.participants * args.episodes_per_participant + args.validation_episodes
+        total_needed = (
+            args.participants * args.episodes_per_participant + args.validation_episodes
+        )
         chosen = rng.choice(candidates, size=total_needed, replace=False)
         sessions = {
-            "enc": ort.InferenceSession(args.model_dir / "lewm_tworooms_encoder.onnx", providers=providers),
-            "act": ort.InferenceSession(args.model_dir / "lewm_tworooms_action.onnx", providers=providers),
-            "pred": ort.InferenceSession(args.model_dir / "lewm_tworooms_predictor.onnx", providers=providers),
+            "enc": ort.InferenceSession(
+                args.model_dir / "lewm_tworooms_encoder.onnx", providers=providers
+            ),
+            "act": ort.InferenceSession(
+                args.model_dir / "lewm_tworooms_action.onnx", providers=providers
+            ),
+            "pred": ort.InferenceSession(
+                args.model_dir / "lewm_tworooms_predictor.onnx", providers=providers
+            ),
             "pixels": cast(h5py.Dataset, f["pixels"]),
             "actions": cast(h5py.Dataset, f["action"]),
         }
         participants = []
         cursor = 0
         for _ in range(args.participants):
-            eps = sorted(int(e) for e in chosen[cursor : cursor + args.episodes_per_participant])
+            eps = sorted(
+                int(e) for e in chosen[cursor : cursor + args.episodes_per_participant]
+            )
             cursor += args.episodes_per_participant
-            participants.append(_pairs_from_episodes(sessions, f, eps, offsets, lengths))
+            participants.append(
+                _pairs_from_episodes(sessions, f, eps, offsets, lengths)
+            )
         val_eps = sorted(int(e) for e in chosen[cursor:])
         validation = _pairs_from_episodes(sessions, f, val_eps, offsets, lengths)
 

@@ -142,11 +142,15 @@ def _progress_and_submit(
     )
 
 
-def _smoke_two_participants(service: FederatedDemoService, rounds: int) -> dict[str, Any]:
+def _smoke_two_participants(
+    service: FederatedDemoService, rounds: int
+) -> dict[str, Any]:
     run = service.create_run(
         {"maxParticipants": 2, "quorum": 2, "rounds": rounds, "mode": REAL_LEWM_MODE}
     )
-    auto = service.join_run(run["id"], join_token=run["joinToken"], display_name="auto-phone")
+    auto = service.join_run(
+        run["id"], join_token=run["joinToken"], display_name="auto-phone"
+    )
     manual = service.join_run(
         run["id"],
         join_token=run["joinToken"],
@@ -254,7 +258,9 @@ def _four_with_dropout_and_reconnect(service: FederatedDemoService) -> dict[str,
     return {
         "runId": run["id"],
         "state": evidence["state"],
-        "dropped": [p["id"] for p in evidence["participants"] if p["state"] == "dropped"],
+        "dropped": [
+            p["id"] for p in evidence["participants"] if p["state"] == "dropped"
+        ],
         "reconnected": participants[0]["participantId"],
         "staleRoundRejected": rejected,
         "claimAuditViolations": 0,

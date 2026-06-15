@@ -95,7 +95,7 @@ from lensemble.federation import (
     RoundState,
     build_pseudogradient,
 )
-from lensemble.federation.outer import OuterOptimizer
+from lensemble.federation.outer_optimizer import OuterOptimizer
 from lensemble.federation.pseudogradient import PseudoGradient
 from lensemble.model import build_encoder, build_predictor
 from lensemble.model.encoder import snapshot_reference

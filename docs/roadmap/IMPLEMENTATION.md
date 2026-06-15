@@ -25,6 +25,10 @@ controls, downstream evaluation, lifecycle reporting, and a final evidence
 bundle. It explicitly excludes the provenance ledger and RFC-0006
 cryptographic-proof implementation.
 
+> **The `Status` column below is the 2026-06-02 generation snapshot, not a live field.**
+> The evidence-track epics above (#190, #200, #220) closed the work across v0.1 through
+> v1.0; authoritative per-issue state lives on the GitHub tracker, not in this column.
+
 ## Milestone: v0.1 (Stage A — single-site upper bound + scaffolding)
 
 | # | Title | Area | Priority | Effort | RFC | Status |

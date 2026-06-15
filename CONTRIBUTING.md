@@ -72,7 +72,7 @@ non-blocking nightly CUDA suite and the x86-64/arm64 cross-platform hash check d
   the `## [Unreleased]` block of [`CHANGELOG.md`](CHANGELOG.md) under one of the six permitted categories
   (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`). Entries are imperative and name the
   affected symbol or `area:*` label and, where applicable, the RFC and `INV-*` id ([09 §3](docs/spec/09-release-and-versioning.md#3-changelog-discipline)).
-- Tensors serialize via `safetensors`, never `pickle`/`torch.load` ([06 — Security §7](docs/spec/06-security-and-threat-model.md)).
+- Tensors serialize via `safetensors`, never `pickle`/`torch.load` ([06 — Security §7](docs/spec/06-security.md)).
 - Named numerical tolerances live in `tests/conftest.py` and are cited by id — never inline a magic
   number ([07 §6](docs/spec/07-testing-strategy.md)).
 - New code keeps coverage above the thresholds above; security-critical paths are covered, not excluded.

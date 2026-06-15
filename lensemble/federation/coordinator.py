@@ -44,7 +44,7 @@ Per-round lifecycle (RFC-0013 §1/§2), all on the single coordinator thread in 
   PASS-THROUGH and does not mutate θ/φ. With the masking secure-aggregation backend the coordinator sees
   only the summed update (no per-participant deltas), so the backstop is a Stage-B / simulated-backend
   operation; the hooks are the seam.
-- **COMMITTING** — the PERSISTENT :class:`~lensemble.federation.outer.OuterOptimizer.step` folds the
+- **COMMITTING** — the PERSISTENT :class:`~lensemble.federation.outer_optimizer.OuterOptimizer.step` folds the
   averaged delta into the global params → ``θ_{t+1}⊕φ_{t+1}`` (covers ONLY θ/φ; the deltas are
   ``PseudoGradient`` s that by construction carry no action head, ``INV-ACTIONHEAD-LOCAL``). The flat
   vector is UN-flattened via the param manifest into an ``encoder.*``/``predictor.*`` state_dict and
@@ -57,7 +57,7 @@ Per-round lifecycle (RFC-0013 §1/§2), all on the single coordinator thread in 
 - **CLOSED → next** — ``driver.open_next`` opens round ``t+1`` unless this was the last requested round.
 
 The averaging denominator is the actual contributing count ``C_t`` (recorded in the ``ContributionRecord``;
-:class:`~lensemble.federation.outer.OuterOptimizer.average_deltas` divides by ``len(deltas)``), so the
+:class:`~lensemble.federation.outer_optimizer.OuterOptimizer.average_deltas` divides by ``len(deltas)``), so the
 outer step is reproducible from recorded inputs.
 
 #22/#04 BOUNDARY (probe pin). When ``cfg.data.probe_path`` is set the pinned probe is loaded and hashed
@@ -85,7 +85,7 @@ from lensemble.errors import (
     LensembleErrorCode,
     NonDeterministicAggregation,
 )
-from lensemble.federation.outer import OuterOptimizer
+from lensemble.federation.outer_optimizer import OuterOptimizer
 from lensemble.federation.pseudogradient import PseudoGradient, build_pseudogradient
 from lensemble.federation.round import RoundDriver, RoundState
 from lensemble.federation.state import GlobalState, ParamRef

@@ -18,6 +18,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from lensemble.artifacts.hashing import sha256_file
 from lensemble.errors import ConfigError, LensembleErrorCode, SchemaVersionMismatch
 
 PHASE3_EVAL_REPORT_SCHEMA_VERSION = 1
@@ -404,7 +405,7 @@ def build_phase3_eval_report(
     report_path = Path(long_run_report_path)
     long_run = load_phase3_long_run_evidence(report_path)
     generated = generated_at or long_run.generated_at
-    source_sha = _sha256_file(report_path)
+    source_sha = sha256_file(report_path)
     run_manifest_hash = phase3_run_manifest_hash_from_report(long_run)
     planner_budget = Phase3PlannerBudget(
         planner="not_applicable",
@@ -764,10 +765,6 @@ def _model_card_eval_text(
             "completed robotics performance comparisons."
         )
     return " ".join((intro, gauge_finding, limitation, task_scale, controls_line))
-
-
-def _sha256_file(path: Path) -> str:
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 __all__ = [

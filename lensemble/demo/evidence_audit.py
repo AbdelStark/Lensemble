@@ -82,12 +82,16 @@ def audit_real_lewm_evidence(evidence: dict[str, Any]) -> list[str]:
     if not isinstance(checkpoint.get("revision"), str) or not _HASH40.match(
         str(checkpoint.get("revision", ""))
     ):
-        violations.append("lewmBinding.checkpoint.revision must be a pinned 40-hex revision")
+        violations.append(
+            "lewmBinding.checkpoint.revision must be a pinned 40-hex revision"
+        )
     if not _is_hash64(checkpoint.get("weightsSha256")):
         violations.append("lewmBinding.checkpoint.weightsSha256 must be a 64-hex hash")
     graph_hashes = binding.get("exportGraphHashes") or {}
     if not graph_hashes or not all(_is_hash64(v) for v in graph_hashes.values()):
-        violations.append("lewmBinding.exportGraphHashes must be non-empty 64-hex hashes")
+        violations.append(
+            "lewmBinding.exportGraphHashes must be non-empty 64-hex hashes"
+        )
     if not binding.get("adapterSpec"):
         violations.append("lewmBinding.adapterSpec must describe the trainable subset")
 
@@ -95,7 +99,11 @@ def audit_real_lewm_evidence(evidence: dict[str, Any]) -> list[str]:
     privacy = evidence.get("privacy") or {}
     for key in ("secureAggregation", "differentialPrivacy"):
         status = str(privacy.get(key, ""))
-        if "absent" not in status and "simulated" not in status and "enabled" not in status:
+        if (
+            "absent" not in status
+            and "simulated" not in status
+            and "enabled" not in status
+        ):
             violations.append(
                 f"privacy.{key} must state exactly what is absent/simulated/enabled"
             )
@@ -116,10 +124,14 @@ def audit_real_lewm_evidence(evidence: dict[str, Any]) -> list[str]:
         seen_revisions.add(rid)
         sources = revision.get("sourceUpdateHashes") or []
         if not sources or not all(h in update_hashes for h in sources):
-            violations.append(f"model revision {rid} source updates are not in updateHashes")
+            violations.append(
+                f"model revision {rid} source updates are not in updateHashes"
+            )
         base = (revision.get("baseCheckpoint") or {}).get("revision")
         if base != checkpoint.get("revision"):
-            violations.append(f"model revision {rid} is not bound to the pinned checkpoint")
+            violations.append(
+                f"model revision {rid} is not bound to the pinned checkpoint"
+            )
 
     # --- metrics honesty: every closed round carries real summaries and health flags ---
     for metric in evidence.get("roundMetrics") or []:
@@ -155,7 +167,11 @@ def audit_real_lewm_evidence(evidence: dict[str, Any]) -> list[str]:
         if match:
             start = max(0, match.start() - 60)
             context = encoded[start : match.end()].lower()
-            if "not " not in context and "no " not in context and "never" not in context:
+            if (
+                "not " not in context
+                and "no " not in context
+                and "never" not in context
+            ):
                 violations.append(f"unnegated overclaim {match.group(0)!r}")
 
     return violations

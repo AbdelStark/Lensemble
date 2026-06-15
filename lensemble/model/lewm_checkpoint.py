@@ -24,6 +24,7 @@ from typing import Any
 
 import torch
 
+from lensemble.artifacts.hashing import sha256_file
 from lensemble.errors import (
     ArtifactError,
     ConfigError,
@@ -96,7 +97,7 @@ def resolve_checkpoint(
         base = Path(local_dir)
     else:
         try:
-            from huggingface_hub import snapshot_download
+            from huggingface_hub import snapshot_download  # type: ignore
         except ImportError as exc:  # pragma: no cover - environment-dependent
             raise ArtifactError(
                 "huggingface_hub is required to download the TwoRooms checkpoint",
@@ -105,7 +106,9 @@ def resolve_checkpoint(
                 "pre-downloaded snapshot",
             ) from exc
         base = Path(
-            snapshot_download(repo_id, revision=revision, allow_patterns=["*.json", "*.pt"])
+            snapshot_download(
+                repo_id, revision=revision, allow_patterns=["*.json", "*.pt"]
+            )
         )
 
     config_path = base / _CONFIG_FILE
@@ -127,15 +130,9 @@ def resolve_checkpoint(
     )
 
 
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def load_tworooms_model(resolved: ResolvedCheckpoint) -> tuple[LeWMTwoRooms, dict[str, Any]]:
+def load_tworooms_model(
+    resolved: ResolvedCheckpoint,
+) -> tuple[LeWMTwoRooms, dict[str, Any]]:
     """Build the reconstruction from the resolved files and strictly load the weights.
 
     Returns ``(model_in_eval_mode, upstream_config_dict)``. Every failure mode is fail-closed:
@@ -177,12 +174,18 @@ def load_tworooms_model(resolved: ResolvedCheckpoint) -> tuple[LeWMTwoRooms, dic
     return model, config
 
 
-def checkpoint_manifest(resolved: ResolvedCheckpoint, model: LeWMTwoRooms) -> dict[str, Any]:
+def checkpoint_manifest(
+    resolved: ResolvedCheckpoint, model: LeWMTwoRooms
+) -> dict[str, Any]:
     """The ``lewm-checkpoint-manifest/1`` evidence artifact for gate G1."""
     cfg: LeWMTwoRoomsConfig = model.cfg
     state = model.state_dict()
     tensors = [
-        {"name": name, "shape": list(t.shape), "dtype": str(t.dtype).removeprefix("torch.")}
+        {
+            "name": name,
+            "shape": list(t.shape),
+            "dtype": str(t.dtype).removeprefix("torch."),
+        }
         for name, t in state.items()
     ]
     trainable = sum(p.numel() for p in model.parameters())
@@ -200,9 +203,9 @@ def checkpoint_manifest(resolved: ResolvedCheckpoint, model: LeWMTwoRooms) -> di
             "hubUrl": f"https://huggingface.co/{resolved.repo_id}",
         },
         "files": {
-            "config.json": {"sha256": _sha256_file(resolved.config_path)},
+            "config.json": {"sha256": sha256_file(resolved.config_path)},
             "weights.pt": {
-                "sha256": _sha256_file(resolved.weights_path),
+                "sha256": sha256_file(resolved.weights_path),
                 "bytes": resolved.weights_path.stat().st_size,
             },
         },
@@ -268,7 +271,10 @@ def reference_forward_report(
         (1, cfg.pred_num_frames, 3, cfg.image_size, cfg.image_size), generator=gen
     )
     actions = (
-        torch.rand((1, cfg.pred_num_frames + rollout_steps, cfg.action_input_dim), generator=gen)
+        torch.rand(
+            (1, cfg.pred_num_frames + rollout_steps, cfg.action_input_dim),
+            generator=gen,
+        )
         * 2
         - 1
     )
@@ -298,7 +304,14 @@ def reference_forward_report(
     ]
     fingerprint = hashlib.sha256(
         json.dumps(
-            [[round(v, 4) for v in torch.cat([o.reshape(-1)[:64] for o in (emb, act_emb, preds, rollout)]).tolist()]],
+            [
+                [
+                    round(v, 4)
+                    for v in torch.cat(
+                        [o.reshape(-1)[:64] for o in (emb, act_emb, preds, rollout)]
+                    ).tolist()
+                ]
+            ],
             separators=(",", ":"),
         ).encode()
     ).hexdigest()

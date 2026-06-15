@@ -45,7 +45,6 @@ MODULES = [
     "lensemble.privacy.dp",
     "lensemble.privacy.accountant",
     "lensemble.data.dataset",
-    "lensemble.data.loaders",
     "lensemble.data.residency",
     "lensemble.data.probe",
     "lensemble.data.adapters",

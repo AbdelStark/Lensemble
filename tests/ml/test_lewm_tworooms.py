@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 import torch
@@ -135,7 +136,9 @@ def test_released_config_validates() -> None:
         lambda c: c["encoder"].__setitem__("pretrained", True),
         lambda c: c["encoder"].__setitem__("use_mask_token", True),
         lambda c: c["encoder"].__setitem__("size", "giant"),
-        lambda c: c["projector"]["norm_fn"].__setitem__("_target_", "torch.nn.LayerNorm"),
+        lambda c: c["projector"]["norm_fn"].__setitem__(
+            "_target_", "torch.nn.LayerNorm"
+        ),
         lambda c: c["predictor"].__setitem__("input_dim", 256),
         lambda c: c.pop("action_encoder"),
     ],
@@ -182,12 +185,17 @@ def test_state_dict_schema_matches_released_inventory() -> None:
     # bias-free QKV is part of the released schema — a bias key would be an unknown tensor.
     assert "predictor.transformer.layers.0.attn.to_qkv.bias" not in state
     # identity input/cond/output projections at D=192 contribute no tensors.
-    assert not any("input_proj" in k or "cond_proj" in k or "output_proj" in k for k in state)
+    assert not any(
+        "input_proj" in k or "cond_proj" in k or "output_proj" in k for k in state
+    )
 
 
 def test_strict_load_round_trips_and_fails_closed() -> None:
     model = build_lewm_tworooms(_released_config())
-    good = {k: torch.randn_like(v) if v.is_floating_point() else v.clone() for k, v in model.state_dict().items()}
+    good = {
+        k: torch.randn_like(v) if v.is_floating_point() else v.clone()
+        for k, v in model.state_dict().items()
+    }
     load_lewm_state_dict(model, good)  # round trip
 
     unknown = dict(good)
@@ -272,7 +280,8 @@ def test_predictor_is_causal() -> None:
     torch.manual_seed(11)
     model = build_lewm_tworooms(_tiny_cfg())
     for block in model.predictor.transformer.layers:
-        torch.nn.init.normal_(block.adaLN_modulation[-1].weight, std=0.05)
+        modulation = cast(torch.nn.Sequential, block.adaLN_modulation)
+        torch.nn.init.normal_(cast(torch.nn.Linear, modulation[-1]).weight, std=0.05)
     emb = torch.randn(1, 3, 192)
     act = torch.randn(1, 3, 192)
     base = model.predict(emb, act)
@@ -315,7 +324,7 @@ def test_rollout_truncates_history_to_predictor_window() -> None:
 
 def _cached_snapshot() -> Path | None:
     try:
-        from huggingface_hub import snapshot_download
+        from huggingface_hub import snapshot_download  # type: ignore
 
         return Path(
             snapshot_download(
@@ -350,7 +359,10 @@ def test_real_checkpoint_strict_load_and_manifest() -> None:
     committed = Path("docs/evidence/lewm_tworooms_checkpoint_manifest.json")
     if committed.is_file():
         recorded = json.loads(committed.read_text())
-        assert recorded["files"]["weights.pt"]["sha256"] == manifest["files"]["weights.pt"]["sha256"]
+        assert (
+            recorded["files"]["weights.pt"]["sha256"]
+            == manifest["files"]["weights.pt"]["sha256"]
+        )
         assert recorded["source"]["revision"] == resolved.revision
 
 
@@ -361,7 +373,9 @@ def test_real_checkpoint_reference_forwards_regress() -> None:
     report = reference_forward_report(model)
     committed = Path("docs/evidence/lewm_tworooms_reference_report.json")
     if not committed.is_file():
-        pytest.skip("reference report not generated yet (scripts/lewm_tworooms_ingest.py)")
+        pytest.skip(
+            "reference report not generated yet (scripts/lewm_tworooms_ingest.py)"
+        )
     recorded = json.loads(committed.read_text())
     assert recorded["seed"] == report["seed"]
     for got, want in zip(report["outputs"], recorded["outputs"], strict=True):
@@ -408,6 +422,8 @@ def test_upstream_vit_parity_when_transformers_available() -> None:
 
     pixels = torch.rand(2, 3, 224, 224, generator=torch.Generator().manual_seed(3))
     with torch.no_grad():
-        upstream_cls = vit(pixels, interpolate_pos_encoding=True).last_hidden_state[:, 0]
+        upstream_cls = vit(pixels, interpolate_pos_encoding=True).last_hidden_state[
+            :, 0
+        ]
         ours_cls = model.encoder(pixels)[:, 0]
     assert torch.allclose(upstream_cls, ours_cls, rtol=RTOL_LEWM, atol=ATOL_LEWM)

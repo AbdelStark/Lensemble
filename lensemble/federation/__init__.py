@@ -53,7 +53,7 @@ from .messages import (
     to_delta_tensor,
 )
 from .network import LoopbackChannel, MessageChannel, NetworkedTransport
-from .outer import OuterOptimizer, assert_bitwise_reproducible
+from .outer_optimizer import OuterOptimizer, assert_bitwise_reproducible
 from .participant import Participant, train_local
 from .phase3_bundle import (
     PHASE3_EVIDENCE_BUNDLE_SCHEMA_VERSION,

@@ -20,7 +20,7 @@ import secrets
 import time
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 RUN_STATES = (
     "created",
@@ -304,7 +304,8 @@ class DemoConfig:
             raise FederatedDemoError("invalid_config", f"unknown demo preset: {preset}")
         if mode not in RUN_MODES:
             raise FederatedDemoError(
-                "invalid_config", f"unknown run mode: {mode}; supported: {sorted(RUN_MODES)}"
+                "invalid_config",
+                f"unknown run mode: {mode}; supported: {sorted(RUN_MODES)}",
             )
         return cls(
             max_participants=max_participants,
@@ -428,7 +429,9 @@ class ParticipantState:
             if metadata.get("schema") == LEWM_UPDATE_SCHEMA:
                 public["metrics"] = deepcopy(metadata.get("metrics", {}))
                 public["participantMode"] = metadata.get("participantMode")
-                public["baseCheckpointRevision"] = metadata.get("baseCheckpointRevision")
+                public["baseCheckpointRevision"] = metadata.get(
+                    "baseCheckpointRevision"
+                )
                 if "delta" in metadata:
                     public["deltaLength"] = len(metadata["delta"])
             redacted[str(round_index)] = public
@@ -1152,7 +1155,9 @@ class FederatedDemoService:
             ],
             "fallback": {
                 "active": False,
-                "mode": "lewm-adapter" if run.mode == REAL_LEWM_MODE else "tiny-js-vector",
+                "mode": "lewm-adapter"
+                if run.mode == REAL_LEWM_MODE
+                else "tiny-js-vector",
                 "reason": "real-lewm-tworooms adapter runtime selected"
                 if run.mode == REAL_LEWM_MODE
                 else "hackathon tiny model runtime selected",
@@ -1635,7 +1640,9 @@ class FederatedDemoService:
             return self._validate_lewm_adapter_delta(
                 artifact, run=run, participant=participant
             )
-        return self._validate_surrogate_update(artifact, run=run, participant=participant)
+        return self._validate_surrogate_update(
+            artifact, run=run, participant=participant
+        )
 
     def _validate_surrogate_update(
         self, artifact: dict[str, Any], *, run: DemoRun, participant: ParticipantState
@@ -1822,7 +1829,9 @@ class FederatedDemoService:
             "simulated": bool(artifact.get("simulated", source == "simulator")),
         }
 
-    def _close_round_lewm(self, run: DemoRun, submitted: list[ParticipantState]) -> None:
+    def _close_round_lewm(
+        self, run: DemoRun, submitted: list[ParticipantState]
+    ) -> None:
         """Deterministic adapter-delta aggregation for the real mode (gate G6).
 
         The global adapter state is the cumulative sum of per-round deterministic means:
@@ -1840,7 +1849,9 @@ class FederatedDemoService:
         parent_revision = run.current_model_revision_id
         parent_state = run.adapter_states.get(parent_revision)
         if parent_state is None:
-            parent_state = [0.0] * len(mean_delta)  # the initial adapter is identity (all-zero)
+            parent_state = [0.0] * len(
+                mean_delta
+            )  # the initial adapter is identity (all-zero)
         new_state = [
             round(parent + delta, 8)
             for parent, delta in zip(parent_state, mean_delta, strict=True)
@@ -2079,7 +2090,9 @@ class FederatedDemoService:
         expected_round_id = self._round_id(run)
         if artifact.get("roundId", expected_round_id) != expected_round_id:
             raise FederatedDemoError(
-                "wrong_round", "artifact roundId does not match active round", status=409
+                "wrong_round",
+                "artifact roundId does not match active round",
+                status=409,
             )
         if artifact.get("modelRevisionId") != run.current_model_revision_id:
             raise FederatedDemoError(
@@ -2090,7 +2103,10 @@ class FederatedDemoService:
 
         binding = self.lewm_binding()
         base = artifact.get("baseCheckpoint")
-        if not isinstance(base, dict) or base.get("revision") != binding["checkpoint"]["revision"]:
+        if (
+            not isinstance(base, dict)
+            or base.get("revision") != binding["checkpoint"]["revision"]
+        ):
             raise FederatedDemoError(
                 "checkpoint_mismatch",
                 "artifact baseCheckpoint.revision does not match the pinned checkpoint",
@@ -2222,7 +2238,9 @@ class FederatedDemoService:
             )
         )
 
-        participant_mode = str(artifact.get("participantMode", participant.automation_mode))
+        participant_mode = str(
+            artifact.get("participantMode", participant.automation_mode)
+        )
         if participant_mode not in AUTOMATION_MODES:
             raise FederatedDemoError(
                 "invalid_artifact", "participantMode must be auto or manual"
@@ -2279,7 +2297,9 @@ class FederatedDemoService:
             [metrics.get("effectiveRank") for metrics in metrics_list]
         )
         if effective_rank is not None and effective_rank / hidden < 0.03:
-            flags.append("collapse-warning: effective rank below 3% of the latent width")
+            flags.append(
+                "collapse-warning: effective rank below 3% of the latent width"
+            )
         latent_std = cls._mean_optional(
             [metrics.get("latentStdMean") for metrics in metrics_list]
         )
@@ -2357,11 +2377,11 @@ class FederatedDemoService:
     def _optional_float(value: object) -> float | None:
         if value is None:
             return None
-        return float(value)
+        return float(cast(float, value))
 
     @staticmethod
     def _mean_optional(values: list[object]) -> float | None:
-        numeric = [float(value) for value in values if value is not None]
+        numeric = [float(cast(float, value)) for value in values if value is not None]
         if not numeric:
             return None
         return round(sum(numeric) / len(numeric), 8)

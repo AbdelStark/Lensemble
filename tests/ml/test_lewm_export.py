@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from typing import cast
 
 import pytest
 import torch
@@ -67,7 +68,9 @@ def test_manifest_binds_graphs_to_checkpoint(tmp_path: Path) -> None:
         weights_sha256="ab" * 32,
     )
     assert manifest["schema"] == EXPORT_SCHEMA
-    assert manifest["checkpoint"]["revision"] == "77adaae0bc31deab21c93740d1f8bb947cd0bdec"
+    assert (
+        manifest["checkpoint"]["revision"] == "77adaae0bc31deab21c93740d1f8bb947cd0bdec"
+    )
     assert manifest["checkpoint"]["weightsSha256"] == "ab" * 32
     for name, path in paths.items():
         entry = manifest["files"][name]
@@ -81,7 +84,9 @@ def test_manifest_binds_graphs_to_checkpoint(tmp_path: Path) -> None:
 def test_committed_export_manifest_is_claim_grade() -> None:
     committed = Path("docs/evidence/lewm_tworooms_browser_export_manifest.json")
     if not committed.is_file():
-        pytest.skip("export manifest not generated yet (scripts/lewm_tworooms_export.py)")
+        pytest.skip(
+            "export manifest not generated yet (scripts/lewm_tworooms_export.py)"
+        )
     manifest = json.loads(committed.read_text())
     assert manifest["schema"] == EXPORT_SCHEMA
     assert manifest["checkpoint"]["repoId"] == "quentinll/lewm-tworooms"
@@ -114,13 +119,12 @@ def test_committed_export_manifest_is_claim_grade() -> None:
 
 
 def _onnx_available() -> bool:
-    try:
-        import onnx  # noqa: F401
-        import onnxruntime  # noqa: F401
-        import onnxscript  # noqa: F401
-    except Exception:
-        return False
-    return True
+    from importlib.util import find_spec
+
+    return all(
+        find_spec(module) is not None
+        for module in ("onnx", "onnxruntime", "onnxscript")
+    )
 
 
 needs_onnx = pytest.mark.skipif(
@@ -162,7 +166,7 @@ def test_parity_fails_on_corrupted_graph(tmp_path: Path) -> None:
     with torch.no_grad():
         # random (non-constant) tamper — the projector input is LayerNormed (zero-mean), so a
         # constant weight shift would cancel exactly
-        weight = model.projector.net[0].weight
-        weight.add_(torch.randn_like(weight) * 0.05)
+        linear = cast(torch.nn.Linear, model.projector.net[0])
+        linear.weight.add_(torch.randn_like(linear.weight) * 0.05)
     parity = onnxruntime_parity(model, paths, require=True)
     assert parity["status"] == "failed"

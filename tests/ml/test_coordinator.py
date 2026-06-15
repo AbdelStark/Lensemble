@@ -299,7 +299,7 @@ def test_corrupt_reduction_aborts_with_global_hash_unchanged(
 
     # Force a non-reproducible reduction: average_deltas returns a DIFFERENT tensor on each call, so the
     # determinism self-check's two recomputations disagree (INV-AGG-DETERMINISM).
-    from lensemble.federation import outer as outer_mod
+    from lensemble.federation import outer_optimizer as outer_mod
 
     counter = {"n": 0}
 

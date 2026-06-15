@@ -19,13 +19,13 @@ The browser receives these exported graphs only — never ``weights.pt``.
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 from typing import Any
 
 import torch
 from torch import Tensor, nn
 
+from lensemble.artifacts.hashing import sha256_file
 from lensemble.model.lewm_checkpoint import ResolvedCheckpoint
 from lensemble.model.lewm_tworooms import LeWMTwoRooms
 
@@ -124,11 +124,16 @@ class PredictorGraph(nn.Module):
         return self.pred_proj(preds.reshape(b * t, d)).reshape(b, t, d)
 
 
-def _fixtures(model: LeWMTwoRooms, seed: int = 20260612) -> dict[str, tuple[Tensor, ...]]:
+def _fixtures(
+    model: LeWMTwoRooms, seed: int = 20260612
+) -> dict[str, tuple[Tensor, ...]]:
     cfg = model.cfg
     gen = torch.Generator().manual_seed(seed)
     pixels = torch.rand((2, 3, cfg.image_size, cfg.image_size), generator=gen)
-    actions = torch.rand((2, cfg.pred_num_frames, cfg.action_input_dim), generator=gen) * 2 - 1
+    actions = (
+        torch.rand((2, cfg.pred_num_frames, cfg.action_input_dim), generator=gen) * 2
+        - 1
+    )
     emb = torch.randn((2, cfg.pred_num_frames, cfg.hidden_dim), generator=gen)
     act_emb = torch.randn((2, cfg.pred_num_frames, cfg.hidden_dim), generator=gen)
     return {
@@ -165,7 +170,10 @@ _IO_SPECS: dict[str, dict[str, Any]] = {
             "action_embeddings": ["batch", "time<=num_frames", "hidden_dim"],
         },
         "outputs": {"predicted_latents": ["batch", "time<=num_frames", "hidden_dim"]},
-        "components": ["predictor (AdaLN causal transformer)", "pred_proj (Linear-BN-GELU-Linear)"],
+        "components": [
+            "predictor (AdaLN causal transformer)",
+            "pred_proj (Linear-BN-GELU-Linear)",
+        ],
     },
 }
 
@@ -192,7 +200,10 @@ def export_browser_graphs(
     }
     dynamic: dict[str, dict[str, dict[int, str]]] = {
         _ENCODER_FILE: {"pixels": {0: "batch"}, "latent": {0: "batch"}},
-        _ACTION_FILE: {"actions": {0: "batch", 1: "time"}, "action_embedding": {0: "batch", 1: "time"}},
+        _ACTION_FILE: {
+            "actions": {0: "batch", 1: "time"},
+            "action_embedding": {0: "batch", 1: "time"},
+        },
         _PREDICTOR_FILE: {
             "latents": {0: "batch", 1: "time"},
             "action_embeddings": {0: "batch", 1: "time"},
@@ -226,14 +237,6 @@ def export_browser_graphs(
     return paths
 
 
-def _sha256_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
 def onnxruntime_parity(
     model: LeWMTwoRooms,
     paths: dict[str, Path],
@@ -248,7 +251,9 @@ def onnxruntime_parity(
         import onnxruntime as ort  # type: ignore[import-not-found]  # pyright: ignore[reportMissingImports]
     except Exception as exc:
         if require:
-            raise RuntimeError("onnxruntime is required for export parity validation") from exc
+            raise RuntimeError(
+                "onnxruntime is required for export parity validation"
+            ) from exc
         return {
             "onnxruntimeAvailable": False,
             "status": "skipped",
@@ -324,7 +329,7 @@ def browser_export_manifest(
     cfg = model.cfg
     files = {
         name: {
-            "sha256": _sha256_file(path),
+            "sha256": sha256_file(path),
             "bytes": path.stat().st_size,
             **_IO_SPECS[name],
         }

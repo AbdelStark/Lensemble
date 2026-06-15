@@ -31,7 +31,9 @@ def _args() -> argparse.Namespace:
         "--model-dir", type=Path, default=Path("web/federated-demo/model/lewm-tworooms")
     )
     parser.add_argument(
-        "--out", type=Path, default=Path("docs/evidence/lewm_tworooms_adapter_overfit.json")
+        "--out",
+        type=Path,
+        default=Path("docs/evidence/lewm_tworooms_adapter_overfit.json"),
     )
     parser.add_argument("--episodes", type=int, default=6)
     parser.add_argument("--steps", type=int, default=300)
@@ -46,8 +48,12 @@ def main() -> None:
 
     args = _args()
     providers = ["CPUExecutionProvider"]
-    enc = ort.InferenceSession(args.model_dir / "lewm_tworooms_encoder.onnx", providers=providers)
-    act = ort.InferenceSession(args.model_dir / "lewm_tworooms_action.onnx", providers=providers)
+    enc = ort.InferenceSession(
+        args.model_dir / "lewm_tworooms_encoder.onnx", providers=providers
+    )
+    act = ort.InferenceSession(
+        args.model_dir / "lewm_tworooms_action.onnx", providers=providers
+    )
     pred = ort.InferenceSession(
         args.model_dir / "lewm_tworooms_predictor.onnx", providers=providers
     )
@@ -62,20 +68,26 @@ def main() -> None:
         pixels_ds = cast(h5py.Dataset, f["pixels"])
         actions_ds = cast(h5py.Dataset, f["action"])
         candidates = np.flatnonzero(lengths >= 41)
-        chosen = rng.choice(candidates, size=min(args.episodes, len(candidates)), replace=False)
+        chosen = rng.choice(
+            candidates, size=min(args.episodes, len(candidates)), replace=False
+        )
         for ep in sorted(int(e) for e in chosen):
             start = int(offsets[ep])
             n_model_steps = min(7, (int(lengths[ep]) - 1) // 5)
             idx = [start + 5 * i for i in range(n_model_steps + 1)]
             frames = (pixels_ds[idx].astype(np.float32) / 255.0).transpose(0, 3, 1, 2)
             latents = enc.run(None, {"pixels": frames})[0]  # (n+1, D)
-            raw_actions = actions_ds[start : start + 5 * n_model_steps].astype(np.float32)
+            raw_actions = actions_ds[start : start + 5 * n_model_steps].astype(
+                np.float32
+            )
             blocks = raw_actions.reshape(1, n_model_steps, 10)
             act_emb = act.run(None, {"actions": blocks})[0][0]  # (n, D)
             for t in range(2, n_model_steps):
                 hist_z = latents[t - 2 : t + 1][None]
                 hist_a = act_emb[t - 2 : t + 1][None]
-                preds = pred.run(None, {"latents": hist_z, "action_embeddings": hist_a})[0]
+                preds = pred.run(
+                    None, {"latents": hist_z, "action_embeddings": hist_a}
+                )[0]
                 xs.append(preds[0, -1])
                 targets.append(latents[t + 1])
 
