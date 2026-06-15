@@ -10,7 +10,7 @@ math. This driver composes the full path in one artifact:
       -> held-out before/after probe on the SERVER-PRODUCED final modelRevisionId
 
 No browsers required: a scripted local-loopback run drives the actual service code. The composition
-core lives in ``lensemble.eval.lewm_system_probe`` (so the dataset-free unit suite drives the same
+core lives in ``lensemble.demo.system_probe`` (so the dataset-free unit suite drives the same
 path on synthetic pairs); this CLI just builds the real ONNX pairs and writes the headline
 evidence ``docs/evidence/lewm_tworooms_system_probe.json``.
 
@@ -25,7 +25,7 @@ import json
 from pathlib import Path
 
 from lensemble.demo.server import load_lewm_manifest
-from lensemble.eval.lewm_system_probe import run_system_composed_probe, write_evidence
+from lensemble.demo.system_probe import run_system_composed_probe, write_evidence
 from lensemble.eval.lewm_tworooms_probe_pairs import (
     DEFAULT_MODEL_DIR,
     build_probe_split,

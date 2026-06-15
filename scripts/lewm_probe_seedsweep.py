@@ -2,7 +2,7 @@
 """Gate #330: seed-robust system-composed probe distribution (epic #332).
 
 Turns the headline from "a documented favorable draw" into "a reproducible, seed-robust result".
-Runs the SYSTEM-COMPOSED probe (lensemble.eval.lewm_system_probe — real deltas through the real
+Runs the SYSTEM-COMPOSED probe (lensemble.demo.system_probe — real deltas through the real
 server aggregation path) across several seeds / episode splits and reports the distribution
 (mean +/- spread and the WORST case), so the public headline cites the worst draw, not the best.
 
@@ -21,7 +21,7 @@ import statistics
 from pathlib import Path
 
 from lensemble.demo.server import load_lewm_manifest
-from lensemble.eval.lewm_system_probe import run_system_composed_probe
+from lensemble.demo.system_probe import run_system_composed_probe
 from lensemble.eval.lewm_tworooms_probe_pairs import (
     DEFAULT_MODEL_DIR,
     build_probe_split,

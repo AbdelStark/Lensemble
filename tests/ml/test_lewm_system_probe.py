@@ -1,7 +1,7 @@
 """System-composed federation gate (#327) + seed-robustness (#330), epic #332.
 
 Two layers:
-- a dataset-free unit run that drives the REAL composition (lensemble.eval.lewm_system_probe:
+- a dataset-free unit run that drives the REAL composition (lensemble.demo.system_probe:
   real node-trained deltas -> FederatedDemoService.submit_update -> _close_round_lewm -> probe on
   the server-produced revision) over synthetic 192-dim bias-correctable pairs; and
 - contract checks pinning the committed headline / cross-check / seed-sweep evidence so the shipped
@@ -71,7 +71,7 @@ def _bias_correctable_pairs(*, n: int, dim: int, seed: int) -> dict:
 @needs_node
 def test_system_composed_probe_drives_the_real_server_path() -> None:
     """The composition wiring works end-to-end on synthetic pairs, no dataset required."""
-    from lensemble.eval.lewm_system_probe import run_system_composed_probe
+    from lensemble.demo.system_probe import run_system_composed_probe
 
     dim = 192
     participants = [_bias_correctable_pairs(n=24, dim=dim, seed=s) for s in (11, 22)]
@@ -188,7 +188,7 @@ def test_system_probe_regenerates_within_tolerance() -> None:
     pytest.importorskip("onnxruntime")
     pytest.importorskip("h5py")
     from lensemble.demo.server import load_lewm_manifest
-    from lensemble.eval.lewm_system_probe import run_system_composed_probe
+    from lensemble.demo.system_probe import run_system_composed_probe
     from lensemble.eval.lewm_tworooms_probe_pairs import (
         DEFAULT_MODEL_DIR,
         build_probe_split,
