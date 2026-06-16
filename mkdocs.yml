@@ -44,6 +44,12 @@ validation:
     unrecognized_links: ignore
     anchors: warn
 
+# Working planning artifacts under docs/plans/ are intentionally not part of the published nav
+# (the site publishes the spec/RFC/roadmap/evidence corpus). They are excluded from the
+# omitted_files warning so `mkdocs build --strict` stays green.
+not_in_nav: |
+  /plans/
+
 nav:
   - Home: index.md
   - API Reference: reference.md
@@ -56,6 +62,7 @@ nav:
       - Browser Federated Demo: roadmap/BROWSER_FEDERATED_DEMO.md
       - Tapestry-like LeWM Pivot: roadmap/TAPESTRY_LEWM.md
       - Tapestry-like LeWM Runbook: roadmap/TAPESTRY_LEWM_RUNBOOK.md
+      - Codex Paris Hackathon: roadmap/HACKATHON_PARIS.md
   - Evidence:
       - Phase 2 Model Card: evidence/phase2_model_card.md
       - Phase 3 Model Card: evidence/phase3_model_card.md
