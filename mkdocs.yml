@@ -61,6 +61,8 @@ nav:
       - Phase 3 Model Card: evidence/phase3_model_card.md
       - MVP Model Card (corrected SO-100): evidence/phase3_mvp_model_card.md
       - Tapestry-like LeWM Demo Card: evidence/lewm_tworooms_demo_card.md
+  - Spikes:
+      - Federated World-Model Training: spikes/0001-federated-world-model-training/README.md
   - Specification:
       - Overview: spec/00-overview.md
       - Architecture: spec/01-architecture.md
