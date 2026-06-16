@@ -1,0 +1,28 @@
+{
+  "lewm_tworooms": {
+    "total_params": 18034478,
+    "submodule_params": {
+      "encoder": 5501376,
+      "predictor": 10791360,
+      "action_encoder": 156206,
+      "projector": 792768,
+      "pred_proj": 792768
+    },
+    "total_fp32_bytes": 72137912,
+    "total_fp32_MB": 72.14
+  },
+  "browser_limits": {
+    "max_lewm_artifact_bytes": 393216,
+    "max_lewm_artifact_KB": 384.0,
+    "max_adapter_parameters": 16384,
+    "shipped_adapter_params": 12512,
+    "shipped_adapter_fp32_bytes": 50048
+  },
+  "feasibility_ratios": {
+    "full_model_delta_fp32_bytes": 72137912,
+    "full_model_delta_over_byte_budget_x": 183.5,
+    "full_model_params_over_param_cap_x": 1100.7,
+    "shipped_adapter_pct_of_full": 0.069,
+    "shipped_adapter_bytes_vs_budget": "50048 / 393216 = 12.7% of budget"
+  }
+}

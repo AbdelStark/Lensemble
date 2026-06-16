@@ -1,0 +1,4 @@
+# Regenerable harness scratch (per-round coordinator checkpoints); the committed evidence is the
+# spike_results.json and browser_feasibility.json next to this file.
+_artifacts/
+_smoke/
