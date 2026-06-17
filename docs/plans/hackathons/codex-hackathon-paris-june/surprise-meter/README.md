@@ -1,6 +1,8 @@
-# Surprise-meter (#338) — PRIORITY plan
+# Less Surprised / Surprise-meter (#338) — PRIORITY plan
 
-The primary Codex-hackathon deliverable: a clean federated **adapter-continuation** run on the frozen LeWM world model, then a live **surprise-meter** showing the model is measurably *less surprised* after the room trains it together.
+The primary Codex-hackathon deliverable (working title **Less Surprised**): a clean federated **adapter-continuation round** on the frozen LeWM world model, then a live **surprise-meter** showing the model is measurably *less surprised* after a room of strangers each train a tiny adapter on it — without sharing data.
+
+> **Claim discipline:** it is an *adapter-continuation round*, never a "federated training run." Improvement is **+12.3% this run, +16.8% mean / +5.4% worst across 5 seeds** — the worst case is always shown. See `05-risks-and-claim-discipline.md`. The `01-architecture.md` "Corrections" box (C1–C12) lists every source-verified API fix.
 
 > Parent: [#338](https://github.com/AbdelStark/Lensemble/issues/338). Stretch sibling: [Cartographer / #339](../cartographer/). Hackathon index: [`../README.md`](../README.md).
 

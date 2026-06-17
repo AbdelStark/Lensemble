@@ -17,6 +17,17 @@ Six child issues under parent [#338](https://github.com/AbdelStark/Lensemble/iss
 
 Critical path: **SM-1 → SM-2 → SM-3 → SM-6**. SM-4 parallels SM-3; SM-5 needs SM-2+SM-4 numbers.
 
+## Cross-cutting verified corrections (apply in every workstream)
+
+These were confirmed against source on 2026-06-17 and are detailed in `01-architecture.md` (Corrections box C1–C12):
+
+- **Runtime methods** are `encodeFrames(frames,batch)` / `embedActionBlocks(blocks,batch,time)` / `predictLatents(latents,actEmb,batch,time)` (flat `Float32Array`s) — **no** `encode()`/`predict()`. Next latent = `preds.subarray((W-1)*192, W*192)`.
+- **Preprocess** with `frameToModelInput(rgb)` (÷255 + HWC→CHW); ImageNet + action z-scores are **baked into the graphs** (don't apply in JS). Surprise = `Σ(pred−z)²/192` (mean over dims).
+- **Adapter:** `adapterFromInitAndOffset({inputDim:192,hiddenDim:32,initSeed:42,offset})` (object arg) + `adapterForward(adapter,x,n)→{y,h}`. Offset len **12512**.
+- **Offset export** is **not** returned by `run_system_composed_probe` — SM-1 adds `offset_out`; the offset never enters the audited evidence (`"adapterState"` forbidden); committed fallback lives at **`web/surprise-meter/fixtures/adapter_offset.json`** (`runs/` is gitignored).
+- **Pre/post toggle** runs on the **held-out probe-pair distribution** (`collectResidentPairs`, seed 991), so the drop *is* the certified +12.3% (S10).
+- **`onnxruntime` is absent everywhere** — Python bakes via `uv run --with onnxruntime …`; node bakes via a throwaway `onnxruntime-node` + injected `file://` fetchFn + CPU EP; the JS self-test is ORT-free; R1 is in-browser only.
+
 ## Per-issue summary
 
 | Issue | Milestone | Title | Primary new files | Key reuse | Accept |
@@ -26,7 +37,7 @@ Critical path: **SM-1 → SM-2 → SM-3 → SM-6**. SM-4 parallels SM-3; SM-5 ne
 | **SM-3** | 1 | Surprise UI + perturbation + frame-diff | `web/surprise-meter/{index.html,app.mjs}` | `dynamic-env-demo` template, `tworooms_panel.mjs`, `charts.mjs` | live meter+env; perturbations spike; frame-diff baseline |
 | **SM-4** | 1 | Pre/post-federation toggle | (extend `surprise_engine.mjs`/`app.mjs`) | `lewm_adapter.mjs` | `mean(post) < mean(pre)`; certified number in HUD |
 | **SM-5** | 1 | Evidence JSON `lewm-surprise/1` + test | `scripts/lewm_surprise_check.py`, `tests/ml/test_lewm_surprise.py` | `write_evidence`, system-probe sourcing | passes predicate; nonClaims; test green |
-| **SM-6** | 1 | Rehearsal + fallback + capture | `scripts/surprise/rehearsal.py`, committed `adapter_offset.json` + `surprise_trajectory.json` | `hackathon_demo_rehearsal` style | gate green; fallback present; clip + card |
+| **SM-6** | 1 | Rehearsal + fallback + capture | `scripts/surprise/rehearsal.py`, `scripts/surprise/bake_trajectory.mjs`, committed `web/surprise-meter/fixtures/adapter_offset.json` + `web/surprise-meter/data/surprise_trajectory.json` | `hackathon_demo_rehearsal` style; node + onnxruntime-node | gate green; tracked fallbacks present; clip + card |
 
 ## Test & gate matrix
 
