@@ -1,0 +1,200 @@
+/* ============================================================================
+   Less Surprised — surprise-meter · "The Offprint" instrument
+   Same design language as the Demo-Night deck: warm bone paper, one oxblood
+   pigment, Fraunces + Newsreader + Spline Sans Mono, the surprise signal as a
+   registered ink recorder. A lab-bench readout printed on paper — not a SaaS UI.
+   Fonts load from Fontsource CDN; vendor them for an offline venue (see README).
+   ========================================================================== */
+
+@font-face { font-family:"Fraunces Variable"; font-style:normal; font-display:swap; font-weight:300 900;
+  src:url("https://cdn.jsdelivr.net/npm/@fontsource-variable/fraunces/files/fraunces-latin-full-normal.woff2") format("woff2"); }
+@font-face { font-family:"Fraunces Variable"; font-style:italic; font-display:swap; font-weight:300 900;
+  src:url("https://cdn.jsdelivr.net/npm/@fontsource-variable/fraunces/files/fraunces-latin-wght-italic.woff2") format("woff2"); }
+@font-face { font-family:"Newsreader Variable"; font-style:normal; font-display:swap; font-weight:200 800;
+  src:url("https://cdn.jsdelivr.net/npm/@fontsource-variable/newsreader/files/newsreader-latin-wght-normal.woff2") format("woff2"); }
+@font-face { font-family:"Newsreader Variable"; font-style:italic; font-display:swap; font-weight:200 800;
+  src:url("https://cdn.jsdelivr.net/npm/@fontsource-variable/newsreader/files/newsreader-latin-wght-italic.woff2") format("woff2"); }
+@font-face { font-family:"Spline Sans Mono Variable"; font-style:normal; font-display:swap; font-weight:300 700;
+  src:url("https://cdn.jsdelivr.net/npm/@fontsource-variable/spline-sans-mono/files/spline-sans-mono-latin-wght-normal.woff2") format("woff2"); }
+
+:root {
+  --paper:      oklch(0.962 0.011 83);
+  --paper-edge: oklch(0.943 0.014 80);
+  --ink:        oklch(0.236 0.018 60);
+  --ink-2:      oklch(0.452 0.020 62);
+  --ink-3:      oklch(0.572 0.020 64);
+  --accent:     oklch(0.452 0.146 24);
+  --accent-deep:oklch(0.382 0.140 25);
+  --trace-ink:  oklch(0.300 0.030 250);
+  --resolved:   oklch(0.470 0.040 200);
+  --ok:         oklch(0.430 0.075 145);
+  --rule:       oklch(0.236 0.018 60 / 0.18);
+  --rule-strong:oklch(0.236 0.018 60 / 0.5);
+  --wash:       oklch(0.452 0.146 24 / 0.07);
+
+  --display:"Fraunces Variable","Iowan Old Style",Georgia,serif;
+  --body:"Newsreader Variable","Iowan Old Style",Georgia,serif;
+  --mono:"Spline Sans Mono Variable",ui-monospace,"SF Mono",Menlo,monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--paper); color: var(--ink); }
+body {
+  font-family: var(--body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.sheet {
+  max-width: 1280px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: clamp(18px, 2.4vw, 34px) clamp(20px, 3.4vw, 56px);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(14px, 1.8vw, 24px);
+}
+
+/* ── masthead ─────────────────────────────────────────────────────────── */
+.masthead {
+  display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 18px;
+  padding-bottom: 12px; border-bottom: 1px solid var(--rule-strong);
+}
+.run-head {
+  font-family: var(--display); font-weight: 560; font-size: clamp(1.3rem, 1rem + 1vw, 1.9rem);
+  letter-spacing: -0.01em;
+}
+.run-sub { color: var(--ink-3); font-weight: 420; font-style: italic; font-size: 0.7em; }
+.mode { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+.mode b { color: var(--accent); font-weight: 600; }
+.live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent);
+  margin-right: 0.5em; vertical-align: middle; animation: pulse 2.4s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.25} }
+
+/* ── the bench: asymmetric editorial grid ─────────────────────────────── */
+.bench {
+  flex: 1 1 auto; min-height: 0;
+  display: grid; grid-template-columns: 1.62fr 1fr; gap: clamp(20px, 2.6vw, 44px);
+}
+.recorder { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.aside { display: flex; flex-direction: column; gap: clamp(14px, 1.6vw, 22px); min-width: 0; }
+
+/* ── figure plates (the recorder + world) ─────────────────────────────── */
+.plate {
+  position: relative; background: var(--paper-edge);
+  border-block: 1px solid var(--rule); overflow: hidden; width: 100%;
+}
+.plate::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply; opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+}
+.plate canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.plate--tall { flex: 1 1 auto; min-height: 220px; }
+.plate--short { flex: 0 0 96px; }
+.plate--world { flex: 0 0 clamp(190px, 22vw, 240px); border: 1px solid var(--rule); }
+/* fade only the trailing (left) edge into the paper — the right edge is "now", where
+   the pen records, so it stays crisp (the cursor/nib must not be masked away) */
+#surpriseCanvas, #frameDiffCanvas {
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 4.5%, #000 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 4.5%, #000 100%);
+}
+.plate-axis {
+  position: absolute; font-family: var(--mono); font-size: 0.56rem; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--ink-3); z-index: 2;
+}
+.plate-axis--y { top: 8px; left: 10px; }
+
+.cap {
+  font-family: var(--mono); font-size: 0.62rem; letter-spacing: 0.02em; color: var(--ink-3);
+  line-height: 1.5; margin: 2px 0 10px;
+}
+.cap b { color: var(--accent); font-weight: 420; }
+.cap em { font-family: var(--body); font-style: italic; font-size: 1.08em; color: var(--ink-2); letter-spacing: 0; }
+.cap-key { display: block; margin-top: 3px; color: var(--ink-3); }
+.swatch { display: inline-block; width: 1.4em; height: 2px; vertical-align: middle; margin: 0 0.4em 0 0.9em; }
+.swatch--ink { background: var(--trace-ink); }
+.swatch--ox { background: var(--accent); }
+
+/* ── readout ──────────────────────────────────────────────────────────── */
+.readout {
+  display: grid; grid-template-columns: auto 1fr; align-items: baseline; column-gap: 0.6em;
+  border-top: 1px solid var(--rule-strong); padding-top: 10px;
+}
+.readout-label { grid-column: 1 / -1; font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--ink-3); }
+.readout-val { font-family: var(--display); font-variation-settings: "opsz" 144; font-weight: 560;
+  font-size: clamp(2.6rem, 2rem + 3vw, 3.8rem); line-height: 0.9; color: var(--ink);
+  font-feature-settings: "tnum" 1; transition: color 180ms ease; text-indent: -0.05em; }
+.readout.is-surprised .readout-val { color: var(--accent); }
+.readout-state { font-family: var(--body); font-style: italic; font-size: 1.05rem; color: var(--ink-3); }
+.readout.is-surprised .readout-state { color: var(--accent-deep); }
+.readout-fed { grid-column: 1 / -1; font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.06em;
+  color: var(--accent); margin-top: 5px; min-height: 0.9em; }
+
+/* ── certified ledger ─────────────────────────────────────────────────── */
+.ledger { border-top: 1px solid var(--rule-strong); padding-top: 10px; }
+.ledger-head { font-family: var(--body); font-style: italic; font-size: 0.92rem; color: var(--ink-2); margin-bottom: 8px; }
+.ledger-tbl { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 0.74rem;
+  font-feature-settings: "tnum" 1; }
+.ledger-tbl td { padding: 0.32em 0; border-bottom: 1px solid var(--rule); color: var(--ink-2); }
+.ledger-tbl td.num { text-align: right; color: var(--ink); }
+/* "this run" is the hero oxblood figure; the worst seed is notable but quieter — a left
+   accent rule on its label, not a second full-row alarm competing for the eye */
+.ledger-tbl tr.is-run td.num { color: var(--accent); font-weight: 600; }
+.ledger-tbl tr.is-worst td { color: var(--ink-2); }
+.ledger-tbl tr.is-worst td:first-child { color: var(--accent-deep); box-shadow: inset 2px 0 var(--accent); padding-left: 0.5em; }
+.ledger-src { font-family: var(--mono); font-size: 0.56rem; color: var(--ink-3); margin: 8px 0 0; line-height: 1.5; }
+
+/* ── controls (instrument rail) ───────────────────────────────────────── */
+.controls {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px;
+  border-top: 1px solid var(--rule-strong); padding-top: 16px;
+}
+.ctl-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ctl-right { margin-left: auto; }
+.ctl-label { font-family: var(--mono); font-size: 0.6rem; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--ink-3); margin-right: 2px; }
+
+.btn {
+  font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.06em; color: var(--ink);
+  background: var(--paper-edge); border: 1px solid var(--rule-strong); border-radius: 0;
+  padding: 0.62em 1.05em; cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease, transform 90ms ease;
+}
+.btn:hover { background: oklch(0.92 0.016 78); border-color: var(--ink-2); }
+.btn:active { transform: translateY(1px); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn.is-armed { color: var(--accent); border-color: var(--accent); background: var(--wash); }
+.btn--icon { min-width: 5.4em; text-align: center; } /* holds PAUSE / PLAY without jumping width */
+
+.seg { display: inline-flex; border: 1px solid var(--rule-strong); }
+.seg-btn {
+  font-family: var(--mono); font-size: 0.66rem; letter-spacing: 0.05em; color: var(--ink-2);
+  background: transparent; border: 0; padding: 0.62em 1.05em; cursor: pointer; position: relative;
+  transition: color 140ms ease, background 140ms ease;
+}
+.seg-btn + .seg-btn { border-left: 1px solid var(--rule); }
+.seg-btn:hover { color: var(--ink); }
+.seg-btn.is-on { color: var(--ink); background: var(--paper-edge); box-shadow: inset 0 -2px var(--accent); }
+.seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* ── footer ───────────────────────────────────────────────────────────── */
+.foot { border-top: 1px solid var(--rule); padding-top: 12px; }
+.non-claims { list-style: none; margin: 0 0 8px; padding: 0;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 2px 28px; }
+.non-claims li { font-family: var(--mono); font-size: 0.58rem; line-height: 1.5; color: var(--ink-3);
+  padding-left: 1.1em; text-indent: -1.1em; }
+.non-claims li::before { content: "—  "; color: var(--ink-3); }
+.scaffold-note { font-family: var(--mono); font-size: 0.58rem; color: var(--ink-3); margin: 0; letter-spacing: 0.02em; }
+.tag { color: var(--accent); text-transform: uppercase; letter-spacing: 0.14em; font-weight: 600; margin-right: 0.5em; }
+
+/* ── responsive: stack the bench, keep all controls ───────────────────── */
+@media (max-width: 900px) {
+  .bench { grid-template-columns: 1fr; }
+  .plate--tall { min-height: 200px; }
+  .non-claims { grid-template-columns: 1fr; }
+  .ctl-right { margin-left: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-dot { animation: none; }
+}
