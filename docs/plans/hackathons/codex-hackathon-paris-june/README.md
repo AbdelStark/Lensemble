@@ -18,6 +18,7 @@ The hackathon ships in three milestones, in strict priority order. Each mileston
 
 - [`surprise-meter/`](surprise-meter/) — **the priority plan** (#338 + the Milestone-0 clean federated run). Read this first.
 - [`cartographer/`](cartographer/) — the stretch plan (#339). Fully scoped; build only if time allows.
+- [`presentation/`](presentation/) — the **Demo-Night reveal.js deck** (*Less Surprised*, draft v0.1). Self-contained; grounded in these plans; edited live during the build. Run with `python3 -m http.server --directory presentation`.
 
 ## Shared facts (feasibility spike + 4 code-recon passes)
 
