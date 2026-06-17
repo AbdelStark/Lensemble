@@ -54,7 +54,7 @@ cd docs/plans/hackathons/codex-hackathon-paris-june/presentation
 ./vendor.sh                      # downloads reveal.js@5.1.0 AND the 3 variable fonts into ./vendor/
 ```
 
-Then set the flag near the top of [`index.html`](index.html):
+Then set the flag near the top of `index.html`:
 
 ```js
 window.DECK_USE_VENDOR = true;   // load reveal.js + fonts from ./vendor instead of the CDN

@@ -50,6 +50,15 @@ validation:
 not_in_nav: |
   /plans/
 
+# The hackathon presentation is a self-contained reveal.js deck served as static files
+# (its own index.html), not an mkdocs page. Exclude its static assets so they don't conflict
+# with README.md for the directory index (which aborts --strict). README.md stays as the
+# directory's index page so the hackathon index's link to presentation/ still resolves.
+exclude_docs: |
+  plans/hackathons/codex-hackathon-paris-june/presentation/index.html
+  plans/hackathons/codex-hackathon-paris-june/presentation/assets/
+  plans/hackathons/codex-hackathon-paris-june/presentation/vendor.sh
+
 nav:
   - Home: index.md
   - API Reference: reference.md
