@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Less Surprised — surprise-meter</title>
+  <!--
+    Milestone-1 surprise-meter — SCAFFOLD with mocked state & flow.
+    Design language is "The Offprint" (matches the Demo-Night deck): warm bone
+    paper, oxblood, Fraunces/Newsreader/Spline Sans Mono, the surprise signal as
+    a registered ink recorder. Wired to mocks under ./mock/ — swap for the real
+    ../federated-demo/ modules on the day (see README.md and the SWAP comments).
+  -->
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="sheet">
+
+    <header class="masthead">
+      <div class="run-head">Less&nbsp;Surprised <span class="run-sub">— surprise-meter</span></div>
+      <div class="mode" id="modeBadge">
+        <span class="live-dot" aria-hidden="true"></span>
+        <span class="mode-text">recording · <b id="modeLabel">pre-federation</b></span>
+      </div>
+    </header>
+
+    <main class="bench">
+      <section class="recorder">
+        <figure class="plate plate--tall">
+          <canvas id="surpriseCanvas"></canvas>
+          <span class="plate-axis plate-axis--y">surprise</span>
+        </figure>
+        <figcaption class="cap">
+          <b>Fig. A</b> — next-latent prediction error, recorded live · a.u.
+          <span class="cap-key"><i class="swatch swatch--ink"></i>predicted&nbsp;vs&nbsp;actual&nbsp;latent
+          <i class="swatch swatch--ox"></i>prediction&nbsp;error</span>
+        </figcaption>
+
+        <figure class="plate plate--short">
+          <canvas id="frameDiffCanvas"></canvas>
+          <span class="plate-axis plate-axis--y">motion</span>
+        </figure>
+        <figcaption class="cap">
+          <b>Fig. B</b> — frame-diff: pixels changing. Surprise is about <em>prediction</em>, not motion —
+          watch this run high while surprise stays flat.
+        </figcaption>
+      </section>
+
+      <aside class="aside">
+        <figure class="plate plate--world">
+          <canvas id="worldCanvas"></canvas>
+        </figure>
+        <figcaption class="cap"><b>Fig. C</b> — TwoRooms · the agent whose next frame the model predicts</figcaption>
+
+        <div class="readout">
+          <span class="readout-label">surprise now</span>
+          <span class="readout-val" id="surpriseNow">0.060</span>
+          <span class="readout-state" id="surpriseState">calm</span>
+          <span class="readout-fed" id="fedDelta"></span>
+        </div>
+
+        <div class="ledger">
+          <div class="ledger-head">Held-out error drop after the room trains it</div>
+          <table class="ledger-tbl" id="certLedger"></table>
+          <p class="ledger-src" id="certSrc"></p>
+        </div>
+      </aside>
+    </main>
+
+    <section class="controls" aria-label="controls">
+      <div class="ctl-group">
+        <span class="ctl-label">Perturb</span>
+        <button class="btn" data-perturb="teleport">Teleport the agent</button>
+        <button class="btn" data-perturb="ood">Off-distribution action</button>
+        <button class="btn" data-perturb="wall">Push through a wall</button>
+      </div>
+      <div class="ctl-group ctl-right">
+        <div class="seg" id="fedToggle" role="group" aria-label="federation state">
+          <button class="seg-btn is-on" data-mode="pre">Pre-federation</button>
+          <button class="seg-btn" data-mode="post">Post-federation</button>
+        </div>
+        <button class="btn btn--icon" id="playToggle" aria-label="pause" title="pause / resume">PAUSE</button>
+      </div>
+    </section>
+
+    <footer class="foot">
+      <ul class="non-claims" id="nonClaims" aria-label="what this does not claim"></ul>
+      <p class="scaffold-note">
+        <span class="tag">Scaffold</span> mocked state &amp; flow — wired to the real LeWM modules on the day.
+        <span id="srcLine"></span>
+      </p>
+    </footer>
+
+  </div>
+  <script type="module" src="./app.mjs"></script>
+</body>
+</html>
