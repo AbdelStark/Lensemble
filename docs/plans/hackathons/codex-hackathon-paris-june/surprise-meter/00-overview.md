@@ -1,20 +1,35 @@
-# Surprise-meter — Master Plan (PRIORITY)
+# Less Surprised — Master Plan (PRIORITY)
 
-> **Project:** Surprise-meter — *watch a JEPA world model become measurably **less surprised** after a room of people trains it together.*
+> **Project:** **Less Surprised** *(working title; the UI is the "surprise-meter")* — *watch a JEPA world model become measurably **less surprised** after a room of strangers improves it together — without sharing any data.*
 > **Parent issue:** [#338](https://github.com/AbdelStark/Lensemble/issues/338)
 > **Event:** Codex Hackathon, Paris (Thursday). Full-day, solo-builder, Codex-sponsored, Demo-Night.
 > **Priority:** This is the **primary** hackathon deliverable. [Cartographer / #339](../cartographer/) is stretch.
+> **Claim discipline (binding):** never "federated training run" / "the room trained the world model." It is a **federated adapter-continuation round on a frozen checkpoint** — only a 12,512-param (0.069%) adapter moves. The seed-robust improvement is **+16.8% mean across 5 seeds, worst +5.4% (seed 2)** — both surfaced, never the mean alone.
 
 ---
 
 ## 1. One-paragraph pitch
 
-First we run a **clean federated training run** — a room of people each train a tiny adapter on the frozen JEPA world model using their own local trajectory data; nothing leaves their device; the clipped deltas aggregate into one shared revision. Then the **Surprise-meter** makes the result visceral: as an agent moves through the TwoRooms world, we show the model's **surprise** — the gap between what it predicted would happen next and what actually happened, measured in latent space — live. Perturb the world and surprise spikes. Then flip **pre- vs post-federation**: the post-federation model is measurably *less surprised* by normal dynamics. Surprise *is* the prediction error the adapter reduced (the certified +12.3% / +16.8%), so the federated story is told by the exact quantity that improved — not a metaphor.
+First we run a **clean federated adapter-continuation round** — a room of people each train a tiny adapter on the frozen JEPA world model using their own local trajectory data; nothing leaves their device; the clipped deltas aggregate into one shared revision. Then the **surprise-meter** makes the result visceral: as an agent moves through the TwoRooms world, we show the model's **surprise** — the gap between what it predicted would happen next and what actually happened, measured in latent space — live. Perturb the world and surprise spikes. Then flip **pre- vs post-federation**: the post-federation model is measurably *less surprised* by normal dynamics. Surprise *is* the prediction error the adapter reduced (the certified **+12.3%** on this run; **+16.8% mean / +5.4% worst** across 5 seeds), so the federated story is told by the exact quantity that improved — not a metaphor.
 
 Two milestones:
 
-- **Milestone 0 (must) — a clean federated training run.** The reliable, one-command, end-to-end federated **adapter-continuation** run + committed evidence + rehearsal gate. Demoable on its own.
-- **Milestone 1 (ship) — the Surprise-meter.** The live visualization that makes Milestone 0's improvement tangible.
+- **Milestone 0 (must) — a clean federated adapter-continuation round.** The reliable, one-command, end-to-end run + committed audited evidence + rehearsal gate, with the post-round 12,512-float adapter offset exported. Demoable on its own.
+- **Milestone 1 (ship) — the surprise-meter.** The live visualization that makes Milestone 0's improvement tangible.
+
+## 1a. Name & the 10-second hook
+
+- **Name:** **Less Surprised** (the meter is the mechanism, not the pitch). Tagline: *"A world model that gets less surprised after a crowd improves it — no data shared, on a laptop, every number audited."*
+- **Impact-first hook (replaces the jargon-first open):** *"This model is about to be surprised — watch."* — show the spike **first**, explain JEPA **second**. The full 0:00–0:15 rewrite is in `04-demo-runsheet.md`.
+
+## 1b. Why this wins (Codex / research-sponsor Demo-Night)
+
+Against flashier consumer demos, this entry's edge is **substance the judges can verify**:
+1. **Crowd-trained live** — QR-join audience participation is the interactive wow, and it is *real* federation (clipped adapter deltas, nothing leaves the device).
+2. **Evidence-audited** — every on-screen number traces to a committed JSON that passes the repo's claim-audit; the anti-hype stance ("here is the worst seed too: +5.4%") is the differentiator at a research-sponsor table.
+3. **Runs on a laptop** — ~6 ms/step, WASM-safe; nothing hangs live.
+4. **Genuine JEPA world-model substance** — prediction error in latent space, the exact quantity the federation improved.
+5. **Built in a Codex loop** — plan → typed contracts → evidence gate, agentically (Decision S9). Foreground it: it is a Codex hackathon.
 
 ---
 
@@ -64,10 +79,12 @@ The earlier #338 issue draft was written before the feasibility spike. The spike
 | **S2** | **Federation = adapter continuation on a frozen checkpoint.** | Honest, certified, laptop-demonstrable (spike #335 NO-GO on full-model in-browser). |
 | **S3** | **Milestone 0 ships before Milestone 1.** A clean federated run is the priority and a standalone demo. | User priority; de-risks the day. |
 | **S4** | **Act-2 runs in-browser** via the existing `lewm_runtime.mjs` (WebGPU EP, WASM fallback) over a **new page** `web/surprise-meter/` that imports the existing `federated-demo` modules (env, runtime, adapter, probe). | Reuse pixel-exact env + hash-checked ONNX + the proven adapter math; cross-page import is an established pattern. |
-| **S5** | **Pre/post-federation** uses the real adapter offset via `lewm_adapter.mjs::adapterFromInitAndOffset`; surprise computed both ways live. | The certified improvement made visible per-step. |
+| **S5** | **Pre/post-federation** uses the real adapter offset via `lewm_adapter.mjs::adapterFromInitAndOffset({inputDim:192, hiddenDim:32, initSeed:42, offset})` (object arg, **not** a bare offset); `adapterForward(adapter, x, n)`. | The certified improvement made visible. Verified signatures (`lewm_adapter.mjs:208,231`); a bare-offset call throws. |
 | **S6** | **Frame-diff baseline on screen** to prove surprise ≠ motion. | The whole "wow" and the credibility depend on this contrast. |
-| **S7** | **Headline number is the certified federated improvement** (+12.3% / +16.8%), read from existing evidence — plus live mean-surprise pre/post. No new federated claim is derived. | Claim discipline; don't recompute a certified number. |
-| **S8** | **Perturbation-spike is validated offline first**; if the CLS predictor doesn't spike cleanly on teleports, the demo leans on the (certain) in-distribution-vs-OOD-action contrast and the pre/post toggle. | De-risks an empirical unknown (R1). |
+| **S7** | **Headline number is the certified federated improvement read from evidence at full precision** (`result.relativeImprovement=0.1227556578…` → "+12.3% this run"; `distribution.relativeImprovementMean` → "+16.8% mean"; `distribution.relativeImprovementMin` → "+5.4% worst"). The **live** mean-surprise drop is shown separately, labelled "this run". No new federated claim is derived. | Claim discipline; don't recompute a certified number, don't store a truncated literal (it would fail the contract's own 1e-6 sourcing check). |
+| **S8** | **Perturbation-spike is validated in-browser before stage** (onnxruntime is absent offline — Chrome is the only runtime); if the CLS predictor doesn't spike cleanly on teleports, the demo leans on the (certain) OOD-action contrast and the pre/post toggle. | De-risks the empirical unknown (R1), with the correct runtime. |
+| **S9** | **Foreground the Codex/agentic-build story.** One closing beat + a DoD item: this was built plan→typed-contracts→evidence-gate in a Codex loop. | It is a Codex hackathon; the agentic-build angle is a scored differentiator and is currently absent from the narrative. |
+| **S10** | **The pre/post toggle runs on the held-out probe-pair distribution** (`collectResidentPairs`, seed 991), computed **once at load** — *not* a freshly-rolled live trajectory. So the on-stage drop **is** the certified `baselineMse→adaptedMse` (= +12.3%), guaranteed. SM-3's perturbation spikes stay on the pre-only meter. | The certified +12.3% is only guaranteed in-distribution; a free-running trajectory could show a smaller/negative drop (worst seed +5.4%). Pinning the distribution removes that stage risk (R11). |
 
 ---
 
@@ -124,11 +141,11 @@ Hard rule: **Milestone 0 alone is a valid demo at every hour.** Surprise-meter o
 
 ## 9. Definition of done (project-level)
 
-- [ ] **Milestone 0:** one command launches a clean federated adapter-continuation run; `docs/evidence/lewm_tworooms_system_probe.json` regenerates and passes `audit_real_lewm_evidence`; rehearsal gate green.
-- [ ] **Milestone 1:** `web/surprise-meter/` renders a live per-step surprise meter over a TwoRooms trajectory, in-browser.
-- [ ] Perturbation controls spike surprise; frame-diff baseline shows surprise ≠ motion.
-- [ ] Pre/post-federation toggle shows in-distribution surprise drop, with the certified number in the HUD.
-- [ ] `docs/evidence/lewm_tworooms_surprise.json` (`lewm-surprise/1`) generated + `tests/ml/test_lewm_surprise.py` green.
-- [ ] Claim-discipline checklist (doc `05`) signed off.
-- [ ] Rehearsal gate passes; ≤20 s capture + result card exist.
+- [ ] **Milestone 0:** one command (`scripts/surprise/run_clean_round.py`) launches a clean federated adapter-continuation round; `docs/evidence/lewm_tworooms_system_probe.json` regenerates and passes `audit_real_lewm_evidence`; the **12,512-float offset is exported** to a sidecar and a committed copy at `web/surprise-meter/fixtures/adapter_offset.json` (tracked — **not** under gitignored `runs/`); rehearsal gate green.
+- [ ] **Milestone 1:** `web/surprise-meter/` renders a live per-step surprise meter over a TwoRooms trajectory, in-browser, on the **WASM** path (no WebGPU dependency; `?ep=wasm` force-WASM hatch confirmed).
+- [ ] Perturbation controls spike surprise (validated **in-browser** before stage, R1); frame-diff baseline shows surprise ≠ motion.
+- [ ] Pre/post-federation toggle shows the in-distribution surprise drop **on the held-out probe-pair set** (S10), with the certified number (+12.3%) **and the worst-case +5.4%** in the HUD, both sourced at full precision.
+- [ ] `docs/evidence/lewm_tworooms_surprise.json` (`lewm-surprise/1`, incl. `federatedSeedWorst`/`federatedSeedStdev`/`warmupSteps`) generated + `tests/ml/test_lewm_surprise.py` green (skip-when-absent); `CHANGELOG.md [Unreleased]` notes the new schema.
+- [ ] Claim-discipline checklist (doc `05`) signed off; the Codex/agentic-build beat (S9) is in the script.
+- [ ] Rehearsal gate passes; ≤20 s capture + result card exist (card shows +12.3% **and** +5.4% worst).
 - [ ] `ruff` + `pyright` clean; touched `pytest` gates green; `check_docs_links.py` + `mkdocs build --strict` pass.

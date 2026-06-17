@@ -9,6 +9,24 @@ Conventions (AGENTS.md / CONTRIBUTING.md):
 
 ---
 
+## 0′. Corrections baked in (verified against source 2026-06-17)
+
+The 16-agent ground-truth pass found these in the first draft; they are fixed below.
+
+| # | Was | Verified truth | Source |
+|---|---|---|---|
+| K1 | "torch `encode_frames` may expect already-normalized input — verify" | **Torch `encode_frames` does NOT normalize.** ImageNet z-score lives only in the ONNX `EncoderGraph`. The harvest must apply `(px/255 → HWC→CHW → (·−mean)/std)` in Python (mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225]). Measured: L2(raw vs normed) = **30.28** — skipping it gives off-distribution latents and eff_rank/std sanity fails. | `lewm_tworooms.py:557-563`; `lewm_export.py:73-76` |
+| K2 | (unstated) | **Torch `encode_actions` does NOT z-score either.** Action z-score is baked only in the ONNX `ActionGraph`; the harvest/MPC must tile the 2-DOF z-score (mean=[0.00309341,−0.05298233], std=[0.86747581,0.86776555]) before `encode_actions`. Stats: `docs/evidence/lewm_tworooms_action_stats.json`. | `lewm_tworooms.py:565-567`; `lewm_export.py:108-110` |
+| K3 | point cloud and pre/post toggle are one population | **Two different latent populations.** CART-1 harvest = **encoder CLS** latents (the manifold shape). The adapter operates on **predictor outputs** `z_hat` (= `pairs.x`, frozen-predictor-output). So the pre/post clouds must be **predictor-output pairs**, not the encoder-CLS cloud. Keep them separate in `manifold.json` (point cloud vs pre/post). | `lewm_probe.mjs:51-56` |
+| K4 | `adapterFromInitAndOffset(offset)` | Object arg: `adapterFromInitAndOffset({inputDim:192, hiddenDim:32, initSeed:42, offset})`; `adapterForward(adapter,x,n)→{y,h}` batched. `createAdapter` default `seed=1`; init is Gaussian × 1/√inputDim (fan-in), **not** Xavier. | `lewm_adapter.mjs:151,208,231` |
+| K5 | `run_system_composed_probe(participants, …)` returns the offset | Keyword-only (`seed` required); **does not return the offset** — read `service.model_revision(run_id, final_id)["adapterState"]` (len 12512), never write it into a `demo-evidence/1` bundle (substring forbidden). | `system_probe.py:119,214` |
+| K6 | `build_probe_split(h5_path, *, …)` | Fully keyword-only: `build_probe_split(*, h5_path, model_dir=DEFAULT_MODEL_DIR, seed, participants=2, episodes_per_participant=8, validation_episodes=4)`; **`seed` required**. | `lewm_tworooms_probe_pairs.py:74` |
+| K7 | cost via `model.goal_cost` | Cost = **accumulated L1** to goal (`(latent−goal).abs().sum(-1)`, `mpc.py:175`). `model.goal_cost` is squared-L2 **terminal-only** — wrong on two axes. The instrumented planner keeps a **dual ring buffer** (latent + action-embedding, each ≤3; `predict` raises `ContractViolation` if T>3). | `mpc.py:160-176`; `lewm_tworooms.py:479,597` |
+| K8 | ablation `naive-fedavg` at `ablation.py:120` | It is a `RungSpec('naive-fedavg', lambda_sig=0.0, lambda_anc=0.0, …)` **config entry at line 121**, not a collapse generator. | `eval/ablation.py:121` |
+| K9 | `onnxruntime` available | **Absent** from the uv venv (torch 2.12.0, h5py 3.16.0 present). CART-1/2/3 run on the **torch** model (`load_tworooms_model`), so both normalizations are applied in Python (K1/K2). Re-bake needs `uv run --with onnxruntime …`. | venv probe |
+
+---
+
 ## 0. Model facts (verified)
 
 `lensemble/model/lewm_tworooms.py` — `LeWMTwoRooms`, config `LeWMTwoRoomsConfig`:
@@ -56,7 +74,7 @@ def harvest_latents(
 ```
 Notes:
 - One NaN action row per episode (terminal step) — drop it (memory: dataset quirk).
-- Pixels are uint8 in H5; normalize to `[0,1]` float before `encode_frames` (the encoder's ImageNet normalization is applied inside `EncoderGraph` for ONNX, but the **torch** `encode_frames` may expect already-normalized input — verify against `lewm_tworooms.py` forward; the harvest must match the training normalization exactly).
+- **Normalization (RESOLVED — K1/K2, load-bearing):** the torch `encode_frames`/`encode_actions` do **no** normalization (it lives in the ONNX graphs only). So the harvest must, in Python: pixels uint8 → `/255` → HWC→CHW → ImageNet `(·−mean)/std` (`mean=[0.485,0.456,0.406]`, `std=[0.229,0.224,0.225]`) before `encode_frames`; and actions → tile the 2-DOF z-score (`mean=[0.00309341,−0.05298233]`, `std=[0.86747581,0.86776555]` from `docs/evidence/lewm_tworooms_action_stats.json`) before `encode_actions`. Skipping the pixel norm shifts each latent by L2≈30.28 and breaks the eff_rank≈9.86 / latent_std≈0.904 sanity. `state_probe_r2` labels = `pos_agent[idx]` (the H5 has it — resolves the "if available" ambiguity).
 - Harvest **a few thousand** latents (e.g. 40 episodes × ~50 steps ≈ 2k points) — enough for a dense cloud, small enough for instant PCA and a small JSON.
 
 **Artifact:** `runs/cartographer/harvest-<hash>.npz` (latents, actions, episode_ids, step_idx, states). `safetensors`/`npz` only — never pickle.
@@ -107,7 +125,7 @@ def lewm_dynamics(model: LeWMTwoRooms) -> Callable:
 **Reuse (verified):**
 - `lensemble/demo/system_probe.run_system_composed_probe(participants, validation, checkpoint, manifest, rounds=3, steps_per_round=20, batch_size=32, seed=20260612, dim=192)` drives the **real** node-trained adapter through `FederatedDemoService.submit_update` → `_close_round_lewm` and scores the server-produced revision. `write_evidence(path, evidence)` (system_probe.py ~273).
 - Or the lower-level `FederatedDemoService` sequence (federated.py): `create_run({mode: REAL_LEWM_MODE, rounds, quorum})` → `join_run` ×N → `start_run` → per participant `update_progress` + `submit_update(artifact)` → `model_revision(run_id, rev)["adapterState"]` (list[float], len 12512).
-- Adapter math (`web/federated-demo/lewm_adapter.mjs`): `y = z_hat + W2·tanh(W1·z_hat + b1) + b2`; **W2,b2 zero-init, W1 Xavier (mulberry32 seed=42)**. Server stores cumulative **offset** from that shared init. `adapterFromInitAndOffset` (line ~208) reconstructs `init + offset`.
+- Adapter math (`web/federated-demo/lewm_adapter.mjs`): `y = z_hat + W2·tanh(W1·z_hat + b1) + b2`; **W2,b2 zero-init, W1 = Gaussian × 1/√inputDim (LeCun fan-in, NOT Xavier), via mulberry32(initSeed=42)**. Server stores cumulative **offset** from that shared init. `adapterFromInitAndOffset({inputDim:192, hiddenDim:32, initSeed:42, offset})` (line 208, object arg) reconstructs `init + offset`. ⚠️ The adapter operates on **predictor outputs** `z_hat` (= `pairs.x`), not the harvested encoder-CLS latents — keep the pre/post clouds (predictor-output pairs) separate from the point cloud (encoder CLS), per K3.
 
 **[BUILD]** `lensemble/eval/manifold_federation.py`:
 ```python
@@ -173,7 +191,7 @@ Stretch: use the ablation ladder's `naive-fedavg` rung (`eval/ablation.py:120`) 
 
 ## 6. WS6 — Evidence JSON (`CART-6`)
 
-**Goal:** back every on-screen number with a generated, tested evidence file (AGENTS.md §16).
+**Goal:** back every on-screen number with a generated, tested evidence file (AGENTS.md "Claim Discipline" — every public number traces to a committed evidence artifact; AGENTS.md has no numbered sections).
 
 **Schema `lewm-manifold/1`** (full shape in doc `02`). Producer **[BUILD]** `scripts/lewm_manifold_check.py` → `docs/evidence/lewm_tworooms_manifold.json`, writing via the existing `system_probe.write_evidence` helper or `Path.write_text(json.dumps(..., indent=2)+"\n")`.
 

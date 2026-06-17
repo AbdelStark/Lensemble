@@ -17,7 +17,7 @@ and seed-robust (`docs/evidence/lewm_tworooms_system_probe.json`, `..._probe_see
 | Priority | Milestone | Issue(s) | Status |
 |---|---|---|---|
 | **0 — must** | A **clean federated training run** (adapter continuation): one-command end-to-end run, committed audited evidence, headless rehearsal gate, live-browser QR runbook. | #338 → SM-1 | Planned |
-| **1 — ship** | **Surprise-meter** (#338): live scalar prediction-error meter; perturbation spikes; frame-diff baseline; pre/post-federation toggle. | [#338](https://github.com/AbdelStark/Lensemble/issues/338) (SM-1…SM-6) | Planned |
+| **1 — ship** | **Less Surprised / surprise-meter** (#338): live scalar prediction-error meter; perturbation spikes; frame-diff baseline; pre/post-federation toggle (on the held-out probe-pair set). | [#338](https://github.com/AbdelStark/Lensemble/issues/338) (SM-1…SM-6) | Planned |
 | **2 — stretch** | **Cartographer** (#339): WebGPU latent-manifold + planning viewer. Build only if #338 ships early. | [#339](https://github.com/AbdelStark/Lensemble/issues/339) (CART-1…CART-9) | Planned (stretch) |
 
 Sibling idea [#337 (Latent Genie)](https://github.com/AbdelStark/Lensemble/issues/337) is **not pursued**
@@ -30,8 +30,9 @@ Sibling idea [#337 (Latent Genie)](https://github.com/AbdelStark/Lensemble/issue
 - **Surprise = scalar** per-frame next-latent prediction error (no per-patch head). It is already
   implemented in `web/federated-demo/lewm_probe.mjs` as `MSE(frozen_predictor_output, true_next_latent)`;
   the adapter reduces exactly this quantity.
-- Certified federated improvement: **+12.3% committed / +16.8% seed-mean** held-out prediction-error
-  reduction.
+- Certified federated improvement: **+12.3% committed run / +16.8% seed-mean / +5.4% worst seed (2)**,
+  stdev 0.11, all 5 seeds improved — held-out prediction-error reduction. The **worst case is always
+  surfaced beside the mean** (claim discipline); numbers are sourced at full float precision.
 
 ## New artifacts these milestones introduce
 

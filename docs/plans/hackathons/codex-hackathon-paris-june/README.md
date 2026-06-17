@@ -23,7 +23,7 @@ The hackathon ships in three milestones, in strict priority order. Each mileston
 
 - World model is **CLS-latent, 192-d, 3-frame predictor window, no decoder**; inference **~6 ms/step on CPU** (>80 fps). WebGPU allowed but not required.
 - Federation = **adapter continuation on a frozen checkpoint** (12,512-param / 0.069% residual adapter; raw data never leaves the participant). Never call it "federated world-model training" (AGENTS.md §Claim Discipline; spike #335).
-- Certified federated improvement: **+12.3% committed / +16.8% seed-mean** held-out prediction-error reduction (`docs/evidence/lewm_tworooms_system_probe.json`, `..._probe_seedsweep.json`).
+- Certified federated improvement: **+12.3% committed / +16.8% seed-mean / +5.4% worst seed** (stdev 0.11; all 5 seeds improved) held-out prediction-error reduction (`docs/evidence/lewm_tworooms_system_probe.json`, `..._probe_seedsweep.json`). Always surface the worst case beside the mean; source at full float precision.
 - The surprise quantity (#338) is already implemented in `web/federated-demo/lewm_probe.mjs` as `MSE(frozen_predictor_output, true_next_latent)` — the adapter reduces exactly this.
 
 ## Sibling idea not pursued
