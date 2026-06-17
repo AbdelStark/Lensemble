@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Less Surprised — Codex Hackathon Paris</title>
+
+  <!--
+    DRAFT deck (v0.2) — "The Offprint" — for the Codex Hackathon, Paris.
+    The demo as an article torn from a scientific journal: warm bone paper,
+    oxblood pigment, Fraunces + Newsreader + Spline Sans Mono, and the surprise
+    signal as a registered ink seismograph (assets/deck.js). Grounded in
+    docs/plans/hackathons/codex-hackathon-paris-june/. Copy & every number are
+    locked to the claim-discipline doc; this is a visual system only.
+
+    Live spine (RIGHT arrow): Title · Hook · What-you-saw · Surprise≠motion ·
+    Twist · How · Result · Close.  Press DOWN for judge/breakout depth + Appendix.
+
+    Offline: run ./vendor.sh once, then set DECK_USE_VENDOR = true below.
+  -->
+  <script>
+    // Flip to true after ./vendor.sh for a no-network presentation machine.
+    window.DECK_USE_VENDOR = false;
+    (function () {
+      var rbase = window.DECK_USE_VENDOR
+        ? "./vendor/reveal.js@5.1.0/"
+        : "https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/";
+      window.__REVEAL_BASE__ = rbase;
+      document.write('<link rel="stylesheet" href="' + rbase + 'dist/reveal.css">');
+
+      // Self-hosted-or-CDN variable fonts (same switch as reveal).
+      var faces = [
+        { fam: "Fraunces Variable", pkg: "fraunces", file: "fraunces-latin-full-normal.woff2", style: "normal", wght: "300 900" },
+        { fam: "Fraunces Variable", pkg: "fraunces", file: "fraunces-latin-wght-italic.woff2", style: "italic", wght: "300 900" },
+        { fam: "Newsreader Variable", pkg: "newsreader", file: "newsreader-latin-wght-normal.woff2", style: "normal", wght: "200 800" },
+        { fam: "Newsreader Variable", pkg: "newsreader", file: "newsreader-latin-wght-italic.woff2", style: "italic", wght: "200 800" },
+        { fam: "Spline Sans Mono Variable", pkg: "spline-sans-mono", file: "spline-sans-mono-latin-wght-normal.woff2", style: "normal", wght: "300 700" }
+      ];
+      var fbase = "https://cdn.jsdelivr.net/npm/@fontsource-variable/";
+      var css = faces.map(function (f) {
+        var url = window.DECK_USE_VENDOR ? "./vendor/fonts/" + f.file : fbase + f.pkg + "/files/" + f.file;
+        return "@font-face{font-family:'" + f.fam + "';font-style:" + f.style +
+          ";font-display:swap;font-weight:" + f.wght + ";src:url('" + url + "') format('woff2');}";
+      }).join("");
+      document.write("<style>" + css + "</style>");
+    })();
+  </script>
+  <link rel="stylesheet" href="./assets/theme.css" />
+</head>
+<body>
+  <div class="reveal">
+
+    <!-- persistent journal chrome -->
+    <header class="frame frame-top">
+      <span class="run-head">Less Surprised · next-latent prediction error</span>
+      <span class="folio" id="folio">Fig. 1 / 9</span>
+    </header>
+    <div class="frame-rule-top"></div>
+    <canvas id="heartbeat" data-meter data-state="heartbeat" height="18"></canvas>
+    <div class="frame-rule-bot"></div>
+    <footer class="frame frame-bottom">
+      <span class="foot-l">Lensemble · A federated JEPA world model</span>
+      <span class="foot-r">github.com/AbdelStark/Lensemble</span>
+    </footer>
+    <p class="draft-tag">Draft v0.2 · edited live during the build</p>
+
+    <div class="slides">
+
+      <!-- ===================================================== 1 · COVER -->
+      <section data-fig="1" class="masthead">
+        <p class="kicker">Codex Hackathon · Paris · Demo Night</p>
+        <h1 class="display">Less Surprised</h1>
+        <p class="lede">
+          Watch a JEPA world model become measurably <span class="ital">less surprised</span>
+          after a room of strangers improves it together — <strong>without sharing any data.</strong>
+        </p>
+        <div class="spacer"></div>
+        <figure class="plate" style="height:140px"><canvas data-meter data-state="live"></canvas></figure>
+        <p class="fig-cap"><b>Fig. 1</b> — next-latent prediction error, recorded live · arbitrary units</p>
+        <p class="foot cite">Runs on a laptop · ~6 ms/step · every number on screen traces to an audited evidence file.</p>
+        <aside class="notes">
+          Cover stays up while the agent is already gliding in the live demo. Don't read the
+          slide — go to the spike. The trace at the top of the page is the same instrument the
+          whole talk is recorded on.
+        </aside>
+      </section>
+
+      <!-- ===================================================== 2 · HOOK -->
+      <section data-fig="2">
+        <h2 class="display">This model is about<br/>to be surprised. <span class="ital">Watch.</span></h2>
+        <div class="spacer"></div>
+        <figure class="plate" style="height:236px"><canvas data-meter data-state="live"></canvas></figure>
+        <p class="fig-cap"><b>Fig. 2</b> — a teleport the model did not predict · the trace registers the error in <b>oxblood</b></p>
+        <aside class="notes">
+          0:00–0:15 — impact first, jargon second. Agent gliding, trace calm → teleport → the
+          spike segment inks over in oxblood with an event rule. "That spike is a world model
+          realizing it was wrong. In the next 80 seconds a room of strangers makes it LESS
+          surprised — without sharing any data." Save "JEPA / latent space" for the next beat.
+        </aside>
+      </section>
+
+      <!-- ===================================================== 3 · WHAT YOU SAW -->
+      <section data-fig="3">
+        <section data-fig="3">
+          <h2>That spike is a world model<br/>realizing it was wrong.</h2>
+          <div class="with-margin">
+            <div>
+              <p class="lede drop-initial">
+                A JEPA world model predicts what the world will look like next — in
+                <em>latent space</em>, not pixels. Surprise is the gap between what it
+                predicted and what actually happened.
+              </p>
+              <p class="foot">Down for the exact quantity · ~6 ms/step on CPU (&gt;80 fps).</p>
+            </div>
+            <ul class="margin-notes">
+              <li><b>192-d</b> CLS latent, one vector per frame</li>
+              <li><b>3-frame</b> predictor window</li>
+              <li><b>no</b> pixel decoder</li>
+            </ul>
+          </div>
+          <aside class="notes">
+            0:15–0:35. The model predicted all of that — low surprise. Then the world did
+            something it didn't expect → spike. "That spike is prediction error in latent
+            space — literally the signal this model is trained on."
+          </aside>
+        </section>
+        <section data-fig="3">
+          <h3>Surprise is one number per frame</h3>
+          <p class="formula">
+            surprise<sub>t</sub> &nbsp;=&nbsp; ‖ <span class="pred">predicted next latent</span>
+            &nbsp;−&nbsp; <span class="true">actual next latent</span> ‖²
+          </p>
+          <p class="lede">
+            A scalar prediction error in latent space — <strong>not</strong> a per-pixel
+            heatmap. The CLS-latent model emits one 192-d vector per frame, so surprise is a
+            recorded signal, not a picture.
+          </p>
+          <p class="foot cite">Already implemented — <code>web/federated-demo/lewm_probe.mjs</code>. The recorder just runs it per step.</p>
+        </section>
+      </section>
+
+      <!-- ===================================================== 4 · SURPRISE ≠ MOTION -->
+      <section data-fig="4">
+        <h2>Surprise is not motion.</h2>
+        <div class="fig-pair">
+          <div>
+            <figure class="plate" style="height:118px"><canvas data-meter data-state="calm"></canvas></figure>
+            <h4>Fast, predictable</h4>
+            <p>The agent sprints across the room — many pixels change, but the model saw it
+               coming. The trace stays flat.</p>
+          </div>
+          <div>
+            <figure class="plate" style="height:118px"><canvas data-meter data-state="busy"></canvas></figure>
+            <h4>Tiny, unexpected</h4>
+            <p>The agent barely moves but does something off-distribution. Few pixels change —
+               the trace spikes.</p>
+          </div>
+        </div>
+        <p class="foot cite">It is about <em>prediction</em>, not pixels changing — a live frame-diff trace runs alongside on stage to prove it.</p>
+        <aside class="notes">
+          0:35–0:50. Point at the frame-diff trace; this kills the "it's just a motion detector"
+          objection. Pick moments where motion and surprise diverge.
+        </aside>
+      </section>
+
+      <!-- ===================================================== 5 · TWIST -->
+      <section data-fig="5">
+        <h2 class="display">Now a room of strangers<br/>makes it <span class="ital">less surprised.</span></h2>
+        <p class="lede">
+          Earlier, people in this room each trained a tiny adapter on the model — on their
+          <strong>own private trajectories.</strong> Nothing left their device.
+        </p>
+        <div class="spacer"></div>
+        <figure class="plate" style="height:122px"><canvas data-meter data-state="resolved"></canvas></figure>
+        <p class="fig-cap"><b>Fig. 5</b> — the same model, after the room trains it · the signal goes quiet</p>
+        <aside class="notes">
+          0:50 setup — the federated beat. Keep it human: "people in this room", "their own
+          data", "nothing left their phone". The cool, flat trace foreshadows the payoff.
+        </aside>
+      </section>
+
+      <!-- ===================================================== 6 · HOW -->
+      <section data-fig="6">
+        <h2>How: federated adapter continuation</h2>
+        <div class="ledger-rows">
+          <div>
+            <span class="n">i · each participant</span>
+            <h4>Trains a 12,512-param adapter</h4>
+            <p>on their local TwoRooms trajectories.</p>
+            <span class="tag">0.069% of the model</span>
+          </div>
+          <div>
+            <span class="n">ii · clipped delta</span>
+            <h4>Only the offset leaves</h4>
+            <p>the adapter delta is clipped and sent — never raw data.</p>
+          </div>
+          <div>
+            <span class="n">iii · aggregate</span>
+            <h4>One shared revision</h4>
+            <p>the mean of the clipped deltas updates the model.</p>
+          </div>
+        </div>
+        <p class="aside">
+          <strong>The backbone stays frozen — only the adapter moves.</strong> Federated adapter
+          continuation on a frozen checkpoint, <u>not</u> federated world-model training.
+        </p>
+        <aside class="notes">
+          The honest mechanism. Spike #335: full-model federated training in-browser is a
+          GPU-scale NO-GO, so the backbone is frozen and only the 12,512-param (0.07%) adapter
+          trains and federates. If a judge asks "did you train a world model on phones?" — no,
+          and say so plainly. That honesty is the differentiator at a research table.
+        </aside>
+      </section>
+
+      <!-- ===================================================== 7 · RESULT (+ depth) -->
+      <section data-fig="7">
+        <section data-fig="7">
+          <h2>The model is measurably less surprised.</h2>
+          <p class="result-prose">
+            Held-out next-step prediction error fell <span class="bignum">+12.3%</span>
+            on this run — and across five independent seeds it never did worse than
+            <strong>+5.4%</strong>, averaging <strong>+16.8%</strong>. We always show the
+            worst seed beside the mean.
+          </p>
+          <figure class="plate" style="margin-top:var(--s3);height:108px"><canvas data-meter data-state="busy"></canvas></figure>
+          <p class="fig-cap"><b>Fig. 7</b> — held-out error, before → after federation · all five seeds improved, no collapse</p>
+          <p class="foot cite">Source — <code>lewm_tworooms_system_probe.json</code> · <code>…_probe_seedsweep.json</code>. Down for the seed table, the audit, and what we never claim.</p>
+          <aside class="notes">
+            0:50–1:15. The pre/post toggle runs on the held-out probe-pair set, so the drop IS
+            the certified number. "Held-out prediction error dropped 12% on this run, 17% on
+            average, and 5% in the WORST seed." Showing the worst seed is the point.
+          </aside>
+        </section>
+
+        <section data-fig="7">
+          <h3>All five seeds — system-composed probe</h3>
+          <table class="ledger">
+            <caption>real adapter deltas through the real server aggregation path</caption>
+            <thead>
+              <tr><th>seed</th><th>baseline MSE</th><th>adapted MSE</th><th>improvement</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>20260612</td><td>0.0604</td><td>0.0530</td><td class="pos"><span class="tagx">this run</span><span class="num">+12.3%</span></td></tr>
+              <tr><td>1</td><td>0.0547</td><td>0.0400</td><td class="pos"><span class="num">+26.8%</span></td></tr>
+              <tr class="worst"><td>2</td><td>0.0564</td><td>0.0534</td><td><span class="tagx">worst</span><span class="num">+5.4%</span></td></tr>
+              <tr><td>3</td><td>0.0769</td><td>0.0717</td><td class="pos"><span class="num">+6.8%</span></td></tr>
+              <tr><td>4</td><td>0.0738</td><td>0.0497</td><td class="pos"><span class="tagx">best</span><span class="num">+32.6%</span></td></tr>
+            </tbody>
+            <tfoot>
+              <tr><td>mean · stdev · verdict</td><td></td><td></td><td>+16.8% · 0.11 · all improved</td></tr>
+            </tfoot>
+          </table>
+          <p class="foot cite">The headline cites the worst-case draw, not the best.</p>
+        </section>
+
+        <section data-fig="7">
+          <h3>Every number on screen is audited</h3>
+          <div class="steps">
+            <div><span class="n">i</span>a number on screen</div>
+            <div><span class="n">ii</span>a committed evidence JSON</div>
+            <div><span class="n">iii</span>the repo claim-audit</div>
+            <div><span class="n">iv</span>a test asserts the negations</div>
+          </div>
+          <p class="lede">
+            The anti-hype stance is the differentiator at a research table:
+            <em>here is the worst seed too.</em>
+          </p>
+          <p class="foot">Down for what we explicitly do not claim.</p>
+        </section>
+
+        <section data-fig="7">
+          <h3>Claim discipline</h3>
+          <div class="fig-pair">
+            <div class="claims say">
+              <h4>What we say</h4>
+              <ul>
+                <li>Federated adapter continuation on a <strong>frozen</strong> checkpoint</li>
+                <li>Scalar next-latent prediction error (CLS-latent)</li>
+                <li>+12.3% this run · <strong>+5.4% worst</strong> / +16.8% mean</li>
+                <li>Illustrative on the TwoRooms backbone</li>
+              </ul>
+            </div>
+            <div class="claims no">
+              <h4>What we never claim</h4>
+              <ul>
+                <li>“Federated world-model training” / “the room trained the model”</li>
+                <li>A per-pixel or spatial surprise heatmap</li>
+                <li>Differential privacy or cryptographic proof on this path</li>
+                <li>Beats local-only · anomaly detector · paper-scale</li>
+              </ul>
+            </div>
+          </div>
+          <aside class="notes">
+            On privacy: nothing leaves the device on this path, but we do NOT claim DP or secure
+            aggregation here — that plumbing exists elsewhere in the repo, not in this path.
+          </aside>
+        </section>
+      </section>
+
+      <!-- ===================================================== 8 · CLOSE -->
+      <section data-fig="8" class="masthead">
+        <h2 class="display">A world model you can<br/>watch <span class="ital">think.</span></h2>
+        <p class="lede">
+          Improved by a crowd that kept its data private. Running on a laptop. Every number on
+          screen backed by a generated, audited evidence file.
+        </p>
+        <div class="spacer"></div>
+        <figure class="plate" style="height:106px"><canvas data-meter data-state="resolved"></canvas></figure>
+        <p class="codex-line"><span class="lbl">Built in a Codex loop</span>plan <span class="sep">→</span> typed contracts <span class="sep">→</span> evidence gate <span class="sep">↺</span></p>
+        <p class="foot cite">github.com/AbdelStark/Lensemble · Less Surprised · Codex Hackathon Paris</p>
+        <aside class="notes">
+          1:15–1:30. "A world model you can watch think, that a crowd improved while keeping
+          their data private — on a laptop, every number backed by an audited evidence file.
+          And the whole thing — plan, typed contracts, the evidence gate — was built in a Codex
+          loop. Thanks." (Codex is HOW it was built — not a claim the result was model-generated.)
+        </aside>
+      </section>
+
+      <!-- ===================================================== 9 · APPENDIX -->
+      <section data-fig="9">
+        <section data-fig="9">
+          <h2>Appendix</h2>
+          <p class="lede">Off the live path — the article’s back-matter, for judges and the breakout. Down to read on.</p>
+          <ul class="appendix-list">
+            <li><b>9.1</b> Milestones — what ships, in priority order</li>
+            <li><b>9.2</b> Cartographer — the stretch (#339)</li>
+            <li><b>9.3</b> Built in a Codex loop</li>
+            <li><b>9.4</b> Architecture · fallback ladder · sources</li>
+          </ul>
+        </section>
+
+        <section data-fig="9">
+          <h3>Milestones — always something to show</h3>
+          <div class="runs">
+            <div><span class="n">M0 · must</span><h4>A clean federated adapter-continuation round</h4>
+              <p>One command, end-to-end, committed audited evidence, rehearsal gate. <strong>Standalone-demoable.</strong></p></div>
+            <div><span class="n">M1 · ship</span><h4>The surprise-meter</h4>
+              <p>Live per-step surprise, perturbation spikes, frame-diff baseline, pre/post-federation toggle. The full deliverable.</p></div>
+            <div class="stretch"><span class="n">M2 · stretch</span><h4>Cartographer</h4>
+              <p>The WebGPU latent-manifold + planning viewer (#339). Built only if M1 ships with time to spare.</p></div>
+          </div>
+          <p class="aside" style="border-color:var(--ink-3)"><strong>Golden rule.</strong> Milestone 0 alone is a valid demo at every hour. Everything above only adds to it.</p>
+        </section>
+
+        <section data-fig="9">
+          <p class="kicker">Stretch · #339</p>
+          <h2>Cartographer — map its imagination</h2>
+          <div class="with-margin">
+            <div>
+              <p class="lede">
+                The same model, turned into a rotating 3-D point cloud of its latent states,
+                with MPC planning trajectories igniting toward a goal.
+              </p>
+              <p class="foot cite">Fully scoped, fully pre-baked — nothing hangs live. Built only if there is time.</p>
+            </div>
+            <ul class="margin-notes">
+              <li><b>eff-rank 9.86 → 1.0</b> healthy vs collapsed <span style="color:var(--ink-3)">illustrative rank-1 floor</span></li>
+              <li>plans on a laptop, in latent space</li>
+              <li>pre/post-federation toggle</li>
+            </ul>
+          </div>
+        </section>
+
+        <section data-fig="9">
+          <h3>Built in a Codex loop</h3>
+          <p class="codex-line" style="font-size:0.9rem"><span class="lbl">the build</span>plan <span class="sep">→</span> typed contracts <span class="sep">→</span> evidence gate <span class="sep">↺</span></p>
+          <p class="lede">
+            The plan, the typed data contracts, and the evidence gate that backs every number —
+            assembled agentically. It is a Codex hackathon; this is <em>how it was built.</em>
+          </p>
+          <p class="foot">Not a claim that the model or the result was model-generated — just the build loop.</p>
+        </section>
+
+        <section data-fig="9">
+          <h3>Architecture</h3>
+          <div class="arch-grid">
+            <div>
+              <div class="h">M0 — federated adapter-continuation run <span>(mostly exists)</span></div>
+              <div class="codeplate"><pre>browser federated-demo (QR join)
+  local trainer → adapter delta
+  → submit_update → aggregate
+  → model revision + offset
+system_probe.py (headless)
+  → docs/evidence/…_system_probe.json</pre></div>
+            </div>
+            <div>
+              <div class="h">M1 — surprise-meter <span>(new page)</span></div>
+              <div class="codeplate"><pre>web/surprise-meter/  (imports federated-demo)
+  tworooms_env → live trajectory
+  lewm_runtime → encode / predict (ONNX)
+  surprise = MSE(pred_next, actual)
+  lewm_adapter → pre/post offset
+  → recorder + perturbation + frame-diff</pre></div>
+            </div>
+          </div>
+          <p class="foot">WebGPU EP with WASM fallback (<code>?ep=wasm</code>). The recorder itself is 2-D canvas — no GPU dependency.</p>
+        </section>
+
+        <section data-fig="9">
+          <h3>Fallback ladder &amp; sources</h3>
+          <div class="fig-pair">
+            <div>
+              <table class="ledger">
+                <caption>use the highest rung that works</caption>
+                <tbody>
+                  <tr><td>A</td><td style="text-align:left">live round → recorder (pre/post from evidence)</td></tr>
+                  <tr><td>B</td><td style="text-align:left">live recorder, pre-baked offset</td></tr>
+                  <tr><td>C</td><td style="text-align:left">recorded trajectory replayed</td></tr>
+                  <tr><td>D</td><td style="text-align:left">the ≤20 s capture clip</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div>
+              <ul class="sources">
+                <li><code>lewm_tworooms_system_probe.json</code> — this-run +12.3%</li>
+                <li><code>lewm_tworooms_probe_seedsweep.json</code> — 5-seed mean/worst</li>
+                <li><code>AGENTS.md § Claim Discipline</code> — binding language</li>
+                <li>Spike #335 — full-model federated training in-browser is NO-GO</li>
+              </ul>
+            </div>
+          </div>
+          <aside class="notes">
+            Wed-eve BLOCKING pre-bake: commit the adapter offset + recorded trajectory + the
+            ≤20 s clip before walking on — onnxruntime is absent at the venue, so rungs B/C/D
+            can't be produced there. Have C and D on disk before stage.
+          </aside>
+        </section>
+      </section>
+
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var base = window.__REVEAL_BASE__;
+      function load(src, cb) { var s = document.createElement("script"); s.src = src; s.onload = cb; document.head.appendChild(s); }
+      load(base + "dist/reveal.js", function () {
+        load(base + "plugin/notes/notes.js", function () {
+          load(base + "plugin/highlight/highlight.js", function () { window.__initDeck__(); });
+        });
+      });
+    })();
+  </script>
+  <script src="./assets/deck.js"></script>
+</body>
+</html>
