@@ -44,10 +44,10 @@ parallel once the engine is stable.
 | Surprise core | `node web/federated-demo/lewm_probe_selftest.mjs` |
 | LeWM evidence | `uv run pytest tests/ml/test_lewm_probe.py tests/ml/test_lewm_system_probe.py tests/ml/test_lewm_evidence_audit.py` |
 | Ledger | `uv run pytest tests/ml/test_demo_economy.py` |
-| Mollie mock/env | `uv run pytest tests/ml/test_mollie_env_contract.py` |
+| Mollie mock/env | `uv run pytest tests/ml/test_demo_economy.py` |
 | Credentialed Mollie smoke | opt-in, skipped unless `MOLLIE_API_KEY` is present |
 | Browser dashboard | Playwright/in-browser smoke if available; otherwise static HTML/module inspection plus JS selftest |
-| Secret hygiene | tracked-file scan for `MOLLIE_API_KEY=`, `live_`, and committed `test_` keys outside `.env.example` placeholders |
+| Secret hygiene | tracked-file scan for Mollie key assignments and committed live/test key values outside `.env.example` placeholders |
 
 ## Build Order
 

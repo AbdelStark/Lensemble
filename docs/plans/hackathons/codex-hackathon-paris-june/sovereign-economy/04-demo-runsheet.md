@@ -22,12 +22,12 @@
 ## Live Flow
 
 1. Start server: `uv run lensemble demo federated --port 8765`.
-2. Open `http://127.0.0.1:8765/web/surprise-meter/`.
+2. Open `http://127.0.0.1:8765/web/federated-demo/`.
 3. Run or replay the federated adapter-continuation result.
-4. Show surprise meter pre/post.
-5. Create sale scenario.
-6. Create Mollie test checkout if `MOLLIE_API_KEY` exists; otherwise use mock.
-7. Show reward split.
+4. Use the host dashboard's **Sovereign economy** panel to create the buyer sale.
+5. Create Mollie test checkout if `MOLLIE_API_KEY` exists; otherwise use mock.
+6. Open checkout/payment link or mark mock paid.
+7. Show reward split, then open the surprise-meter view for the model-quality proof.
 
 ## Fallback Ladder
 
@@ -41,6 +41,8 @@
 ## Preflight
 
 - [ ] `.env` or shell has `MOLLIE_API_KEY` for credentialed path, or mock mode is selected.
+- [ ] `LENSEMBLE_DEMO_CHECKOUT_AMOUNT_EUR` is a small Mollie test amount; the
+      EUR 1,000,000 figure remains the simulated sale amount.
 - [ ] `.env` is ignored and no real key is committed.
 - [ ] Ledger fixture has at least four participants and cent-balanced rewards.
 - [ ] Surprise-meter fallback assets exist.

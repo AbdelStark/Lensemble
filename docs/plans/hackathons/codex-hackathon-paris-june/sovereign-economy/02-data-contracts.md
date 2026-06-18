@@ -13,6 +13,11 @@
     "displayName": "Humanoid robotics buyer"
   },
   "saleAmount": { "currency": "EUR", "value": "1000000.00" },
+  "checkoutAmount": {
+    "currency": "EUR",
+    "value": "10.00",
+    "label": "Mollie test checkout amount"
+  },
   "orchestratorShare": "0.20",
   "communityPool": { "currency": "EUR", "value": "800000.00" },
   "payment": {
@@ -72,9 +77,18 @@ raw_weight_i = accepted_rounds_i * sample_count_i * quality_i * cap_factor_i
 reward_i = community_pool * raw_weight_i / sum(raw_weight)
 ```
 
-The exact implementation may tune `raw_weight_i`, but it must be deterministic,
-documented, and tested. The first shippable path can use fixture participants
-when no live run exists.
+Implemented demo formula:
+
+```text
+weight_i = (sample_count_i + 4 * local_steps_i + runtime_ms_i / 1000)
+           * max(accepted_rounds_i, 1)
+           * update_health_i
+           * cap_factor_i
+```
+
+This keeps the path deterministic, data/compute-weighted, and testable. The
+server derives rows from redacted run `updateMetadata` when available and uses
+fixture participants when no live run exists.
 
 ## Payment Modes
 

@@ -211,6 +211,22 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.button-link {
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(180deg, #5850ec, var(--accent));
+  color: #fff;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: 0 1px 2px rgba(55, 48, 163, 0.25);
+}
+
 /* -------------------------------------------------------------------- text */
 
 .note,
@@ -228,6 +244,55 @@ button:disabled {
 .mono {
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.92em;
+}
+
+/* ------------------------------------------------------------- economy */
+
+.economy-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 16px;
+  background: var(--surface);
+}
+
+.economy-head,
+.economy-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.economy-head {
+  justify-content: space-between;
+}
+
+.reward-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.reward-table th,
+.reward-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 7px 0;
+  text-align: left;
+}
+
+.reward-table th {
+  color: var(--ink-3);
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 11px;
+}
+
+.reward-table .num {
+  text-align: right;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 /* ------------------------------------------------------------------ badges */

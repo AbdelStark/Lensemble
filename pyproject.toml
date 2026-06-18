@@ -35,6 +35,7 @@ dependencies = [
     "blake3>=0.4",
     "typer",
     "rich",
+    "mollie-api-python>=4,<5",
 ]
 
 [project.optional-dependencies]

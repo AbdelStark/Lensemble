@@ -62,6 +62,8 @@ let backendPoll = null; // { view, runId, timer, socket, transport }
 const inferenceByRun = new Map();
 const backendLearnerJobs = new Map();
 const backendLearnerTelemetry = new Map();
+const economyByRun = new Map();
+const economyMessages = new Map();
 
 // ---------------------------------------------------------------- utilities
 
@@ -133,6 +135,18 @@ function formatMetric(value, digits = 3) {
   const fixed = Number(value).toFixed(digits);
   if (!fixed.includes(".")) return fixed;
   return fixed.replace(/\.?0+$/, "");
+}
+
+function formatMoney(amount) {
+  if (!amount) return "n/a";
+  return `${amount.currency ?? "EUR"} ${amount.value ?? "0.00"}`;
+}
+
+function latestRevisionId(run) {
+  const revisions = run.modelRevisions ?? [];
+  return revisions.length > 0
+    ? revisions[revisions.length - 1].modelRevisionId
+    : run.currentModelRevisionId ?? "latest";
 }
 
 function latestUpdateMetadata(participant, preferredRound = null) {
@@ -938,6 +952,127 @@ function hostQrUrl(run) {
   return run.joinUrl || buildJoinUrl(window.location.href, run.id, run.joinToken);
 }
 
+function economyRewardRows(sale) {
+  const rows = sale?.ledger?.participantRewards ?? [];
+  if (rows.length === 0) return note("Reward rows appear after the sale scenario is created.");
+  return el("table", { class: "reward-table" }, [
+    el("thead", {}, el("tr", {}, [
+      el("th", { text: "participant" }),
+      el("th", { text: "weight" }),
+      el("th", { text: "reward" }),
+    ])),
+    el("tbody", {}, rows.slice(0, 5).map((row) =>
+      el("tr", {}, [
+        el("td", { text: row.displayName || row.participantId }),
+        el("td", { class: "num", text: formatMetric(row.contributionWeight, 1) }),
+        el("td", { class: "num", text: formatMoney(row.reward) }),
+      ]),
+    )),
+  ]);
+}
+
+function renderEconomyPanel(run) {
+  const sale = economyByRun.get(run.id) ?? null;
+  const message = economyMessages.get(run.id) ?? "";
+  const statusNote = keyed("economy-note", el("p", { class: "note", text: message }));
+  const createButton = keyed("economy-create", el("button", {
+    class: sale ? "secondary" : null,
+    text: sale ? "Recreate sale scenario" : "Create buyer sale scenario",
+    onclick: async () => {
+      const live = runRef.current ?? run;
+      economyMessages.set(live.id, "Creating deterministic contribution ledger...");
+      morphHostSnapshot(live);
+      try {
+        const created = await backendClient.createEconomySale({
+          runId: live.id,
+          modelRevisionId: latestRevisionId(live),
+        });
+        economyByRun.set(live.id, created);
+        economyMessages.set(live.id, "Sale scenario ready.");
+        morphHostSnapshot(live);
+      } catch (error) {
+        economyMessages.set(live.id, error.message);
+        morphHostSnapshot(live);
+      }
+    },
+  }));
+
+  const actions = [createButton];
+  if (sale) {
+    actions.push(keyed("economy-payment", el("button", {
+      text: sale.payment?.status === "not_created" ? "Create Mollie checkout" : "Refresh checkout",
+      onclick: async () => {
+        const live = runRef.current ?? run;
+        economyMessages.set(live.id, "Creating checkout/payment link...");
+        morphHostSnapshot(live);
+        try {
+          const updated = await backendClient.createEconomyPayment(sale.saleId, { allowMockFallback: true });
+          economyByRun.set(live.id, updated);
+          economyMessages.set(live.id, updated.payment?.mode === "mollie-test" ? "Mollie test checkout created." : "Mock checkout ready.");
+          morphHostSnapshot(live);
+        } catch (error) {
+          economyMessages.set(live.id, error.message);
+          morphHostSnapshot(live);
+        }
+      },
+    })));
+    if (sale.payment?.checkoutUrl) {
+      actions.push(keyed("economy-open", el("a", {
+        class: "button-link",
+        href: sale.payment.checkoutUrl,
+        target: "_blank",
+        rel: "noreferrer",
+        text: "Open checkout",
+      })));
+      actions.push(keyed("economy-paid", el("button", {
+        class: "secondary",
+        text: sale.payment.mode === "mollie-test" ? "Refresh payment status" : "Mark mock paid",
+        onclick: async () => {
+          const live = runRef.current ?? run;
+          economyMessages.set(live.id, "Checking payment status...");
+          morphHostSnapshot(live);
+          try {
+            const updated = await backendClient.refreshEconomyPayment(sale.saleId, {
+              markPaid: sale.payment.mode !== "mollie-test",
+            });
+            economyByRun.set(live.id, updated);
+            economyMessages.set(live.id, `Payment status: ${updated.payment?.status ?? "unknown"}.`);
+            morphHostSnapshot(live);
+          } catch (error) {
+            economyMessages.set(live.id, error.message);
+            morphHostSnapshot(live);
+          }
+        },
+      })));
+    }
+  }
+
+  return el("div", { class: "economy-panel" }, [
+    el("div", { class: "economy-head" }, [
+      el("h2", { text: "Sovereign economy" }),
+      sale?.payment?.status ? stateBadge(sale.payment.status) : stateBadge("ready"),
+    ]),
+    note("A humanoid robotics buyer purchases the improved revision; L'Ensemble Labs keeps the orchestrator share and the community pool is split by contribution weight."),
+    sale
+      ? el("div", { class: "metric-tiles" }, [
+          metricTile("simulated sale", formatMoney(sale.saleAmount)),
+          metricTile("checkout", formatMoney(sale.checkoutAmount), sale.payment?.mode ?? "not-created"),
+          metricTile("orchestrator", formatMoney(sale.ledger?.orchestratorReward), `${Number(sale.orchestratorShare) * 100}%`),
+          metricTile("community", formatMoney(sale.communityPool)),
+        ])
+      : note("Create the sale scenario when the run has enough proof for the pitch, or use the deterministic fixture path during rehearsal."),
+    sale ? economyRewardRows(sale) : null,
+    sale?.payment?.fallbackReason ? errorBox(`Payment fallback: ${sale.payment.fallbackReason}`) : null,
+    el("div", { class: "economy-actions" }, actions),
+    statusNote,
+    sale
+      ? el("p", { class: "muted" }, [
+          "Simulation only: no legal payout, no securities claim, and no raw data or Mollie secret leaves the server.",
+        ])
+      : null,
+  ]);
+}
+
 // Pure builder: returns the detached host dashboard <section>. Shared by mount
 // and morph so the live tree and the freshly-built tree always have the same
 // shape. Handlers read runRef.current (never the captured run) so a node kept by
@@ -1040,6 +1175,7 @@ function buildBackendHostTree(run) {
         keyed("participant-slots", participantSlots(run)),
         ...runAnalytics(run),
         run.runMode === "real-lewm-tworooms" ? keyed("claim-boundary", renderClaimBoundary(run)) : null,
+        keyed("economy", renderEconomyPanel(run)),
         run.runMode === "real-lewm-tworooms" ? keyed("probe-head", el("h2", { text: "Before/after validation probe" })) : null,
         keyed("probe", renderRealModeProbe(run)),
         keyed("diag-head", el("h2", { text: "Training diagnostics" })),
