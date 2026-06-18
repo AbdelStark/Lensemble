@@ -54,16 +54,25 @@ export class SurpriseEngine {
     if (this.trajectory?.length) {
       const row = this.trajectory[this.frame % this.trajectory.length];
       const rawSurprise = this.mode === "post" ? row.surprisePost : row.surprisePre;
+      this.event.energy *= Math.pow(0.06, dt);
+      if (this.override && this.t >= this.override.until) this.override = null;
+      const eventEnergy = this.event.energy;
+      const eventFrameKick = eventEnergy > 0.045 && this.event.type !== "ood"
+        ? Math.min(0.42, eventEnergy * 2.4)
+        : 0;
+      const agent = this.override && this.t < this.override.until
+        ? this.override.pos
+        : row.agent ?? mockEnv.path(this.t);
       return {
         t: Number(row.t ?? this.t),
-        agent: row.agent ?? mockEnv.path(this.t),
-        room: (row.agent?.x ?? 0.5) < 0.5 ? "left" : "right",
-        surprise: rawSurprise === null || rawSurprise === undefined ? this.baselineLevel() : Number(rawSurprise),
-        frameDiff: Number(row.frameDiff),
+        agent,
+        room: (agent?.x ?? 0.5) < 0.5 ? "left" : "right",
+        surprise: (rawSurprise === null || rawSurprise === undefined ? this.baselineLevel() : Number(rawSurprise)) + eventEnergy,
+        frameDiff: Math.min(1, Number(row.frameDiff) + eventFrameKick),
         baseline: this.baselineLevel(),
         mode: this.mode,
-        hot: Boolean(row.event),
-        event: row.event ?? null,
+        hot: Boolean(row.event) || eventEnergy > 0.045,
+        event: eventEnergy > 0.045 ? this.event.type : row.event ?? null,
         running: this.running,
       };
     }

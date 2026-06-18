@@ -7,6 +7,7 @@ import {
   mseOf,
   stepSurprise,
 } from "./surprise_engine.mjs";
+import { SurpriseEngine } from "./mock/engine.mjs";
 
 const D = 192;
 const WINDOW = 3;
@@ -131,6 +132,19 @@ assert.equal(live.steps[0].surprisePre, null);
 assert.equal(live.steps[1].surprisePre, null);
 assert.ok(Number.isFinite(live.steps[2].surprisePre));
 assert.equal(live.steps[4].event, "ood");
+
+const replay = new SurpriseEngine({
+  trajectory: [
+    { t: 0, agent: { x: 0.45, y: 0.5 }, surprisePre: 0.05, surprisePost: 0.04, frameDiff: 0.2 },
+    { t: 1, agent: { x: 0.46, y: 0.5 }, surprisePre: 0.05, surprisePost: 0.04, frameDiff: 0.2 },
+  ],
+});
+const replayBase = replay.tick(1 / 60);
+replay.perturb("ood");
+const replaySpike = replay.tick(1 / 60);
+assert.ok(replaySpike.surprise > replayBase.surprise * 1.5);
+assert.equal(replaySpike.event, "ood");
+assert.ok(replaySpike.frameDiff <= replayBase.frameDiff + 0.001);
 
 console.log(
   JSON.stringify({
