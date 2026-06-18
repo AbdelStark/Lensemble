@@ -196,12 +196,38 @@ function learnerTelemetryPayload(progress, telemetry) {
   };
 }
 
-function metricTile(label, value, detail = null) {
-  return el("div", { class: "metric-tile" }, [
+function metricTile(label, value, detail = null, options = {}) {
+  const attrs = { class: options.className ? `metric-tile ${options.className}` : "metric-tile" };
+  if (options.title) attrs.title = options.title;
+  return el("div", attrs, [
     el("span", { class: "metric-label", text: label }),
     el("strong", { text: value }),
     detail ? el("span", { class: "muted", text: detail }) : null,
   ]);
+}
+
+function progressRatio(run) {
+  return run.config.rounds > 0 ? Math.min(1, (run.roundMetrics?.length ?? 0) / run.config.rounds) : 0;
+}
+
+function shortRunId(run) {
+  return String(run.id).replace(/^run-/, "").slice(0, 8);
+}
+
+function detailDisclosure(key, title, content, { count = null, tone = null } = {}) {
+  const existing = app.querySelector(`[data-key="${key}"]`);
+  const attrs = { class: tone ? `detail-disclosure ${tone}` : "detail-disclosure", "data-key": key };
+  if (existing?.open) attrs.open = "open";
+  return keyed(
+    key,
+    el("details", attrs, [
+      el("summary", {}, [
+        el("span", { text: title }),
+        count === null ? null : el("span", { class: "detail-count", text: String(count) }),
+      ]),
+      el("div", { class: "detail-body" }, content),
+    ]),
+  );
 }
 
 function drawQr(canvas, text) {
@@ -324,7 +350,7 @@ function runStatusStrip(run) {
   ]);
 }
 
-function runAnalytics(run) {
+function runChartNodes(run) {
   const rounds = run.roundMetrics ?? [];
   if (rounds.length === 0) return [];
   const real = run.runMode === "real-lewm-tworooms";
@@ -333,7 +359,7 @@ function runAnalytics(run) {
   const perParticipant = participantLossSeries(run);
   const meanSeries = roundSeries(run, [
     { key: real ? "predLossLastMean" : "localLossMean", label: "mean", dashed: true },
-  ]).map((s) => ({ ...s, color: "#8b909a" }));
+  ]).map((s) => ({ ...s, color: "#4e5759" }));
   if (perParticipant.length > 0) {
     charts.push(
       lineChart({
@@ -376,11 +402,46 @@ function runAnalytics(run) {
       }),
     );
   }
+  return charts;
+}
+
+function runAnalytics(run) {
+  const charts = runChartNodes(run);
   if (charts.length === 0) return [];
   return [
     keyed("analytics-head", el("h2", { text: "Run analytics" })),
     keyed("analytics-grid", el("div", { class: "charts-grid" }, charts)),
   ];
+}
+
+function runAnalyticsWall(run) {
+  const charts = runChartNodes(run);
+  const latest = (run.roundMetrics ?? [])[run.roundMetrics?.length - 1] ?? null;
+  const headline = run.runMode === "real-lewm-tworooms"
+    ? "Training signal"
+    : "Training progress";
+  if (charts.length === 0) {
+    return el("section", { class: "dashboard-graph-wall empty" }, [
+      el("div", { class: "section-kicker", text: headline }),
+      el("h2", { text: "Graphs appear after the first aggregation closes" }),
+      note("Start the run after quorum is ready. As participant updates arrive, this wall becomes the main view of loss, geometry, adapter norms, and collapse checks."),
+    ]);
+  }
+  return el("section", { class: "dashboard-graph-wall" }, [
+    el("div", { class: "graph-wall-head" }, [
+      el("div", {}, [
+        el("div", { class: "section-kicker", text: headline }),
+        el("h2", { text: "Live training telemetry" }),
+      ]),
+      latest
+        ? el("div", { class: "graph-wall-status" }, [
+            el("span", { text: `round ${latest.round}` }),
+            stateBadge((latest.healthFlags ?? []).length > 0 ? "watch" : "improved"),
+          ])
+        : null,
+    ]),
+    el("div", { class: "charts-grid chart-wall-grid" }, charts),
+  ]);
 }
 
 function metricsList(run) {
@@ -1192,63 +1253,96 @@ function buildBackendHostTree(run) {
     },
   }));
 
-  return el("section", { class: "panel" }, [
-    keyed("run-head", el("h2", {}, [`Run ${run.id} `, stateBadge(run.state)])),
-    keyed("run-meta", el("p", { class: "muted" }, [
-      run.runMode === "real-lewm-tworooms"
-        ? el("span", { class: "chip", text: `${run.lewmBinding?.checkpoint?.repoId}@${String(run.lewmBinding?.checkpoint?.revision ?? "").slice(0, 12)} · ${run.lewmBinding?.adapterParameterCount}-param adapter` })
-        : el("span", { class: "chip", text: run.learnerRuntime }),
-      ` quorum ${run.config.quorum} · up to ${run.config.maxParticipants} participants · ${run.config.rounds} rounds · ${backendPoll?.transport ?? run.deployment?.transportMode ?? "polling"}`,
+  const active = (run.participants ?? []).filter((p) => !["dropped", "error"].includes(p.state)).length;
+  const latest = (run.roundMetrics ?? [])[run.roundMetrics?.length - 1] ?? null;
+  const transport = backendPoll?.transport ?? run.deployment?.transportMode ?? "polling";
+  const modeChip = run.runMode === "real-lewm-tworooms"
+    ? `${run.lewmBinding?.checkpoint?.repoId}@${String(run.lewmBinding?.checkpoint?.revision ?? "").slice(0, 12)}`
+    : run.learnerRuntime;
+  const revisionId = latestRevisionId(run);
+
+  return el("section", { class: "dashboard-shell" }, [
+    keyed("run-head", el("header", { class: "dashboard-head" }, [
+      el("div", {}, [
+        el("div", { class: "section-kicker", text: "Federated control room" }),
+        el("h1", {}, [`Run ${shortRunId(run)} `, stateBadge(run.state)]),
+      ]),
+      el("div", { class: "dashboard-head-meta" }, [
+        el("span", { class: "chip", text: modeChip }),
+        el("span", { class: "chip", text: `${transport} stream` }),
+        el("a", { class: "text-link", href: "#/", text: "New run" }),
+      ]),
     ])),
     run.state === "paused"
       ? keyed("paused-banner", el("p", { class: "error-box" }, [
           `Paused — quorum dropped${run.pausedReason ? ` (${run.pausedReason})` : ""}. The run resumes automatically when enough participants reconnect; their progress is kept.`,
         ]))
       : null,
-    keyed("status-strip", runStatusStrip(run)),
-    el("div", { class: "columns" }, [
-      el("div", { class: "panel" }, [
-        el("h2", { text: "Invite participants" }),
-        qrCanvas,
-        el("div", { class: "join-url" }, [
-          urlInput,
-          el("button", { class: "secondary", text: "Copy", onclick: () => navigator.clipboard?.writeText(runRef.current ? hostQrUrl(runRef.current) : joinUrl) }),
-        ]),
-        startButton,
-        abortButton,
-        timeoutButton,
-        exportButton,
-        statusNote,
-        el("p", {}, el("a", { href: "#/", text: "New run" })),
+    keyed("kpi-rail", el("div", { class: "dashboard-kpi-rail" }, [
+      metricTile("rounds closed", `${run.roundMetrics?.length ?? 0}/${run.config.rounds}`, `${formatMetric(progressRatio(run) * 100, 0)}% complete`),
+      metricTile("participants", `${active}/${run.config.maxParticipants}`, `quorum ${run.config.quorum}`),
+      latest && run.runMode === "real-lewm-tworooms"
+        ? metricTile("prediction loss", formatMetric(latest.predLossLastMean, 5), `from ${formatMetric(latest.predLossFirstMean, 5)}`)
+        : latest
+          ? metricTile("mean loss", formatMetric(latest.localLossMean, 4), "latest round")
+          : metricTile("mean loss", "waiting", "first aggregate pending"),
+      latest && run.runMode === "real-lewm-tworooms"
+        ? metricTile("geometry", `rank ${formatMetric(latest.effectiveRankMean, 1)}`, `sigreg ${formatMetric(latest.sigregStatisticMean, 4)}`)
+        : latest
+          ? metricTile("update norm", formatMetric(latest.aggregateNorm, 4), "aggregate")
+          : metricTile("update norm", "waiting", "first aggregate pending"),
+      metricTile("revision", revisionId, run.aggregationMode, { className: "revision-tile", title: revisionId }),
+    ])),
+    el("div", { class: "dashboard-workbench" }, [
+      el("div", { class: "dashboard-main" }, [
+        keyed("graph-wall", runAnalyticsWall(run)),
+        run.runMode === "real-lewm-tworooms"
+          ? keyed("proof-strip", el("section", { class: "dashboard-proof-strip" }, [
+              renderClaimBoundary(run),
+              el("div", { class: "probe-panel" }, [
+                el("div", { class: "section-kicker", text: "Validation" }),
+                renderRealModeProbe(run),
+              ]),
+            ]))
+          : detailDisclosure("inference-detail", "Inference panel", [markStatic("inference", renderInferencePanel(run))]),
       ]),
-      el("div", { class: "panel" }, [
-        keyed("round-head", el("h2", { text: run.round > 0 ? `Round ${run.round} of ${run.config.rounds}` : "Waiting for participants" })),
-        keyed("participant-slots", participantSlots(run)),
-        ...runAnalytics(run),
-        run.runMode === "real-lewm-tworooms" ? keyed("claim-boundary", renderClaimBoundary(run)) : null,
-        keyed("economy", renderEconomyPanel(run)),
-        run.runMode === "real-lewm-tworooms" ? keyed("probe-head", el("h2", { text: "Before/after validation probe" })) : null,
-        keyed("probe", renderRealModeProbe(run)),
-        keyed("diag-head", el("h2", { text: "Training diagnostics" })),
-        keyed("diagnostics", trainingDiagnostics(run)),
-        keyed("metrics-head", el("h2", { text: "Round metrics" })),
-        keyed("metrics", metricsList(run)),
-        keyed("artifacts-head", el("h2", { text: "Artifacts" })),
-        keyed("artifacts", artifactList(run)),
-        keyed("timeline-head", el("h2", { text: "Event timeline" })),
-        keyed("timeline", timelineList(run.events)),
+      el("aside", { class: "dashboard-side" }, [
+        el("section", { class: "control-card invite-card" }, [
+          el("div", { class: "section-kicker", text: "Invite" }),
+          qrCanvas,
+          el("div", { class: "join-url" }, [
+            urlInput,
+            el("button", { class: "secondary", text: "Copy", onclick: () => navigator.clipboard?.writeText(runRef.current ? hostQrUrl(runRef.current) : joinUrl) }),
+          ]),
+        ]),
+        el("section", { class: "control-card command-card" }, [
+          el("div", { class: "section-kicker", text: "Run commands" }),
+          startButton,
+          timeoutButton,
+          abortButton,
+          exportButton,
+          statusNote,
+        ]),
+        el("section", { class: "control-card roster-card" }, [
+          el("div", { class: "section-kicker", text: run.round > 0 ? `Round ${run.round}/${run.config.rounds}` : "Waiting for participants" }),
+          participantSlots(run),
+        ]),
+        run.runMode === "real-lewm-tworooms"
+          ? el("section", { class: "control-card lab-card" }, [
+              el("div", { class: "section-kicker", text: "Checkpoint lab" }),
+              note("Open TwoRooms for the real rollout view. The dashboard stays on aggregate training telemetry."),
+              el("a", { class: "button-link secondary-link", href: "#/tworooms", text: "Open TwoRooms lab" }),
+            ])
+          : null,
       ]),
     ]),
-    run.runMode === "real-lewm-tworooms"
-      ? keyed("checkpoint-note", el("section", { class: "panel compact" }, [
-          el("h2", { text: "Checkpoint-backed inference" }),
-          el("p", { class: "note" }, [
-            "Watch the real model roll out and plan in the ",
-            el("a", { href: "#/tworooms", text: "TwoRooms lab" }),
-            ". The probe above scores the latest aggregated revision.",
-          ]),
-        ]))
-      : markStatic("inference", renderInferencePanel(run)),
+    el("div", { class: "dashboard-drawers" }, [
+      detailDisclosure("diagnostics-detail", "Participant diagnostics", [trainingDiagnostics(run)], { count: (run.participants ?? []).length }),
+      detailDisclosure("metrics-detail", "Round detail cards", [metricsList(run)], { count: run.roundMetrics?.length ?? 0 }),
+      detailDisclosure("artifacts-detail", "Artifacts", [artifactList(run)], { count: run.artifacts?.length ?? 0 }),
+      detailDisclosure("timeline-detail", "Event timeline", [timelineList(run.events)], { count: run.events?.length ?? 0 }),
+      detailDisclosure("economy-detail", "Buyer ledger and reward split", [renderEconomyPanel(run)], { tone: "accent" }),
+    ]),
   ]);
 }
 

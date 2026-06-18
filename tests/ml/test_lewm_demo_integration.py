@@ -35,22 +35,39 @@ def test_chart_data_preparation_passes_under_node() -> None:
     assert report["total"] >= 5
 
 
-def test_dashboard_mounts_analytics_above_probe_and_timeline() -> None:
+def test_dashboard_mounts_graph_wall_above_probe_and_collapsed_detail_drawers() -> None:
     app = (WEB_DIR / "app.mjs").read_text(encoding="utf-8")
-    # the backend dashboard is the LAST invite column (the legacy simulator view precedes it)
-    dashboard = app.split('"Invite participants"')[-1]
+    dashboard = app.split("function buildBackendHostTree(run)")[1].split(
+        "function drawHostQr"
+    )[0]
     order = [
-        dashboard.index("runAnalytics(run)"),
+        dashboard.index("runAnalyticsWall(run)"),
         dashboard.index("renderRealModeProbe(run)"),
-        dashboard.index("trainingDiagnostics(run)"),
-        dashboard.index("metricsList(run)"),
-        dashboard.index("timelineList(run.events)"),
+        dashboard.index('detailDisclosure("diagnostics-detail"'),
+        dashboard.index('detailDisclosure("metrics-detail"'),
+        dashboard.index('detailDisclosure("timeline-detail"'),
     ]
     assert order == sorted(order), (
-        "analytics → probe → diagnostics → metrics → timeline"
+        "graph wall → probe → collapsed diagnostics → collapsed metrics → collapsed timeline"
     )
-    assert "runStatusStrip(run)" in app
+    assert "dashboard-shell" in dashboard
+    assert "dashboard-drawers" in dashboard
+    assert 'detailDisclosure("economy-detail"' in dashboard
     assert "participantLossSeries" in app
+
+
+def test_dashboard_css_prioritizes_visible_graph_matrix_and_hides_details() -> None:
+    css = (WEB_DIR / "style.css").read_text(encoding="utf-8")
+    assert ".dashboard-graph-wall" in css
+    assert ".chart-wall-grid .chart:first-child" in css
+    assert "grid-row: 1 / -1" in css
+    assert ".detail-disclosure" in css
+    assert "summary::after" in css
+    assert ".revision-tile strong" in css
+    assert "white-space: nowrap" in css
+    assert "text-overflow: ellipsis" in css
+    assert "#9333ea" not in css
+    assert "rgba(79, 70, 229" not in css
 
 
 def test_host_form_creates_real_mode_runs_only() -> None:

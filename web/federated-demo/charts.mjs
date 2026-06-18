@@ -1,10 +1,10 @@
 // Lightweight SVG charts for the host dashboard — no dependencies.
 //
 // Data preparation is pure and node-testable; only lineChart() touches the DOM. Every series is
-// real run data (participant update metadata and round metrics) — nothing is smoothed or
-// fabricated, gaps stay gaps.
+// real run data (participant update metadata and round metrics) — only the SVG path is
+// visually interpolated; the points and gaps stay literal.
 
-export const CHART_PALETTE = ["#4f46e5", "#0d9488", "#d97706", "#e11d48", "#0284c7", "#9333ea", "#65a30d", "#c026d3"];
+export const CHART_PALETTE = ["#0f6d7a", "#b45309", "#127047", "#ad2f25", "#38646b", "#725d39", "#5d6f3b", "#8b4a42"];
 
 // ---------------------------------------------------------------------------
 // pure data preparation
@@ -112,12 +112,12 @@ function svgEl(tag, attrs) {
 
 // Shared geometry so the initial render and every in-place update compute the
 // exact same scales (no one-frame jump when a chart updates).
-function buildScales({ series, width = 520, height = 170, yZero = false }) {
+function buildScales({ series, width = 760, height = 250, yZero = false }) {
   const extent = seriesExtent(series);
   if (!extent) return { extent: null };
   const yMin = yZero ? Math.min(0, extent.yMin) : extent.yMin;
   const yMax = extent.yMax;
-  const pad = { top: 10, right: 12, bottom: 22, left: 44 };
+  const pad = { top: 14, right: 18, bottom: 30, left: 56 };
   const innerW = width - pad.left - pad.right;
   const innerH = height - pad.top - pad.bottom;
   const sx = (x) => pad.left + ((x - extent.xMin) / (extent.xMax - extent.xMin)) * innerW;
@@ -130,9 +130,23 @@ function seriesColor(s, index) {
 }
 
 function pathD(points, sc) {
-  return points
-    .map((p, i) => `${i === 0 ? "M" : "L"}${sc.sx(p.x).toFixed(1)},${sc.sy(p.y).toFixed(1)}`)
-    .join(" ");
+  const coords = points.map((p) => ({ x: sc.sx(p.x), y: sc.sy(p.y) }));
+  if (coords.length <= 2) {
+    return coords.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  }
+  let d = `M${coords[0].x.toFixed(1)},${coords[0].y.toFixed(1)}`;
+  for (let i = 0; i < coords.length - 1; i += 1) {
+    const p0 = coords[Math.max(0, i - 1)];
+    const p1 = coords[i];
+    const p2 = coords[i + 1];
+    const p3 = coords[Math.min(coords.length - 1, i + 2)];
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+  }
+  return d;
 }
 
 // Renders grid + axis ticks into their layer. Cheap (a handful of nodes); cleared
@@ -160,7 +174,13 @@ function renderAxes(layer, sc) {
 function renderSeriesGroup(group, s, color, sc) {
   let path = group.querySelector("path");
   if (!path) {
-    path = svgEl("path", { fill: "none", "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round" });
+    path = svgEl("path", {
+      fill: "none",
+      "stroke-width": 3,
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "vector-effect": "non-scaling-stroke",
+    });
     group.append(path);
   }
   path.setAttribute("d", pathD(s.points, sc));
@@ -172,7 +192,7 @@ function renderSeriesGroup(group, s, color, sc) {
   s.points.forEach((p, i) => {
     let dot = circles[i];
     if (!dot) {
-      dot = svgEl("circle", { r: 2.6 });
+      dot = svgEl("circle", { r: 3.2 });
       group.append(dot);
     }
     dot.setAttribute("cx", sc.sx(p.x));
