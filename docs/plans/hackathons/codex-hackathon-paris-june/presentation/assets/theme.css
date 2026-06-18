@@ -196,6 +196,15 @@ code { background: none; padding: 0; }
 }
 .fig-cap b { color: var(--accent); font-weight: 420; }
 
+/* --- recorded-demo plate (the live-demo fallback) ----------------------- */
+/* a captured run, framed like the seismograph plate so the fallback reads as
+   the same instrument recording, not a screen grab pasted onto paper. */
+.demo-plate { padding: 0; }
+.demo-plate video {
+  display: block; width: 100%; height: auto; max-height: 62vh;
+  background: var(--ink); /* letterbox in ink, never pure black */
+}
+
 /* --- masthead (cover & close) ------------------------------------------- */
 /* give the big italic display headline room so its descenders clear the lede
    on the emotional-peak slides (cover, alternative, the room, close). */

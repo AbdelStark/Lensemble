@@ -35,6 +35,7 @@ from pathlib import Path
 SLIDE_ORDER = [
     "0", "1", "2", "3", "4", "5", "6", "6/1", "7", "8",
     "9", "10", "10/1", "11", "12", "13", "14", "14/1", "14/2", "14/3",
+    "15",  # recorded-demo fallback (last spine slide)
 ]
 
 PRES = Path(__file__).resolve().parent.parent / (
@@ -87,6 +88,28 @@ def font_faces_css() -> str:
             f"font-weight:{wght};src:url('data:font/woff2;base64,{b64}') format('woff2');}}"
         )
     return "\n".join(blocks)
+
+
+# Recorded-demo media: ./media/<file> -> data URI. Keeps the standalone export a
+# single self-contained file (no sibling mp4), matching the inlined-fonts ethos.
+MEDIA = {
+    "./media/lensemble-demo.mp4": "video/mp4",
+    "./media/lensemble-demo-poster.jpg": "image/jpeg",
+}
+
+
+def inline_media(html: str) -> tuple[str, int]:
+    n = 0
+    for rel, mime in MEDIA.items():
+        path = PRES / rel[2:]  # strip leading "./"
+        if rel not in html:
+            continue
+        if not path.exists():
+            sys.exit(f"[export] ERROR: media asset missing: {path}")
+        b64 = base64.b64encode(path.read_bytes()).decode("ascii")
+        html = html.replace(rel, f"data:{mime};base64,{b64}")
+        n += 1
+    return html, n
 
 
 def find_chrome() -> str | None:
@@ -159,6 +182,10 @@ def main() -> None:
     )
     deck_js = js_safe((PRES / "assets" / "deck.js").read_text(encoding="utf-8"))
 
+    # Inline the recorded-demo media as data URIs so the standalone file plays the
+    # fallback video with zero sibling files / zero network, same as the fonts.
+    html, n_media = inline_media(html)
+
     head_inline = (
         "<style>/* reveal.js core (inlined) */\n" + reveal_css + "</style>\n"
         "  <style>/* variable fonts (inlined woff2) */\n" + font_faces_css() + "</style>\n"
@@ -207,6 +234,8 @@ def main() -> None:
         sys.exit("[export] ERROR: residual local file reference (href/src) remains.")
     if re.search(r'url\(\s*["\']?\.?/?(?:assets|vendor)/', html):
         sys.exit("[export] ERROR: residual local url() reference remains.")
+    if "./media/" in html:
+        sys.exit("[export] ERROR: residual ./media/ reference remains (video not inlined).")
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(html, encoding="utf-8")

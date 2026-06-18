@@ -54,10 +54,10 @@ python3 scripts/build_presentation_export.py --pdf     # HTML + a static PDF (ne
 This writes into `dist/` (git-ignored, regenerable):
 
 - **`dist/lensemble-deck.html`** is a single self-contained file with reveal.js, both
-  plugins, the theme, the seismograph script, and all five variable fonts inlined as
-  base64. It has zero external references, so you can **double-click it** (it runs from
-  `file://`, no server and no network) and the deck looks identical to the live one,
-  animated trace and all.
+  plugins, the theme, the seismograph script, all five variable fonts, **and the recorded
+  demo video** inlined as base64. It has zero external references, so you can
+  **double-click it** (it runs from `file://`, no server and no network) and the deck looks
+  identical to the live one, animated trace and the playable fallback video included.
 - **`dist/lensemble-deck.pdf`** is a static, no-JS, one-slide-per-page PDF in talk order.
   It opens on any device and is the most failure-proof backup. It is captured from the
   standalone file so it matches the bespoke layout exactly (reveal's generic `?print-pdf`
@@ -92,6 +92,7 @@ serif/mono system stack if a face ever fails to load, so a cold venue machine ne
 | `index.html`      | The slides (12-slide spine + an appendix stack), the journal chrome, the font/reveal loader. |
 | `assets/theme.css`| The "Offprint" design system (oklch pigments, type scale, the seismograph plate, ledger tables). |
 | `assets/deck.js`  | The registered-ink **seismograph** recorder (canvas) + reveal.js config (flush-left, uncentered). |
+| `media/`          | The **recorded demo** (`lensemble-demo.mp4`, H.264 so every browser plays it) + poster frame. The live-demo fallback. Committed (not git-ignored) so GitHub Pages serves it. |
 | `vendor.sh`       | One-shot offline vendoring of reveal.js **and** the variable fonts. |
 
 ## Slide map
@@ -119,6 +120,14 @@ for the depth under a slide.
 **Appendix (↓ under slide 15, for the breakout and Q&A):**
 
 15. In depth, Cartographer (see the model's mind), how the system is wired, reproducibility.
+
+**Fallback (the final slide, reach it with `End`):**
+
+16. Recorded demo, *the run, on tape*. A captured screen recording of the live demo, framed
+    in the seismograph plate. If the live demo misbehaves on the night, press **`End`** to land
+    here and press play; otherwise skip it (the talk ends on the close). The mp4 is inlined into
+    the standalone export and served directly on GitHub Pages, so it plays with or without a
+    network.
 
 ## Every number is sourced (verified against the evidence files)
 
