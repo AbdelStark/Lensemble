@@ -53,11 +53,12 @@ export class SurpriseEngine {
     this.frame++;
     if (this.trajectory?.length) {
       const row = this.trajectory[this.frame % this.trajectory.length];
+      const rawSurprise = this.mode === "post" ? row.surprisePost : row.surprisePre;
       return {
         t: Number(row.t ?? this.t),
         agent: row.agent ?? mockEnv.path(this.t),
         room: (row.agent?.x ?? 0.5) < 0.5 ? "left" : "right",
-        surprise: this.mode === "post" ? Number(row.surprisePost) : Number(row.surprisePre),
+        surprise: rawSurprise === null || rawSurprise === undefined ? this.baselineLevel() : Number(rawSurprise),
         frameDiff: Number(row.frameDiff),
         baseline: this.baselineLevel(),
         mode: this.mode,

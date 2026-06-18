@@ -5,6 +5,18 @@
 // There is no spatial heatmap in this export surface.
 
 import { adapterForward, adapterFromInitAndOffset } from "../federated-demo/lewm_adapter.mjs";
+import { mulberry32 } from "../federated-demo/rng.mjs";
+import {
+  ACTION_BLOCK,
+  ACTION_DIM,
+  IMG_SIZE,
+  createExpertPolicy,
+  frameToModelInput,
+  packActionBlock,
+  renderFrameRGB,
+  sampleEpisode,
+  stepEpisode,
+} from "../federated-demo/tworooms_env.mjs";
 
 export const SURPRISE_ENGINE_VERSION = "lewm-surprise-engine/1";
 export const DEFAULT_LATENT_DIM = 192;
@@ -180,5 +192,132 @@ export function buildPrePostStreams({
     meanPre,
     meanPost,
     surpriseDropRatioLive: meanPre > 0 ? (meanPre - meanPost) / meanPre : 0,
+  };
+}
+
+function frameDiffMean(a, b) {
+  if (a.length !== b.length) throw new Error("frame diff length mismatch");
+  let total = 0;
+  for (let i = 0; i < a.length; i += 1) total += Math.abs(a[i] - b[i]);
+  return total / (a.length * 255);
+}
+
+function normalizeAgent(agent) {
+  return {
+    x: Math.max(0, Math.min(1, agent.x / IMG_SIZE)),
+    y: Math.max(0, Math.min(1, agent.y / IMG_SIZE)),
+  };
+}
+
+function forcedOodBlock() {
+  const block = new Float32Array(ACTION_BLOCK * ACTION_DIM);
+  for (let i = 0; i < ACTION_BLOCK; i += 1) {
+    block[i * 2] = i % 2 === 0 ? 2.5 : -2.25;
+    block[i * 2 + 1] = i % 2 === 0 ? -2.5 : 2.25;
+  }
+  return block;
+}
+
+export async function buildLiveSurpriseTrajectory({
+  runtime,
+  offset = null,
+  steps = 96,
+  seed = 20260618,
+  perturbations = [
+    { step: 34, kind: "teleport" },
+    { step: 56, kind: "ood" },
+    { step: 78, kind: "wall" },
+  ],
+  policyOptions = { actionNoise: 1.0, actionRepeatProb: 0 },
+} = {}) {
+  if (!runtime) throw new Error("runtime is required");
+  const perturbationByStep = new Map(perturbations.map((item) => [item.step, item.kind]));
+  const rng = mulberry32(seed >>> 0);
+  const expert = createExpertPolicy(policyOptions);
+  const adapter = offset
+    ? adapterFromOffset({
+        offset,
+        inputDim: runtime.hidden ?? DEFAULT_LATENT_DIM,
+      })
+    : null;
+  const preEngine = createOnlineSurpriseEngine({ runtime });
+  const postEngine = adapter ? createOnlineSurpriseEngine({ runtime, adapter }) : null;
+  let episode = sampleEpisode(rng);
+  let currentRgb = renderFrameRGB(episode.agent);
+  const rows = [];
+
+  for (let step = 0; step < steps; step += 1) {
+    const kind = perturbationByStep.get(step) ?? null;
+    const before = episode;
+    let actionBlock;
+    let nextEpisode = episode;
+    if (kind === "ood") {
+      actionBlock = forcedOodBlock();
+      for (let i = 0; i < ACTION_BLOCK; i += 1) {
+        nextEpisode = stepEpisode(nextEpisode, [actionBlock[i * 2], actionBlock[i * 2 + 1]]);
+      }
+    } else {
+      const subActions = [];
+      for (let i = 0; i < ACTION_BLOCK; i += 1) {
+        const action = expert(nextEpisode, rng);
+        subActions.push(action);
+        nextEpisode = stepEpisode(nextEpisode, action);
+      }
+      actionBlock = packActionBlock(subActions);
+    }
+    if (kind === "teleport") {
+      nextEpisode = {
+        ...nextEpisode,
+        agent: sampleEpisode(rng).agent,
+        done: false,
+      };
+    } else if (kind === "wall") {
+      nextEpisode = {
+        ...nextEpisode,
+        agent: {
+          x: before.agent.x < IMG_SIZE / 2 ? IMG_SIZE - 22 : 22,
+          y: before.agent.y,
+        },
+        done: false,
+      };
+    }
+
+    const nextRgb = renderFrameRGB(nextEpisode.agent);
+    const currentInput = frameToModelInput(currentRgb);
+    const nextInput = frameToModelInput(nextRgb);
+    const pre = await preEngine.observeTransition({
+      currentFrameInput: currentInput,
+      actionBlock,
+      nextFrameInput: nextInput,
+    });
+    const post = postEngine
+      ? await postEngine.observeTransition({
+          currentFrameInput: currentInput,
+          actionBlock,
+          nextFrameInput: nextInput,
+        })
+      : null;
+    rows.push({
+      i: step,
+      t: Number((step / 30).toFixed(4)),
+      agent: normalizeAgent(nextEpisode.agent),
+      surprisePre: pre.surprise === null ? null : Number(pre.surprise.toFixed(8)),
+      surprisePost: post?.surprise === null || post?.surprise === undefined
+        ? null
+        : Number(post.surprise.toFixed(8)),
+      frameDiff: Number(frameDiffMean(currentRgb, nextRgb).toFixed(8)),
+      event: kind,
+      live: true,
+    });
+    episode = nextEpisode.done ? sampleEpisode(rng) : nextEpisode;
+    currentRgb = renderFrameRGB(episode.agent);
+  }
+
+  return {
+    schema: "lewm-surprise-live-traj/1",
+    seed,
+    backend: runtime.backend ?? "unknown",
+    warmupSteps: preEngine.warmupSteps,
+    steps: rows,
   };
 }

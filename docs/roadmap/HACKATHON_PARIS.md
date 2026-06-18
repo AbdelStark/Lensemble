@@ -59,7 +59,8 @@ Sibling idea [#337 (Latent Genie)](https://github.com/AbdelStark/Lensemble/issue
 - Clean-round and rehearsal gates: `scripts/surprise/run_clean_round.py` exports the real
   12,512-float adapter offset sidecar; `scripts/surprise/rehearsal.py` validates the synthetic
   system path, JS self-test, and served fallback assets.
-- Web demo `web/surprise-meter/` with served fallback assets:
+- Web demo `web/surprise-meter/` with live ONNX replay (`engine=auto|live|fallback`,
+  `?ep=wasm` force-WASM) and served fallback assets:
   `fixtures/adapter_offset.json`, `data/result_card.json`, and `data/surprise_trajectory.json`.
 - Sovereign-economy contracts `sovereign-sale/1` and `sovereign-contribution-ledger/1`.
 - Server-side Mollie test checkout path with `.env.example` placeholders and mock fallback.

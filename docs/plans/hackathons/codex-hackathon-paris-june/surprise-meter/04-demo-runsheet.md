@@ -41,8 +41,8 @@ Default if fragile or short on time: narrate the live round for the crowd-partic
 | Rung | What | When |
 |---|---|---|
 | A | Live federated round → surprise-meter (pre/post still from certified evidence + pre-baked offset) | only if rehearsed + fast |
-| B | Live surprise-meter computing from ONNX, **pre-baked** offset for pre/post | default |
-| C | Recorded `surprise_trajectory.json` (`lewm-surprise-traj/1`) replayed in the meter (no live ONNX) | if WebGPU/ONNX won't run |
+| B | Live surprise-meter computing from ONNX, **pre-baked** offset for pre/post. Use `http://127.0.0.1:8765/web/surprise-meter/?engine=live&ep=wasm`. | default |
+| C | Recorded `surprise_trajectory.json` (`lewm-surprise-traj/1`) replayed in the meter (no live ONNX). Use `http://127.0.0.1:8765/web/surprise-meter/?engine=fallback`. | if WebGPU/ONNX won't run |
 | D | The ≤20 s capture clip | if the projector machine won't run the page |
 
 > **Start-of-day BLOCKING pre-req (2026-06-18):** verify rungs B/C/D before relying on live runtime. `onnxruntime` is absent from the uv venv, system node, and npm, so bake `web/surprise-meter/fixtures/adapter_offset.json` (len 12512, via `uv run --with onnxruntime --with hdf5plugin python scripts/surprise/run_clean_round.py ...`) **and** regenerate `docs/evidence/lewm_tworooms_surprise.json`, `web/surprise-meter/data/result_card.json`, and `web/surprise-meter/data/surprise_trajectory.json` via `uv run python scripts/lewm_surprise_check.py`. Commit the served fallback assets outside the gitignored `runs/` path. Have rungs C and D on disk before walking on.
@@ -54,7 +54,7 @@ Default if fragile or short on time: narrate the live round for the crowd-partic
 - [ ] `scripts/surprise/rehearsal.py` green; `docs/evidence/lewm_tworooms_surprise.json` passes its test.
 - [ ] Milestone-0 one-command run reproduces audited evidence; the offset sidecar (len 12512) is produced.
 - [ ] **ONNX integrity (fail-closed gate):** the committed `model/lewm-tworooms/*.onnx` are fully present and their SHA-256 match `manifest.json` (sizes: encoder 25,923,986 · predictor 46,910,027 · action 641,851). A stale/partial graph throws `hash-mismatch` before the meter starts — verify with a 3-line node/python check at pre-flight.
-- [ ] `web/surprise-meter/` renders in the **presentation browser** at projector resolution from the **vendored** `ort.webgpu.min.js`. **Confirm the `?ep=wasm` force-WASM path** — do NOT assume WebGPU on an unknown machine; there is no automatic WebGPU→WASM fallback (R5).
+- [ ] `web/surprise-meter/` renders in the **presentation browser** at projector resolution. **Confirm the `?engine=live&ep=wasm` force-WASM path** — do NOT assume WebGPU on an unknown machine; `engine=auto` falls back to the recorded trajectory if live ONNX fails (R5).
 - [ ] **In-browser R1 check (R1/R13):** ≥1 perturbation channel spikes the meter (ratio >1.5); else foreground OOD-action + pre/post (S8). Frame-diff trace visible.
 - [ ] Pre/post toggle shows the drop on the held-out set; HUD shows **+12.3% and +5.4% worst**, both equal to the evidence files at full precision.
 - [ ] nonClaims footer visible/correct; committed fallback offset + recorded trajectory present and tracked; clip + result card exported.

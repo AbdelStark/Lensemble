@@ -26,6 +26,26 @@ def test_surprise_meter_node_selftest() -> None:
     assert payload["warmupSteps"] == 2
 
 
+def test_surprise_meter_page_carries_live_and_fallback_contracts() -> None:
+    app = Path("web/surprise-meter/app.mjs").read_text(encoding="utf-8")
+    runtime = Path("web/federated-demo/lewm_runtime.mjs").read_text(encoding="utf-8")
+    readme = Path("web/surprise-meter/README.md").read_text(encoding="utf-8")
+
+    for needle in (
+        "engine=auto|live|fallback",
+        "preferredProviders()",
+        "buildLiveSurpriseTrajectory",
+        "collectResidentPairs",
+        "buildPrePostStreams",
+        "../federated-demo/model/lewm-tworooms/",
+        "browser held-out error",
+    ):
+        assert needle in app, needle
+    assert "?engine=live&ep=wasm" in readme
+    assert "providerAttempts" in runtime
+    assert "session-create-failed" in runtime
+
+
 @needs_node
 def test_surprise_rehearsal_script_runs_as_command(tmp_path: Path) -> None:
     result = subprocess.run(

@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 
 import {
+  buildLiveSurpriseTrajectory,
   createOnlineSurpriseEngine,
   mseOf,
   stepSurprise,
@@ -87,6 +88,49 @@ assert.equal(step0.surprise, null);
 assert.equal(step1.surprise, null);
 assert.equal(step2.warmup, false);
 assert.ok(Math.abs(step2.surprise - direct.surprise) <= 1e-8);
+
+const liveRuntime = {
+  hidden: D,
+  numFrames: WINDOW,
+  imageSize: 224,
+  actionDim: 10,
+  backend: "fake-wasm",
+  async encodeFrames(frameInput, batch) {
+    assert.equal(batch, 1);
+    const out = new Float32Array(D);
+    for (let i = 0; i < D; i += 1) out[i] = frameInput[(i * 31) % frameInput.length] * 0.5;
+    return out;
+  },
+  async embedActionBlocks(actionBlock, batch, time) {
+    assert.equal(batch, 1);
+    assert.equal(time, 1);
+    const out = new Float32Array(D);
+    for (let i = 0; i < D; i += 1) out[i] = actionBlock[i % actionBlock.length] * 0.02;
+    return out;
+  },
+  async predictLatents(latents, actions, batch, time) {
+    assert.equal(batch, 1);
+    assert.equal(time, WINDOW);
+    const last = latents.subarray((WINDOW - 1) * D, WINDOW * D);
+    const out = new Float32Array(D * WINDOW);
+    for (let t = 0; t < WINDOW; t += 1) {
+      for (let i = 0; i < D; i += 1) out[t * D + i] = last[i] + actions[(WINDOW - 1) * D + i] + 0.01;
+    }
+    return out;
+  },
+};
+
+const live = await buildLiveSurpriseTrajectory({
+  runtime: liveRuntime,
+  steps: 8,
+  perturbations: [{ step: 4, kind: "ood" }],
+});
+assert.equal(live.schema, "lewm-surprise-live-traj/1");
+assert.equal(live.steps.length, 8);
+assert.equal(live.steps[0].surprisePre, null);
+assert.equal(live.steps[1].surprisePre, null);
+assert.ok(Number.isFinite(live.steps[2].surprisePre));
+assert.equal(live.steps[4].event, "ood");
 
 console.log(
   JSON.stringify({

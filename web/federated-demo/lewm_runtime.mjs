@@ -66,6 +66,7 @@ export async function loadLewmRuntime({
 
   const sessions = {};
   const integrity = {};
+  const graphBuffers = {};
   let backend = null;
   for (const [key, file] of Object.entries(GRAPH_FILES)) {
     let buffer;
@@ -82,13 +83,30 @@ export async function loadLewmRuntime({
       throw new LewmUnsupportedError("hash-mismatch", `${file}: expected ${expected.slice(0, 12)}…, got ${actual.slice(0, 12)}…`);
     }
     integrity[file] = { expected, actual, verified: Boolean(expected && actual && expected === actual) };
-    try {
-      sessions[key] = await ortApi.InferenceSession.create(buffer, {
-        executionProviders: preferredProviders,
-      });
-      backend = backend ?? (sessions[key].executionProviders?.[0] ?? preferredProviders.join("|"));
-    } catch (error) {
-      throw new LewmUnsupportedError("session-create-failed", `${file}: ${error.message}`);
+    graphBuffers[key] = { file, buffer };
+  }
+
+  function providerAttempts() {
+    const requested = preferredProviders.length ? preferredProviders : ["wasm"];
+    if (requested.length === 1) return [requested];
+    return [requested, ...requested.map((provider) => [provider])];
+  }
+
+  for (const [key, { file, buffer }] of Object.entries(graphBuffers)) {
+    const errors = [];
+    for (const providers of providerAttempts()) {
+      try {
+        sessions[key] = await ortApi.InferenceSession.create(buffer, {
+          executionProviders: providers,
+        });
+        backend = backend ?? (sessions[key].executionProviders?.[0] ?? providers.join("|"));
+        break;
+      } catch (error) {
+        errors.push(`${providers.join("|")}: ${error.message}`);
+      }
+    }
+    if (!sessions[key]) {
+      throw new LewmUnsupportedError("session-create-failed", `${file}: ${errors.join("; ")}`);
     }
   }
 

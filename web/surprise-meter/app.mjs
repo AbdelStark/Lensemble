@@ -1,8 +1,11 @@
-// surprise-meter — UI wiring over the stage fallback engine.
+// surprise-meter — UI wiring over the live/fallback stage engine.
+import { loadLewmRuntime } from "../federated-demo/lewm_runtime.mjs";
+import { collectResidentPairs } from "../federated-demo/lewm_local_trainer.mjs";
 import { SurpriseEngine } from "./mock/engine.mjs";
 import { Recorder } from "./seismograph.mjs";
 import { CERTIFIED as FALLBACK_CERTIFIED, NON_CLAIMS as FALLBACK_NON_CLAIMS, MODEL, pct } from "./mock/fixtures.mjs";
 import { mockEnv } from "./mock/lewm_mock.mjs"; // ROOMS layout for the world view
+import { buildLiveSurpriseTrajectory, buildPrePostStreams } from "./surprise_engine.mjs";
 
 const $ = (id) => document.getElementById(id);
 const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -10,15 +13,28 @@ const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-mo
 const TRACE_INK = "#222f3c", GRAPHITE = "#84786a", OXBLOOD = "#96282b",
       INK2 = "#6a6253", RULE = "rgba(37,28,22,0.5)", PAPER_EDGE = "#efe9dd";
 
+// dev / kiosk hooks:
+// ?engine=auto|live|fallback, ?ep=wasm|webgpu, ?steps=96, ?mode=post,
+// ?auto=ood|teleport|wall, ?hold=ood.
+const params = new URLSearchParams(location.search);
+
 let certified = { ...FALLBACK_CERTIFIED };
 let nonClaims = [...FALLBACK_NON_CLAIMS];
 let servedTrajectory = null;
+let servedOffset = null;
+let livePrePost = null;
+let runtimeState = {
+  kind: "fallback",
+  label: "Fallback",
+  summary: "recorded surprise trajectory and certified held-out evidence.",
+};
 
 async function loadServedBundle() {
   try {
-    const [cardRes, trajectoryRes] = await Promise.all([
+    const [cardRes, trajectoryRes, offsetRes] = await Promise.all([
       fetch("./data/result_card.json", { cache: "no-store" }),
       fetch("./data/surprise_trajectory.json", { cache: "no-store" }),
+      fetch("./fixtures/adapter_offset.json", { cache: "no-store" }),
     ]);
     if (cardRes.ok) {
       const card = await cardRes.json();
@@ -42,12 +58,117 @@ async function loadServedBundle() {
         servedTrajectory = trajectory.steps;
       }
     }
+    if (offsetRes.ok) {
+      const offset = await offsetRes.json();
+      if (Array.isArray(offset) && offset.length === 12512 && offset.some((value) => Number(value) !== 0)) {
+        servedOffset = offset;
+      }
+    }
   } catch {
     servedTrajectory = null;
   }
 }
 
+function preferredProviders() {
+  const ep = params.get("ep");
+  if (ep === "wasm" || ep === "webgpu") return [ep];
+  return ["webgpu", "wasm"];
+}
+
+function engineMode() {
+  const mode = params.get("engine");
+  return mode === "live" || mode === "fallback" ? mode : "auto";
+}
+
+async function ensureOrt() {
+  if (globalThis.ort) return globalThis.ort;
+  const url =
+    params.get("ort") ||
+    "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.webgpu.min.js";
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = url;
+    script.async = true;
+    script.onload = () => {
+      if (globalThis.ort) resolve(globalThis.ort);
+      else reject(new Error("ONNX Runtime script loaded without exposing global ort"));
+    };
+    script.onerror = () => reject(new Error(`failed to load ONNX Runtime from ${url}`));
+    document.head.appendChild(script);
+  });
+}
+
+async function withTimeout(promise, timeoutMs, label) {
+  let timer = null;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs} ms`)), timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer !== null) clearTimeout(timer);
+  }
+}
+
+async function tryBuildLiveTrajectory() {
+  if (engineMode() === "fallback") return null;
+  if (!servedOffset) throw new Error("adapter offset fixture is missing or invalid");
+  const ortApi = await ensureOrt();
+  const runtime = await loadLewmRuntime({
+    baseUrl: "../federated-demo/model/lewm-tworooms/",
+    ortApi,
+    preferredProviders: preferredProviders(),
+  });
+  const steps = Number.parseInt(params.get("steps") || "96", 10);
+  const live = await buildLiveSurpriseTrajectory({
+    runtime,
+    offset: servedOffset,
+    steps: Number.isFinite(steps) ? Math.max(24, Math.min(180, steps)) : 96,
+  });
+  const heldOut = await collectResidentPairs({
+    runtime,
+    seed: 991,
+    episodes: 2,
+    maxModelSteps: 10,
+    policyOptions: { actionNoise: 1.0, actionRepeatProb: 0 },
+    minPairs: 4,
+  });
+  livePrePost = buildPrePostStreams({
+    pairs: heldOut.pairs,
+    offset: servedOffset,
+    inputDim: runtime.hidden,
+  });
+  runtimeState = {
+    kind: "live",
+    label: "Live",
+    summary: `live ONNX replay (${runtime.backend ?? live.backend}, ${preferredProviders().join("+")}); browser held-out drop ${pct(livePrePost.surpriseDropRatioLive)} on ${livePrePost.count} pairs.`,
+  };
+  return live.steps;
+}
+
 await loadServedBundle();
+try {
+  const timeoutMs = Number.parseInt(params.get("liveTimeoutMs") || "20000", 10);
+  const liveSteps = await withTimeout(
+    tryBuildLiveTrajectory(),
+    Number.isFinite(timeoutMs) ? timeoutMs : 20000,
+    "live surprise-meter startup",
+  );
+  if (Array.isArray(liveSteps) && liveSteps.length) {
+    servedTrajectory = liveSteps;
+  } else if (engineMode() === "live") {
+    throw new Error("live mode did not produce a trajectory");
+  }
+} catch (error) {
+  if (engineMode() === "live") {
+    throw error;
+  }
+  runtimeState = {
+    kind: "fallback",
+    label: "Fallback",
+    summary: `recorded trajectory fallback; live ONNX unavailable (${error.message}).`,
+  };
+}
 
 const engine = new SurpriseEngine({ certified, trajectory: servedTrajectory });
 const surpRec = new Recorder($("surpriseCanvas"), {
@@ -121,8 +242,13 @@ function fillHUD() {
     `<tr><td>mean · ${certified.seeds} seeds</td><td class="num">${pct(certified.mean)}</td></tr>` +
     `<tr class="is-worst"><td>worst · seed ${certified.worstSeed}</td><td class="num">${pct(certified.worst)}</td></tr>`;
   $("certSrc").textContent = "Source — " + certified.source + " · all seeds improved, no collapse";
+  if (livePrePost) {
+    $("certSrc").textContent += ` · browser held-out check ${pct(livePrePost.surpriseDropRatioLive)} on ${livePrePost.count} pairs`;
+  }
   $("nonClaims").innerHTML = nonClaims.map((c) => `<li>${c}</li>`).join("");
-  $("srcLine").textContent = `Adapter ${MODEL.latentDim}-d latent · ${servedTrajectory ? "recorded fallback trajectory" : "deterministic fallback engine"} · ~${MODEL.msPerStep} ms/step.`;
+  $("runtimeTag").textContent = runtimeState.label;
+  $("runtimeSummary").textContent = runtimeState.summary;
+  $("srcLine").textContent = ` Adapter ${MODEL.latentDim}-d latent · ~${MODEL.msPerStep} ms/step.`;
 }
 
 // ── controls ──────────────────────────────────────────────────────────────
@@ -133,9 +259,13 @@ function setMode(mode) {
   engine.setMode(mode);
   surpRec.setBaseline(engine.baselineLevel());
   $("modeLabel").textContent = mode === "post" ? "post-federation" : "pre-federation";
-  $("fedDelta").textContent = mode === "post"
-    ? "held-out error ↓ " + (certified.relativeImprovement * 100).toFixed(1) + "% vs pre-federation"
-    : "";
+  if (mode === "post" && livePrePost) {
+    $("fedDelta").textContent = `browser held-out error ↓ ${(livePrePost.surpriseDropRatioLive * 100).toFixed(1)}% (${livePrePost.count} pairs); evidence ${pct(certified.relativeImprovement)}`;
+  } else {
+    $("fedDelta").textContent = mode === "post"
+      ? "held-out error ↓ " + (certified.relativeImprovement * 100).toFixed(1) + "% vs pre-federation"
+      : "";
+  }
   document.querySelectorAll(".seg-btn").forEach((b) => b.classList.toggle("is-on", b.dataset.mode === mode));
 }
 document.querySelectorAll(".seg-btn").forEach((b) =>
@@ -186,12 +316,17 @@ function frame(ts) {
   requestAnimationFrame(frame);
 }
 
-// dev / kiosk hooks: ?mode=post · ?auto=ood|teleport|wall (attract loop) · ?hold=ood (pin a spike)
-const params = new URLSearchParams(location.search);
 const autoType = params.get("auto");
 const holdType = params.get("hold");
 
 fillHUD();
+globalThis.__surpriseMeter = {
+  runtimeState,
+  livePrePost,
+  certified,
+  trajectoryKind: runtimeState.kind,
+  trajectorySteps: servedTrajectory?.length ?? 0,
+};
 // warm the recorders so the paper is already inked, and leave the engine mid-stride
 // (no reset — resetting would zero frameDiff and leave a one-frame dip at the seam).
 for (let i = 0; i < 260; i++) { const s = engine.tick(1 / 60); surpRec.push(s.surprise, false); fdRec.push(s.frameDiff, false); }
