@@ -27,7 +27,7 @@ Nine child issues under parent [#339](https://github.com/AbdelStark/Lensemble/is
 
 ## Ordering for a solo builder (and the pre-bake)
 
-1. **Only after #338 is rehearsal-green:** vendor Three.js; build CART-8 skeleton against a hand-written mock `manifold.json`; bake a **v0 fallback** from the current checkpoint (even latents-only, no plans) before any live stretch demo.
+1. **Only after #359 is rehearsal-green:** vendor Three.js; build CART-8 skeleton against a hand-written mock `manifold.json`; bake a **v0 fallback** from the current checkpoint (even latents-only, no plans) before any live stretch demo.
 2. **Thu AM:** CART-1, then CART-2 (the risky one) and CART-3 in parallel slots.
 3. **Thu midday:** CART-4 → CART-5 → CART-7 (first real `manifold.json`).
 4. **Thu PM:** wire real data into CART-8; CART-6 evidence + test; CART-9 rehearsal + capture.

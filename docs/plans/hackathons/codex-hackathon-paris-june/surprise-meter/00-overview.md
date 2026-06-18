@@ -1,9 +1,9 @@
-# Less Surprised — Master Plan (PRIORITY)
+# Less Surprised — Surprise-Meter Technical Plan
 
 > **Project:** **Less Surprised** *(working title; the UI is the "surprise-meter")* — *watch a JEPA world model become measurably **less surprised** after a room of strangers improves it together — without sharing any data.*
-> **Parent issue:** [#338](https://github.com/AbdelStark/Lensemble/issues/338)
+> **Parent issue:** [#359](https://github.com/AbdelStark/Lensemble/issues/359). Technical tracker: [#338](https://github.com/AbdelStark/Lensemble/issues/338)
 > **Event:** Codex Hackathon, Paris (Thursday). Full-day, solo-builder, Codex-sponsored, Demo-Night.
-> **Priority:** This is the **primary** hackathon deliverable. [Cartographer / #339](../cartographer/) is stretch.
+> **Priority:** This is the model-quality proof track for the sovereign-economy parent. [Cartographer / #339](../cartographer/) is stretch.
 > **Claim discipline (binding):** never "federated training run" / "the room trained the world model." It is a **federated adapter-continuation round on a frozen checkpoint** — only a 12,512-param (0.069%) adapter moves. The seed-robust improvement is **+16.8% mean across 5 seeds, worst +5.4% (seed 2)** — both surfaced, never the mean alone.
 
 ---

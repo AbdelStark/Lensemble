@@ -116,7 +116,7 @@ Critical path: **CART-1 → CART-4 → CART-7 → CART-9**. CART-8 runs in paral
 
 | Block | Work |
 |-------|------|
-| Stretch pre-flight | Bake a **v0 fallback** `manifold.json` from current checkpoint so a viewer exists before any live work. Vendor Three.js. Start only after #338 is rehearsal-green. |
+| Stretch pre-flight | Bake a **v0 fallback** `manifold.json` from current checkpoint so a viewer exists before any live work. Vendor Three.js. Start only after #359 is rehearsal-green. |
 | 09:00–11:00 | CART-1 harvest + CART-2 instrumented MPC (parallel). |
 | 11:00–13:00 | CART-3 federation round + CART-4 projection/alignment/metrics. |
 | 13:00–14:30 | CART-5 collapse + CART-7 bake orchestrator → real `manifold.json`. |

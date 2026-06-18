@@ -1,12 +1,13 @@
-# Less Surprised — Demo-Night deck (DRAFT)
+# Sovereign Robotics World-Model Economy — Demo-Night deck (DRAFT)
 
 A self-contained [reveal.js](https://revealjs.com/) presentation for the Codex Hackathon (Paris).
-It is the slide backdrop for the 90-second Demo-Night pitch — grounded in the plans under
-[`../`](../) and the [surprise-meter](../surprise-meter/) priority plan.
+It is the slide backdrop for the 90-second Demo-Night pitch, now grounded in the
+parent [sovereign-economy](../sovereign-economy/) plan with the
+[surprise-meter](../surprise-meter/) as the model-quality proof.
 
-> **Status: draft v0.2.** Built before the hackathon from the plans alone. Expect to edit
+> **Status: draft v0.3.** Built before the hackathon from the plans alone. Expect to edit
 > slides live as real screenshots, the live federated round, and the final capture clip land.
-> Slide content deliberately mirrors [`surprise-meter/04-demo-runsheet.md`](../surprise-meter/04-demo-runsheet.md)
+> Slide content should now mirror [`sovereign-economy/04-demo-runsheet.md`](../sovereign-economy/04-demo-runsheet.md)
 > beat-for-beat; the runsheet is the source of truth for the spoken script.
 
 ## Design — "The Offprint"
@@ -75,21 +76,21 @@ to a serif/mono system stack if a face ever fails to load, so a cold venue machi
 
 ## Slide map
 
-The **horizontal spine = the live 90s arrow path** (matches `04-demo-runsheet.md`). Press
+The **horizontal spine = the live 90s arrow path** (matches `../sovereign-economy/04-demo-runsheet.md`). Press
 **→** to stay on the spoken script; press **↓ / Space** for the judge/breakout depth under
 each slide.
 
 **Live spine (→):**
 
-1. Title — *Less Surprised*
-2. Hook — "this model is about to be surprised. Watch." (live spike)
-3. What you saw — JEPA world model, surprise = next-latent prediction error · ↓ the formula
-4. Surprise ≠ motion — the frame-diff contrast
-5. The twist — a room makes it less surprised (the federation pivot)
-6. How — federated adapter continuation on a **frozen** checkpoint (12,512 params / 0.069%)
-7. The result — **+12.3%** this run · +16.8% mean · **+5.4% worst** (5 seeds)
-   · ↓ seed table · ↓ evidence flow · ↓ claim do/don't columns
-8. Close — "a world model you can watch think" + the *built in a Codex loop* beat
+1. Title — *Sovereign robotics world-model economy*
+2. Problem — frontier model access restrictions and sovereignty risk
+3. Mechanism — community federated adapter continuation; raw data stays local
+4. Proof — surprise meter: scalar next-latent prediction error drops
+5. Buyer — a humanoid robotics buyer wants the improved revision
+6. Transaction — Mollie test checkout/payment link
+7. Rewards — orchestrator share + contribution-weighted participant split
+   · ↓ ledger table · ↓ evidence flow · ↓ claim do/don't columns
+8. Close — sovereign model improvement with shared upside + the Codex loop beat
 
 **Appendix (↓ under slide 9 — off the live path, for Q&A / the breakout):**
 
@@ -115,7 +116,8 @@ each slide.
 
 ## Claim discipline (binding — do not drift on stage)
 
-Mirrors [`surprise-meter/05-risks-and-claim-discipline.md`](../surprise-meter/05-risks-and-claim-discipline.md)
+Mirrors [`sovereign-economy/05-risks-and-claim-discipline.md`](../sovereign-economy/05-risks-and-claim-discipline.md),
+[`surprise-meter/05-risks-and-claim-discipline.md`](../surprise-meter/05-risks-and-claim-discipline.md),
 and `AGENTS.md § Claim Discipline`:
 
 - It is **federated adapter continuation on a frozen checkpoint** — never "federated
@@ -123,6 +125,10 @@ and `AGENTS.md § Claim Discipline`:
 - The federated improvement is **always** stated with the worst seed beside the mean:
   *+12.3% this run, +16.8% mean / +5.4% worst across 5 seeds.* Never the mean alone.
 - Surprise is a **scalar per-frame** next-latent prediction error — never a per-pixel heatmap.
+- Use placeholders: "frontier model access restrictions" and "a humanoid robotics buyer."
+  Do not name specific companies or incidents without separate verification and approval.
+- Payments and rewards are **test/simulation only**. No real payout, legal revenue-share,
+  securities, or employment claim.
 - **No** DP, secure-aggregation, cryptographic-proof, beats-local-only, anomaly-detector,
   or paper-scale claims on this path.
 

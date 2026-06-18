@@ -19,25 +19,34 @@ comments as public claim surfaces, not scratch notes.
 ## Hackathon Today — 2026-06-18
 
 The active event is the Codex Hackathon in Paris. Treat today as ship mode:
-optimize every action for a reliable Demo-Night-ready `#338` delivery, not for
+optimize every action for a reliable Demo-Night-ready `#359` delivery, not for
 new research scope.
 
 - Start with [`docs/plans/hackathons/codex-hackathon-paris-june/`](docs/plans/hackathons/codex-hackathon-paris-june/)
-  and the active tracker [#338](https://github.com/AbdelStark/Lensemble/issues/338).
-- Primary deliverable: **Less Surprised / surprise-meter**. The queue is
-  `#349` -> `#350` -> `#351` -> `#352` -> `#353` -> `#354`.
-- Open `#349` first. A clean federated adapter-continuation round plus
-  fallbacks is a valid standalone demo; do not let later UI work break that.
+  and the active tracker [#359](https://github.com/AbdelStark/Lensemble/issues/359).
+- Primary deliverable: **sovereign robotics world-model economy**. The queue is
+  `#364` -> `#361` -> `#360` -> `#338` -> `#363` -> `#362`, with
+  `#338` / `#349`-`#354` continuing as the surprise-meter technical track.
+- Open `#364` for narrative/deck work, `#361` for ledger work, and `#349` for
+  the first surprise-meter build task. These can proceed in parallel.
 - Do not work on Cartographer `#339`, Latent Genie `#337`, or other stretch
-  ideas until `#338` has a green rehearsal gate and fallback bundle.
+  ideas until `#359` has a green integrated rehearsal gate and fallback bundle.
 - If a path is blocked for more than a short build/debug cycle, choose the
-  demo-preserving fallback from the runsheet instead of widening scope.
+  demo-preserving fallback from the sovereign-economy runsheet instead of
+  widening scope.
 - Stage-ready assets have priority over elegance: one-command clean round,
-  committed adapter offset, recorded trajectory fallback, evidence JSON, <=20 s
-  capture, and claim-safe result card.
+  committed adapter offset, recorded trajectory fallback, contribution ledger,
+  Mollie test checkout or mock checkout, evidence JSON, <=20 s capture, and
+  claim-safe result/economics card.
 - Keep the on-stage language exact: "federated adapter continuation on a frozen
   checkpoint"; scalar surprise is next-latent MSE; show +12.3% this run,
   +16.8% mean, and +5.4% worst seed together.
+- Use safe placeholders in public copy: "frontier model access restrictions" and
+  "a humanoid robotics buyer." Do not name specific companies or incidents
+  unless separately verified and approved.
+- Mollie API keys are server-side only. `.env` is ignored; commit only
+  `.env.example` placeholders. Browser code must never contain `MOLLIE_API_KEY`
+  or real `test_` / `live_` keys.
 
 ## Claim Discipline
 

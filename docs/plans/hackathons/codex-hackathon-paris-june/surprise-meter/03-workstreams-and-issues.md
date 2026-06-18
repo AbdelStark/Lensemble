@@ -1,6 +1,6 @@
 # Surprise-meter — Workstreams & Child Issues
 
-Six child issues under parent [#338](https://github.com/AbdelStark/Lensemble/issues/338). SM-1 is **Milestone 0** (the priority, standalone-demoable); SM-2..SM-6 are **Milestone 1** (the surprise-meter).
+Six child issues under technical tracker [#338](https://github.com/AbdelStark/Lensemble/issues/338), which supports parent [#359](https://github.com/AbdelStark/Lensemble/issues/359). SM-1 is **Milestone 0** (standalone-demoable); SM-2..SM-6 are **Milestone 1** (the surprise-meter).
 
 ## Dependency graph
 
