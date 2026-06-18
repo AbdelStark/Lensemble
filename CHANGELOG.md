@@ -19,6 +19,11 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:eval`/`area:docs`: add the `lewm-surprise/1` stage evidence contract for
+  the Codex-Paris surprise-meter. `scripts/lewm_surprise_check.py` now writes
+  `docs/evidence/lewm_tworooms_surprise.json` plus served fallback assets under
+  `web/surprise-meter/data/`, while `web/surprise-meter/surprise_engine.mjs`
+  and `surprise_selftest.mjs` pin the scalar next-latent MSE contract (#353).
 - `area:eval`/`area:federation`: closed the LeWM federated-demo credibility gap (epic #332). The
   headline probe number is now produced by the **system the demo ships**: `scripts/lewm_system_probe.py`
   (core in `lensemble.eval.lewm_system_probe`) trains real adapter deltas in node and drives them

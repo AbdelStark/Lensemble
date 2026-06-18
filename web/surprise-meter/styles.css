@@ -83,6 +83,7 @@ body {
 .plate {
   position: relative; background: var(--paper-edge);
   border-block: 1px solid var(--rule); overflow: hidden; width: 100%;
+  margin: 0;
 }
 .plate::after {
   content: ""; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: multiply; opacity: 0.05;

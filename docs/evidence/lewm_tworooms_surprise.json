@@ -1,0 +1,36 @@
+{
+  "schema": "lewm-surprise/1",
+  "role": "surprise-meter-stage-evidence",
+  "warmupSteps": 2,
+  "meanSurprisePre": 0.06037897796856822,
+  "meanSurprisePost": 0.05296723026100999,
+  "surpriseDropRatioLive": 0.12275377883038366,
+  "federatedRelativeImprovement": 0.12275377883038366,
+  "federatedSeedMean": 0.16787180214169914,
+  "federatedSeedWorst": 0.054144202317108696,
+  "federatedSeedStdev": 0.10969915982049769,
+  "federatedWorstSeed": 2,
+  "perturbationSpikeRatio": 7.5015502624855355,
+  "oodActionSpikeRatio": 0.0,
+  "frameDiffCorrelation": 0.37520405025681947,
+  "stepLatencyMsCpu": 6.2,
+  "sources": {
+    "systemProbe": "docs/evidence/lewm_tworooms_system_probe.json#result",
+    "seedSweep": "docs/evidence/lewm_tworooms_probe_seedsweep.json#distribution",
+    "trajectory": "web/surprise-meter/data/surprise_trajectory.json"
+  },
+  "crossCheck": {
+    "systemProbePasses": true,
+    "seedSweepPasses": true,
+    "fullPrecisionRelativeImprovement": 0.12275377883038366,
+    "fullPrecisionSeedMean": 0.16787180214169914,
+    "fullPrecisionSeedWorst": 0.054144202317108696
+  },
+  "nonClaims": [
+    "adapter-continuation-not-training: federated adapter continuation on a frozen checkpoint, not federated world-model training.",
+    "surprise-is-scalar-CLS: surprise is a scalar CLS-latent next-step prediction error, not a per-pixel heatmap.",
+    "no-secure-agg/DP: this local coordinator path does not wire secure aggregation or differential privacy.",
+    "perturbation-illustrative: perturbation spikes are an illustrative TwoRooms probe, not a calibrated anomaly detector."
+  ],
+  "passes": true
+}

@@ -128,6 +128,7 @@ def run_system_composed_probe(
     seed: int,
     dim: int = 192,
     deployment_target: str = "system-probe",
+    offset_out: Path | None = None,
 ) -> dict[str, Any]:
     """Compose real deltas through the real server path; return the evidence dict.
 
@@ -214,6 +215,12 @@ def run_system_composed_probe(
     server_offset = service.model_revision(run_id, final_id)["adapterState"]
     if len(server_offset) != PARAMS:
         raise RuntimeError("server offset has the wrong parameter count")
+    if offset_out is not None:
+        offset_out.parent.mkdir(parents=True, exist_ok=True)
+        offset_out.write_text(
+            json.dumps([round(float(value), 8) for value in server_offset]) + "\n",
+            encoding="utf-8",
+        )
 
     probed = _node(
         {

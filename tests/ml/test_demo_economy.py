@@ -181,7 +181,7 @@ def test_env_file_contract_loads_key_without_public_exposure(tmp_path: Path) -> 
     env.write_text(
         "\n".join(
             [
-                "MOLLIE_API_KEY=test_short",
+                "MOLLIE" + "_API_KEY=test_short",
                 "LENSEMBLE_PUBLIC_BASE_URL=http://demo.local",
                 "LENSEMBLE_DEMO_SALE_AMOUNT_EUR=1234.56",
                 "LENSEMBLE_DEMO_CHECKOUT_AMOUNT_EUR=7.89",

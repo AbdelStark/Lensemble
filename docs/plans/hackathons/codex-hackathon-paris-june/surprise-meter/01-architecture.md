@@ -277,7 +277,7 @@ export async function buildPrePostStreams({ runtime, offset, seed = PROBE_SEED, 
 
 | HUD label | File | JSON path | Value |
 |---|---|---|---|
-| +12.3% (this run) | `lewm_tworooms_system_probe.json` | `result.relativeImprovement` | 0.1227556578424805 |
+| +12.3% (this run) | `lewm_tworooms_system_probe.json` | `result.relativeImprovement` | 0.12275377883038366 |
 | +16.8% (mean, 5 seeds) | `lewm_tworooms_probe_seedsweep.json` | `distribution.relativeImprovementMean` | 0.16787180214169914 |
 | +5.4% (worst, seed 2) | `lewm_tworooms_probe_seedsweep.json` | `distribution.relativeImprovementMin` | 0.054144202317108696 |
 

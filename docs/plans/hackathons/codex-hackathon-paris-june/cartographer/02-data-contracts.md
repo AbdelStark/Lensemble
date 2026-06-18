@@ -157,7 +157,7 @@ Path: `docs/evidence/lewm_tworooms_manifold.json`. Producer: `scripts/lewm_manif
 - `nonClaims` contains the four mandatory negations (federated-adapter-not-training, synthetic-collapse, projection-lossy, no-pixel-comparison).
 
 ### Sourcing rule (claim discipline)
-- `federatedRelativeImprovement` and `federatedSeedMeanImprovement` are **read from** the cited existing evidence files at **full float precision**, never recomputed and never truncated (Decision D3). Verified values: `result.relativeImprovement = 0.1227556578424805` (system probe); `distribution.relativeImprovementMean = 0.16787180214169914` (seed-sweep). The producer asserts the source files exist and the values match within 1e-6 — the contract's `0.1227`/`0.168` literals are display roundings only and would **fail** that check if stored.
+- `federatedRelativeImprovement` and `federatedSeedMeanImprovement` are **read from** the cited existing evidence files at **full float precision**, never recomputed and never truncated (Decision D3). Verified values: `result.relativeImprovement = 0.12275377883038366` (system probe); `distribution.relativeImprovementMean = 0.16787180214169914` (seed-sweep). The producer asserts the source files exist and the values match within 1e-6 — the contract's `0.1227`/`0.168` literals are display roundings only and would **fail** that check if stored.
 - The example above lists **five** `nonClaims`; the `passes` predicate requires **at least the four** mandatory negations (federated-adapter-not-training, synthetic-collapse, projection-lossy, no-pixel-comparison) as substrings — the fifth (single-coordinator/no-DP) is recommended and matches the surprise-meter set.
 - All other `result` numbers are produced by this run and are deterministic given `seed`.
 

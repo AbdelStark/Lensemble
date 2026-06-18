@@ -30,6 +30,7 @@ Tapestry (AI Alliance), not its primitives and not its scale.
 | Federation | `lewm-adapter-delta/1` bounded clipped deltas, validated server-side (schema, byte budget, shapes, norms, checkpoint/export-hash freshness, replay, fabricated-metric rejection) and aggregated as a deterministic per-round mean over a shared deterministic adapter init | `tests/ml/test_lewm_federation.py` |
 | Before/after probe (system-composed) | The headline number is produced by the **system the demo ships**: real node-trained adapter deltas flow through `FederatedDemoService.submit_update` (real validation) and `_close_round_lewm` (real deterministic-mean aggregation + hash-chained revisions), and the probe scores the **server-produced** final `modelRevisionId` — not an offline-recomputed mean. Held-out MSE improved 0.0604 → 0.0530 (**+12.3%**, verdict `improved`, 0 claim-audit violations) on the seed-`20260612` draw | [system-composed probe](lewm_tworooms_system_probe.json); offline math cross-check [federated probe](lewm_tworooms_probe_check.json) |
 | Seed robustness | The headline is not a single favorable draw: across 5 independent seeds / episode splits the system-composed probe improves on **every** seed with **no collapse** — mean +16.8%, worst case **+5.4%** (seed 2), best +32.6% | [seed sweep](lewm_tworooms_probe_seedsweep.json) |
+| Surprise-meter stage card | The Codex-Paris meter renders scalar CLS-latent surprise, a recorded fallback trajectory, the certified +12.3% this-run result, +16.8% seed mean, and +5.4% worst seed with non-claims visible in the page | [surprise evidence](lewm_tworooms_surprise.json), `web/surprise-meter/data/result_card.json`, `web/surprise-meter/data/surprise_trajectory.json` |
 | Held-out collapse check | The gain is bias-correction, not the #259 held-out magnitude collapse: on the validation pairs the adapted latent std holds vs the frozen baseline (0.90 → 0.91) and effective rank is preserved (9.86 → 9.80), so an "improved" MSE cannot hide a collapse — a materially lower std/rank overrides the verdict to `collapse-risk` | held-out diagnostics in [system-composed probe](lewm_tworooms_system_probe.json) |
 | Honest failure states | Round metrics carry server-side health flags (effective-rank collapse, latent-std magnitude collapse, flat/worsened loss, SIGReg outliers); the dashboard probe reports `flat`/`worse` verdicts instead of hiding them — the first probe configuration **was** flat and is recorded as such in the development history | round metrics in every evidence export |
 
@@ -66,6 +67,8 @@ uv run --with onnxruntime --with hdf5plugin python scripts/lewm_adapter_overfit_
 uv run --with onnxruntime --with hdf5plugin python scripts/lewm_probe_check.py --h5 <tworoom.h5>     # offline math cross-check
 uv run --with onnxruntime --with hdf5plugin python scripts/lewm_system_probe.py --h5 <tworoom.h5>    # system-composed headline (#327)
 uv run --with onnxruntime --with hdf5plugin python scripts/lewm_probe_seedsweep.py --h5 <tworoom.h5> # seed robustness (#330)
+uv run --with onnxruntime --with hdf5plugin python scripts/surprise/run_clean_round.py --h5 <tworoom.h5> # offset sidecar + served fixture
+uv run python scripts/lewm_surprise_check.py # surprise evidence + served fallback result/trajectory
 uv run lensemble demo federated --port 8765   # then create a real-lewm-tworooms run
 ```
 

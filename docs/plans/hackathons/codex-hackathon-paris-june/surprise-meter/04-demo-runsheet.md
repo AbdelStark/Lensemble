@@ -45,7 +45,7 @@ Default if fragile or short on time: narrate the live round for the crowd-partic
 | C | Recorded `surprise_trajectory.json` (`lewm-surprise-traj/1`) replayed in the meter (no live ONNX) | if WebGPU/ONNX won't run |
 | D | The ≤20 s capture clip | if the projector machine won't run the page |
 
-> **Start-of-day BLOCKING pre-req (2026-06-18):** verify rungs B/C/D before relying on live runtime. `onnxruntime` is absent from the uv venv, system node, and npm, so bake `web/surprise-meter/fixtures/adapter_offset.json` (len 12512, via `uv run --with onnxruntime --with hdf5plugin python scripts/surprise/run_clean_round.py ...`) **and** `web/surprise-meter/data/surprise_trajectory.json` (via the node + `onnxruntime-node` bake, `scripts/surprise/bake_trajectory.mjs`), **and** record the <=20 s clip. Commit all three (they live outside the gitignored `runs/`). Have rungs C and D on disk before walking on.
+> **Start-of-day BLOCKING pre-req (2026-06-18):** verify rungs B/C/D before relying on live runtime. `onnxruntime` is absent from the uv venv, system node, and npm, so bake `web/surprise-meter/fixtures/adapter_offset.json` (len 12512, via `uv run --with onnxruntime --with hdf5plugin python scripts/surprise/run_clean_round.py ...`) **and** regenerate `docs/evidence/lewm_tworooms_surprise.json`, `web/surprise-meter/data/result_card.json`, and `web/surprise-meter/data/surprise_trajectory.json` via `uv run python scripts/lewm_surprise_check.py`. Commit the served fallback assets outside the gitignored `runs/` path. Have rungs C and D on disk before walking on.
 
 ---
 

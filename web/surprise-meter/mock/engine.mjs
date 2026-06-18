@@ -11,7 +11,11 @@ import { CERTIFIED } from "./fixtures.mjs";
 const PEAK = { teleport: 0.205, ood: 0.20, wall: 0.165 };
 
 export class SurpriseEngine {
-  constructor() { this.reset(); }
+  constructor({ certified = CERTIFIED, trajectory = null } = {}) {
+    this.certified = certified;
+    this.trajectory = Array.isArray(trajectory) ? trajectory : null;
+    this.reset();
+  }
 
   reset() {
     this.t = 0; this.frame = 0;
@@ -27,7 +31,7 @@ export class SurpriseEngine {
   toggleRun() { this.running = !this.running; return this.running; }
 
   // pre = baselineMse, post = adaptedMse → their ratio IS the certified +12.3% (C11)
-  baselineLevel() { return this.mode === "post" ? CERTIFIED.adaptedMse : CERTIFIED.baselineMse; }
+  baselineLevel() { return this.mode === "post" ? this.certified.adaptedMse : this.certified.baselineMse; }
 
   perturb(type) {
     this.event = { type, energy: PEAK[type] ?? 0.18 };
@@ -47,6 +51,21 @@ export class SurpriseEngine {
   tick(dt) {
     if (this.running) this.t += dt;
     this.frame++;
+    if (this.trajectory?.length) {
+      const row = this.trajectory[this.frame % this.trajectory.length];
+      return {
+        t: Number(row.t ?? this.t),
+        agent: row.agent ?? mockEnv.path(this.t),
+        room: (row.agent?.x ?? 0.5) < 0.5 ? "left" : "right",
+        surprise: this.mode === "post" ? Number(row.surprisePost) : Number(row.surprisePre),
+        frameDiff: Number(row.frameDiff),
+        baseline: this.baselineLevel(),
+        mode: this.mode,
+        hot: Boolean(row.event),
+        event: row.event ?? null,
+        running: this.running,
+      };
+    }
     this.event.energy *= Math.pow(0.06, dt); // ink-recorder decay
     if (this.override && this.t >= this.override.until) this.override = null;
 

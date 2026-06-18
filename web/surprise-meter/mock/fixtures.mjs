@@ -1,20 +1,15 @@
-// Mocked evidence + offset for the surprise-meter scaffold.
+// Fallback evidence constants for the surprise-meter.
 //
 // The numbers below mirror, at full precision, the certified system-composed
-// probe so the HUD can be wired exactly as it will be on the day:
+// probe so the HUD can render even if the generated served bundle is missing:
 //   docs/evidence/lewm_tworooms_system_probe.json   (this run)
 //   docs/evidence/lewm_tworooms_probe_seedsweep.json (5-seed distribution)
-//
-// SWAP FOR REAL: fetch these JSONs (served under WEB_ROOT) instead of hard-coding,
-// and load the 12,512-float adapter offset from
-//   web/surprise-meter/fixtures/adapter_offset.json  (committed; C10).
-// Until then this file is the single source of the on-screen figures.
 
 export const CERTIFIED = Object.freeze({
   // lewm_tworooms_system_probe.json
-  baselineMse: 0.06037891671884794,
-  adaptedMse: 0.052967063077209414,
-  relativeImprovement: 0.1227556578424805, // +12.3% — "this run"
+  baselineMse: 0.06037897796856822,
+  adaptedMse: 0.05296723026100999,
+  relativeImprovement: 0.12275377883038366, // +12.3% — "this run"
   // lewm_tworooms_probe_seedsweep.json / distribution
   mean: 0.16787180214169914, // +16.8%
   worst: 0.054144202317108696, // +5.4% — seed 2 (always shown beside the mean)
@@ -24,7 +19,7 @@ export const CERTIFIED = Object.freeze({
   seeds: 5,
   allImproved: true,
   collapse: false,
-  source: "lewm_tworooms_system_probe.json · …_probe_seedsweep.json",
+  source: "lewm_tworooms_surprise.json · …_probe_seedsweep.json",
 });
 
 // Adapter dimensions (C4/C5). The real offset is a 12,512-float vector.

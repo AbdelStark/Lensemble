@@ -168,6 +168,7 @@ def test_demo_card_links_every_gate_artifact() -> None:
         # epic #332: the system-composed headline + seed-robustness artifacts
         "lewm_tworooms_system_probe.json",
         "lewm_tworooms_probe_seedsweep.json",
+        "lewm_tworooms_surprise.json",
     ):
         assert artifact in text, artifact
         assert (Path("docs/evidence") / artifact).is_file(), artifact

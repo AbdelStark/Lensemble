@@ -56,7 +56,11 @@ Sibling idea [#337 (Latent Genie)](https://github.com/AbdelStark/Lensemble/issue
 
 - Evidence schema `lewm-surprise/1` → `docs/evidence/lewm_tworooms_surprise.json` (producer
   `scripts/lewm_surprise_check.py`, test `tests/ml/test_lewm_surprise.py`).
-- Web demo `web/surprise-meter/` (imports the existing `web/federated-demo/` runtime/env/adapter/probe).
+- Clean-round and rehearsal gates: `scripts/surprise/run_clean_round.py` exports the real
+  12,512-float adapter offset sidecar; `scripts/surprise/rehearsal.py` validates the synthetic
+  system path, JS self-test, and served fallback assets.
+- Web demo `web/surprise-meter/` with served fallback assets:
+  `fixtures/adapter_offset.json`, `data/result_card.json`, and `data/surprise_trajectory.json`.
 - Sovereign-economy contracts `sovereign-sale/1` and `sovereign-contribution-ledger/1`.
 - Server-side Mollie test checkout path with `.env.example` placeholders and mock fallback.
 - (Stretch / #339) `cartographer-manifold/1` + `lewm-manifold/1` and `web/latent-manifold-viewer/`.

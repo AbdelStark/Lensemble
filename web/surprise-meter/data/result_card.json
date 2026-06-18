@@ -1,0 +1,27 @@
+{
+  "schema": "lewm-surprise-result-card/1",
+  "headline": "Less surprised after federated adapter continuation",
+  "thisRun": 0.12275377883038366,
+  "seedMean": 0.16787180214169914,
+  "seedWorst": 0.054144202317108696,
+  "worstSeed": 2,
+  "display": {
+    "thisRun": "+12.3%",
+    "seedMean": "+16.8%",
+    "seedWorst": "+5.4%"
+  },
+  "meanSurprisePre": 0.06037897796856822,
+  "meanSurprisePost": 0.05296723026100999,
+  "passes": true,
+  "sources": {
+    "systemProbe": "docs/evidence/lewm_tworooms_system_probe.json#result",
+    "seedSweep": "docs/evidence/lewm_tworooms_probe_seedsweep.json#distribution",
+    "trajectory": "web/surprise-meter/data/surprise_trajectory.json"
+  },
+  "nonClaims": [
+    "adapter-continuation-not-training: federated adapter continuation on a frozen checkpoint, not federated world-model training.",
+    "surprise-is-scalar-CLS: surprise is a scalar CLS-latent next-step prediction error, not a per-pixel heatmap.",
+    "no-secure-agg/DP: this local coordinator path does not wire secure aggregation or differential privacy.",
+    "perturbation-illustrative: perturbation spikes are an illustrative TwoRooms probe, not a calibrated anomaly detector."
+  ]
+}

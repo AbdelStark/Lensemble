@@ -1,9 +1,7 @@
-// surprise-meter — UI wiring over the mocked engine.
-// SWAP FOR REAL: only ./mock/engine.mjs changes (its imports → ../federated-demo/*).
-// Everything here — the recorder, the world view, the controls, the HUD — stays.
+// surprise-meter — UI wiring over the stage fallback engine.
 import { SurpriseEngine } from "./mock/engine.mjs";
 import { Recorder } from "./seismograph.mjs";
-import { CERTIFIED, NON_CLAIMS, MODEL, pct } from "./mock/fixtures.mjs";
+import { CERTIFIED as FALLBACK_CERTIFIED, NON_CLAIMS as FALLBACK_NON_CLAIMS, MODEL, pct } from "./mock/fixtures.mjs";
 import { mockEnv } from "./mock/lewm_mock.mjs"; // ROOMS layout for the world view
 
 const $ = (id) => document.getElementById(id);
@@ -12,10 +10,49 @@ const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-mo
 const TRACE_INK = "#222f3c", GRAPHITE = "#84786a", OXBLOOD = "#96282b",
       INK2 = "#6a6253", RULE = "rgba(37,28,22,0.5)", PAPER_EDGE = "#efe9dd";
 
-const engine = new SurpriseEngine();
+let certified = { ...FALLBACK_CERTIFIED };
+let nonClaims = [...FALLBACK_NON_CLAIMS];
+let servedTrajectory = null;
+
+async function loadServedBundle() {
+  try {
+    const [cardRes, trajectoryRes] = await Promise.all([
+      fetch("./data/result_card.json", { cache: "no-store" }),
+      fetch("./data/surprise_trajectory.json", { cache: "no-store" }),
+    ]);
+    if (cardRes.ok) {
+      const card = await cardRes.json();
+      if (card.schema === "lewm-surprise-result-card/1") {
+        certified = {
+          ...certified,
+          baselineMse: Number(card.meanSurprisePre),
+          adaptedMse: Number(card.meanSurprisePost),
+          relativeImprovement: Number(card.thisRun),
+          mean: Number(card.seedMean),
+          worst: Number(card.seedWorst),
+          worstSeed: Number(card.worstSeed),
+          source: "lewm_tworooms_surprise.json · served result_card.json",
+        };
+        if (Array.isArray(card.nonClaims) && card.nonClaims.length) nonClaims = card.nonClaims;
+      }
+    }
+    if (trajectoryRes.ok) {
+      const trajectory = await trajectoryRes.json();
+      if (trajectory.schema === "lewm-surprise-traj/1" && Array.isArray(trajectory.steps)) {
+        servedTrajectory = trajectory.steps;
+      }
+    }
+  } catch {
+    servedTrajectory = null;
+  }
+}
+
+await loadServedBundle();
+
+const engine = new SurpriseEngine({ certified, trajectory: servedTrajectory });
 const surpRec = new Recorder($("surpriseCanvas"), {
   color: TRACE_INK, spikes: true, max: 0.30, weight: 2.0,
-  baseline: CERTIFIED.baselineMse, preBaseline: CERTIFIED.baselineMse,
+  baseline: certified.baselineMse, preBaseline: certified.baselineMse,
 });
 const fdRec = new Recorder($("frameDiffCanvas"), { color: GRAPHITE, spikes: false, max: 1.0, weight: 1.6 });
 
@@ -80,24 +117,24 @@ const world = (() => {
 // ── HUD: certified ledger + non-claims, rendered from data ────────────────
 function fillHUD() {
   $("certLedger").innerHTML =
-    `<tr class="is-run"><td>this run</td><td class="num">${pct(CERTIFIED.relativeImprovement)}</td></tr>` +
-    `<tr><td>mean · ${CERTIFIED.seeds} seeds</td><td class="num">${pct(CERTIFIED.mean)}</td></tr>` +
-    `<tr class="is-worst"><td>worst · seed ${CERTIFIED.worstSeed}</td><td class="num">${pct(CERTIFIED.worst)}</td></tr>`;
-  $("certSrc").textContent = "Source — " + CERTIFIED.source + " · all seeds improved, no collapse";
-  $("nonClaims").innerHTML = NON_CLAIMS.map((c) => `<li>${c}</li>`).join("");
-  $("srcLine").textContent = `Adapter ${MODEL.latentDim}-d latent · ~${MODEL.msPerStep} ms/step.`;
+    `<tr class="is-run"><td>this run</td><td class="num">${pct(certified.relativeImprovement)}</td></tr>` +
+    `<tr><td>mean · ${certified.seeds} seeds</td><td class="num">${pct(certified.mean)}</td></tr>` +
+    `<tr class="is-worst"><td>worst · seed ${certified.worstSeed}</td><td class="num">${pct(certified.worst)}</td></tr>`;
+  $("certSrc").textContent = "Source — " + certified.source + " · all seeds improved, no collapse";
+  $("nonClaims").innerHTML = nonClaims.map((c) => `<li>${c}</li>`).join("");
+  $("srcLine").textContent = `Adapter ${MODEL.latentDim}-d latent · ${servedTrajectory ? "recorded fallback trajectory" : "deterministic fallback engine"} · ~${MODEL.msPerStep} ms/step.`;
 }
 
 // ── controls ──────────────────────────────────────────────────────────────
 const readout = document.querySelector(".readout");
-let shownSurprise = CERTIFIED.baselineMse, surprised = false;
+let shownSurprise = certified.baselineMse, surprised = false;
 
 function setMode(mode) {
   engine.setMode(mode);
   surpRec.setBaseline(engine.baselineLevel());
   $("modeLabel").textContent = mode === "post" ? "post-federation" : "pre-federation";
   $("fedDelta").textContent = mode === "post"
-    ? "held-out error ↓ " + (CERTIFIED.relativeImprovement * 100).toFixed(1) + "% vs pre-federation"
+    ? "held-out error ↓ " + (certified.relativeImprovement * 100).toFixed(1) + "% vs pre-federation"
     : "";
   document.querySelectorAll(".seg-btn").forEach((b) => b.classList.toggle("is-on", b.dataset.mode === mode));
 }
