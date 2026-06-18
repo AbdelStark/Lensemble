@@ -300,7 +300,7 @@ class EconomyDemoService:
     def _redirect_url(self, sale: dict[str, Any]) -> str:
         return (
             f"{self.config.public_base_url}/web/federated-demo/"
-            f"#/host/{sale['runId']}?sale={sale['saleId']}"
+            f"#/economy/{sale['runId']}?sale={sale['saleId']}"
         )
 
     def _webhook_url(self) -> str:

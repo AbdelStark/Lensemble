@@ -59,6 +59,19 @@ def test_economy_ledger_balances_to_the_cent() -> None:
     }
 
 
+def test_mock_payment_redirects_to_buyer_flow_screen() -> None:
+    service = EconomyDemoService(
+        config=EconomyConfig(public_base_url="http://demo.local", api_key=None)
+    )
+    service.create_sale({"saleId": "sale_redirect", "runId": "run_redirect"})
+    sale = service.create_payment("sale_redirect", {"mode": "mock"})
+
+    assert (
+        sale["payment"]["checkoutUrl"]
+        == "http://demo.local/web/federated-demo/#/economy/run_redirect?sale=sale_redirect&mockCheckout=1"
+    )
+
+
 def test_economy_uses_run_snapshot_when_updates_exist() -> None:
     run_snapshot = {
         "id": "run_live",
@@ -226,6 +239,29 @@ def test_economy_dashboard_cites_surprise_proof_contract() -> None:
         "model revision",
     ):
         assert needle in app, needle
+
+
+def test_buyer_flow_screen_is_mocked_and_powered_by_mollie() -> None:
+    app = Path("web/federated-demo/app.mjs").read_text(encoding="utf-8")
+    routes = Path("web/federated-demo/join_url.mjs").read_text(encoding="utf-8")
+    styles = Path("web/federated-demo/style.css").read_text(encoding="utf-8")
+
+    for needle in (
+        "view: \"economy\"",
+        "Open buyer flow",
+        "Create buyer scenario",
+        "Process buyer payment",
+        "Release community rewards",
+        "Powered by Mollie",
+        "mock settlement",
+        "Humanoid robotics buyer",
+        "Ensemble Labs",
+        "mode: \"mock\"",
+    ):
+        assert needle in app or needle in routes, needle
+    for needle in ("economy-flow-graph", "flow-token", "participant-balance-list"):
+        assert needle in styles, needle
+    assert "Figure" not in app
 
 
 def _money(amount: dict[str, Any]) -> Decimal:

@@ -74,6 +74,7 @@ const backendLearnerJobs = new Map();
 const backendLearnerTelemetry = new Map();
 const economyByRun = new Map();
 const economyMessages = new Map();
+const economyFlowByRun = new Map();
 
 // ---------------------------------------------------------------- utilities
 
@@ -104,7 +105,7 @@ const runRef = { current: null };
 let currentRoute = null; // routeKey of the currently mounted view
 
 function routeKey(route) {
-  return [route.view, route.runId ?? "", Boolean(route.token)].join("|");
+  return [route.view, route.runId ?? "", Boolean(route.token), route.saleId ?? ""].join("|");
 }
 
 // keyed(): stable identity for the reconciler. preserve(): never reconcile while
@@ -150,6 +151,21 @@ function formatMetric(value, digits = 3) {
 function formatMoney(amount) {
   if (!amount) return "n/a";
   return `${amount.currency ?? "EUR"} ${amount.value ?? "0.00"}`;
+}
+
+function moneyNumber(amount) {
+  const parsed = Number(amount?.value ?? amount ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatMoneyHuman(value, currency = "EUR") {
+  const numeric = Number(value);
+  const abs = Math.abs(Number.isFinite(numeric) ? numeric : 0);
+  const formatted = new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(abs);
+  return `${numeric < 0 ? "-" : ""}${currency} ${formatted}`;
 }
 
 function latestRevisionId(run) {
@@ -553,6 +569,7 @@ async function refreshBackendRoute(view, runId) {
     if (!currentRouteStill(view, runId) || shouldDeferAutoRefreshForDocument()) return;
     if (view === "host") morphHostSnapshot(run);
     else if (view === "join") morphJoinSnapshot(parseRoute(window.location.hash), run);
+    else if (view === "economy") morphEconomySnapshot(parseRoute(window.location.hash), run);
   } catch {
     if (currentRouteStill(view, runId) && !shouldDeferAutoRefreshForDocument()) render();
   } finally {
@@ -591,6 +608,7 @@ function attachBackendSocket(poll) {
       if (run && !shouldDeferAutoRefreshForDocument()) {
         if (view === "host") morphHostSnapshot(run);
         else if (view === "join") morphJoinSnapshot(parseRoute(window.location.hash), run);
+        else if (view === "economy") morphEconomySnapshot(parseRoute(window.location.hash), run);
       } else if (events.length > 0) {
         void refreshBackendRoute(view, runId);
       }
@@ -673,6 +691,7 @@ function mountRoute(route) {
   if (route.view === "home") renderHome();
   else if (route.view === "host") renderHost(route.runId);
   else if (route.view === "join") renderJoin(route);
+  else if (route.view === "economy") renderEconomyRoute(route);
   else if (route.view === "tworooms") renderTwoRoomsLab();
   else {
     clearBackendPoll();
@@ -699,6 +718,8 @@ function updateRoute(route) {
   } else if (route.view === "join") {
     if (!route.token) morphLocalJoin();
     else if (runRef.current) morphJoinSnapshot(route, runRef.current);
+  } else if (route.view === "economy") {
+    if (runRef.current) morphEconomySnapshot(route, runRef.current);
   }
 }
 
@@ -1023,6 +1044,361 @@ function hostQrUrl(run) {
   return run.joinUrl || buildJoinUrl(window.location.href, run.id, run.joinToken);
 }
 
+function economyRouteHref(run, sale = null) {
+  const suffix = sale?.saleId ? `?sale=${encodeURIComponent(sale.saleId)}` : "";
+  return `#/economy/${encodeURIComponent(run.id)}${suffix}`;
+}
+
+function rememberEconomySaleInUrl(run, sale) {
+  const route = parseRoute(window.location.hash);
+  if (route.view !== "economy" || route.runId !== run.id || route.saleId === sale?.saleId) return;
+  window.history.replaceState(null, "", economyRouteHref(run, sale));
+  currentRoute = routeKey(parseRoute(window.location.hash));
+}
+
+function isRunComplete(run) {
+  return run?.state === "completed";
+}
+
+function economyFlowStorageKey(runId) {
+  return `lensemble-economy-flow:${runId}`;
+}
+
+function storedEconomyFlow(runId) {
+  const inMemory = economyFlowByRun.get(runId);
+  if (inMemory) return inMemory;
+  try {
+    const stored = JSON.parse(window.sessionStorage.getItem(economyFlowStorageKey(runId)) ?? "null");
+    return typeof stored?.phase === "string" ? stored : null;
+  } catch {
+    return null;
+  }
+}
+
+function setEconomyPhase(runId, phase, sale = null) {
+  const value = { phase, saleId: sale?.saleId ?? null, pulsedAt: Date.now() };
+  economyFlowByRun.set(runId, value);
+  try {
+    window.sessionStorage.setItem(economyFlowStorageKey(runId), JSON.stringify(value));
+  } catch {
+    // Losing the replay state is acceptable; the ledger/payment state remains server-backed.
+  }
+}
+
+function currentEconomyPhase(runId, sale) {
+  const explicit = storedEconomyFlow(runId);
+  const explicitMatchesSale = !explicit?.saleId || explicit.saleId === sale?.saleId;
+  if (
+    explicit?.phase
+    && explicitMatchesSale
+    && (explicit.phase !== "rewards-paid" || sale?.payment?.status === "paid")
+  ) {
+    return explicit.phase;
+  }
+  if (!sale) return "scenario";
+  if (sale.payment?.status === "paid") return "buyer-paid";
+  return "ledger-ready";
+}
+
+function phaseClass(phase) {
+  return `phase-${String(phase).replace(/_/g, "-")}`;
+}
+
+function reconcileEconomySurface(run) {
+  const route = parseRoute(window.location.hash);
+  if (route.view === "economy") morphEconomySnapshot(route, run);
+  else if (route.view === "host") morphHostSnapshot(run);
+}
+
+async function createEconomyScenario(run, { recreate = false } = {}) {
+  const existing = economyByRun.get(run.id);
+  if (existing && !recreate) return existing;
+  economyMessages.set(run.id, "Building contribution-weighted reward ledger...");
+  reconcileEconomySurface(run);
+  const created = await backendClient.createEconomySale({
+    runId: run.id,
+    modelRevisionId: latestRevisionId(run),
+  });
+  economyByRun.set(run.id, created);
+  rememberEconomySaleInUrl(run, created);
+  setEconomyPhase(run.id, "ledger-ready", created);
+  economyMessages.set(run.id, "Buyer scenario ready.");
+  reconcileEconomySurface(run);
+  return created;
+}
+
+async function processMockBuyerPayment(run) {
+  const sale = await createEconomyScenario(run);
+  economyMessages.set(run.id, "Processing mocked Mollie buyer payment...");
+  reconcileEconomySurface(run);
+  const opened = await backendClient.createEconomyPayment(sale.saleId, {
+    mode: "mock",
+    allowMockFallback: true,
+  });
+  economyByRun.set(run.id, opened);
+  const paid = await backendClient.refreshEconomyPayment(opened.saleId, { markPaid: true });
+  economyByRun.set(run.id, paid);
+  setEconomyPhase(run.id, "buyer-paid", paid);
+  economyMessages.set(run.id, "Buyer payment settled into Ensemble Labs.");
+  reconcileEconomySurface(run);
+  return paid;
+}
+
+function releaseCommunityRewards(run, sale = null) {
+  setEconomyPhase(run.id, "rewards-paid", sale);
+  economyMessages.set(run.id, "Community rewards released.");
+  reconcileEconomySurface(run);
+}
+
+function economyParticipantRows(run, sale) {
+  const rewards = sale?.ledger?.participantRewards ?? [];
+  if (rewards.length > 0) return rewards;
+  const participants = (run?.participants ?? []).filter((participant) =>
+    !["dropped", "error"].includes(participant.state),
+  );
+  if (participants.length > 0) {
+    return participants.map((participant) => ({
+      participantId: participant.id,
+      displayName: participant.displayName || participant.id,
+      reward: { currency: "EUR", value: "0.00" },
+      contributionWeight: 0,
+    }));
+  }
+  return ["Alice", "Bob"].map((name, index) => ({
+    participantId: `placeholder-${index + 1}`,
+    displayName: name,
+    reward: { currency: "EUR", value: "0.00" },
+    contributionWeight: 0,
+  }));
+}
+
+function economyBalances(sale, phase) {
+  const currency = sale?.saleAmount?.currency ?? "EUR";
+  const saleAmount = moneyNumber(sale?.saleAmount);
+  const labsRetained = moneyNumber(sale?.ledger?.orchestratorReward);
+  const rewardsReleased = phase === "rewards-paid";
+  const buyerPaid = phase === "buyer-paid" || rewardsReleased;
+  return {
+    currency,
+    buyer: buyerPaid ? 0 : saleAmount,
+    labs: rewardsReleased ? labsRetained : buyerPaid ? saleAmount : 0,
+  };
+}
+
+function participantBalance(row, phase) {
+  return phase === "rewards-paid" ? moneyNumber(row.reward) : 0;
+}
+
+function settlementNode({ className, title, subtitle, balance, badge = null }) {
+  return el("div", { class: `settlement-node ${className}` }, [
+    badge ? el("span", { class: "node-badge", text: badge }) : null,
+    el("span", { class: "node-title", text: title }),
+    el("span", { class: "node-subtitle", text: subtitle }),
+    el("strong", { class: "node-balance", text: balance }),
+  ]);
+}
+
+function economyFlowGraph(run, sale, phase) {
+  const rows = economyParticipantRows(run, sale);
+  const balances = economyBalances(sale, phase);
+  return el("div", { class: `economy-flow-graph ${phaseClass(phase)}` }, [
+    el("div", { class: "flow-rail buyer-rail" }, [
+      el("span", { class: "flow-label", text: "buyer payment" }),
+      el("span", { class: "flow-token buyer-token" }),
+    ]),
+    el("div", { class: "flow-rail reward-rail" }, [
+      el("span", { class: "flow-label", text: "reward split" }),
+      el("span", { class: "flow-token reward-token" }),
+    ]),
+    settlementNode({
+      className: "buyer-node",
+      title: sale?.buyer?.displayName ?? "Humanoid robotics buyer",
+      subtitle: "buyer account",
+      balance: formatMoneyHuman(balances.buyer, balances.currency),
+      badge: "buyer",
+    }),
+    settlementNode({
+      className: "labs-node",
+      title: "Ensemble Labs",
+      subtitle: phase === "rewards-paid" ? "orchestrator retained" : "settlement account",
+      balance: formatMoneyHuman(balances.labs, balances.currency),
+      badge: "orchestrator",
+    }),
+    el("div", { class: "community-node" }, [
+      el("div", { class: "community-head" }, [
+        el("span", { class: "node-badge", text: "community" }),
+        el("strong", { text: "Participants" }),
+      ]),
+      el("div", { class: "participant-balance-list" }, rows.map((row) =>
+        el("div", { class: "participant-balance" }, [
+          el("span", { class: "participant-name", text: row.displayName || row.participantId }),
+          el("span", {
+            class: "participant-amount",
+            text: formatMoneyHuman(participantBalance(row, phase), row.reward?.currency ?? balances.currency),
+          }),
+        ]),
+      )),
+    ]),
+  ]);
+}
+
+function economyStageTiles(sale, phase) {
+  const saleAmount = sale?.saleAmount ? formatMoneyHuman(moneyNumber(sale.saleAmount), sale.saleAmount.currency) : "pending";
+  const checkout = sale?.checkoutAmount ? formatMoney(sale.checkoutAmount) : "pending";
+  const labs = sale?.ledger?.orchestratorReward
+    ? formatMoneyHuman(moneyNumber(sale.ledger.orchestratorReward), sale.ledger.orchestratorReward.currency)
+    : "pending";
+  const community = sale?.communityPool
+    ? formatMoneyHuman(moneyNumber(sale.communityPool), sale.communityPool.currency)
+    : "pending";
+  return el("div", { class: "economy-stage-tiles" }, [
+    metricTile("scenario value", saleAmount, "mocked"),
+    metricTile("Mollie rail", checkout, sale?.payment?.mode ?? "not-created"),
+    metricTile("Labs retained", labs, "20%"),
+    metricTile("community rewards", community, phase === "rewards-paid" ? "released" : "ready"),
+  ]);
+}
+
+function economyStageActions(run, sale, phase) {
+  const actions = [];
+  if (!isRunComplete(run)) {
+    actions.push(el("a", { class: "button-link secondary-link", href: `#/host/${encodeURIComponent(run.id)}`, text: "Back to run" }));
+    return actions;
+  }
+  actions.push(el("button", {
+    class: sale ? "secondary" : null,
+    text: sale ? "Rebuild ledger" : "Create buyer scenario",
+    onclick: async () => {
+      try {
+        await createEconomyScenario(run, { recreate: Boolean(sale) });
+      } catch (error) {
+        economyMessages.set(run.id, error.message);
+        reconcileEconomySurface(run);
+      }
+    },
+  }));
+  actions.push(el("button", {
+    text: sale?.payment?.status === "paid" ? "Replay buyer payment" : "Process buyer payment",
+    disabled: sale ? null : "disabled",
+    onclick: async () => {
+      try {
+        await processMockBuyerPayment(run);
+      } catch (error) {
+        economyMessages.set(run.id, error.message);
+        reconcileEconomySurface(run);
+      }
+    },
+  }));
+  actions.push(el("button", {
+    class: phase === "rewards-paid" ? "secondary" : null,
+    text: phase === "rewards-paid" ? "Replay rewards" : "Release community rewards",
+    disabled: sale?.payment?.status === "paid" ? null : "disabled",
+    onclick: () => releaseCommunityRewards(run, sale),
+  }));
+  actions.push(el("a", { class: "button-link secondary-link", href: `#/host/${encodeURIComponent(run.id)}`, text: "Run dashboard" }));
+  return actions;
+}
+
+function economySettlementLedger(sale) {
+  if (!sale) return null;
+  return el("div", { class: "economy-ledger-grid" }, [
+    el("div", { class: "settlement-summary" }, [
+      el("div", { class: "section-kicker", text: "Settlement" }),
+      el("dl", { class: "kv" }, [
+        el("dt", { text: "payment id" }),
+        el("dd", { text: sale.payment?.paymentId ?? "not-created" }),
+        el("dt", { text: "payment status" }),
+        el("dd", { text: sale.payment?.status ?? "not_created" }),
+        el("dt", { text: "run" }),
+        el("dd", { text: sale.runId }),
+        el("dt", { text: "revision" }),
+        el("dd", { text: sale.modelRevisionId }),
+      ]),
+    ]),
+    el("div", { class: "settlement-summary" }, [
+      el("div", { class: "section-kicker", text: "Reward ledger" }),
+      economyRewardRows(sale),
+    ]),
+  ]);
+}
+
+async function renderEconomyRoute(route) {
+  clearBackendPoll();
+  teardownHost();
+  teardownParticipant();
+  app.append(el("section", { class: "panel" }, [el("h2", { text: "Loading buyer flow..." })]));
+  try {
+    const [run, sale] = await Promise.all([
+      backendClient.getRun(route.runId),
+      route.saleId ? backendClient.getEconomySale(route.saleId).catch((error) => {
+        economyMessages.set(route.runId, error.message);
+        return null;
+      }) : Promise.resolve(null),
+    ]);
+    if (!currentRouteStill("economy", route.runId)) return;
+    if (sale) economyByRun.set(run.id, sale);
+    app.replaceChildren();
+    mountEconomySnapshot(route, run);
+  } catch (error) {
+    if (!currentRouteStill("economy", route.runId)) return;
+    app.replaceChildren(
+      el("section", { class: "panel" }, [
+        el("h2", { text: "Buyer flow unavailable" }),
+        errorBox(error.message),
+        el("p", {}, el("a", { href: "#/", text: "Back to home" })),
+      ]),
+    );
+  }
+}
+
+function buildEconomyTree(route, run) {
+  const sale = economyByRun.get(run.id) ?? null;
+  const phase = currentEconomyPhase(run.id, sale);
+  const message = economyMessages.get(run.id) ?? "";
+  return el("section", { class: `economy-stage ${phaseClass(phase)}` }, [
+    el("header", { class: "economy-stage-head" }, [
+      el("div", {}, [
+        el("div", { class: "section-kicker", text: "Sovereign robotics economy" }),
+        el("h1", {}, ["Buyer flow ", stateBadge(run.state)]),
+      ]),
+      el("div", { class: "economy-stage-meta" }, [
+        el("span", { class: "mollie-mark", text: "Powered by Mollie" }),
+        el("span", { class: "chip", text: "mock settlement" }),
+        route.saleId ? el("span", { class: "chip", text: route.saleId }) : null,
+      ]),
+    ]),
+    isRunComplete(run)
+      ? null
+      : errorBox("Buyer flow unlocks after the federated adapter-continuation run completes."),
+    economyStageTiles(sale, phase),
+    economyFlowGraph(run, sale, phase),
+    el("div", { class: "economy-command-strip" }, economyStageActions(run, sale, phase)),
+    message ? el("p", { class: "note", text: message }) : null,
+    economyProofBlock(sale),
+    economySettlementLedger(sale),
+    sale?.payment?.fallbackReason ? errorBox(`Payment fallback: ${sale.payment.fallbackReason}`) : null,
+    el("p", { class: "muted" }, [
+      "Simulation only: no legal payout, no securities claim, and no raw data or Mollie secret leaves the server.",
+    ]),
+  ]);
+}
+
+function mountEconomySnapshot(route, run) {
+  runRef.current = run;
+  ensureBackendPoll("economy", run.id, { role: "host" });
+  app.append(buildEconomyTree(route, run));
+}
+
+function morphEconomySnapshot(route, run) {
+  runRef.current = run;
+  ensureBackendPoll("economy", run.id, { role: "host" });
+  if (!app.firstElementChild) {
+    mountEconomySnapshot(route, run);
+    return;
+  }
+  morph(app.firstElementChild, buildEconomyTree(route, run));
+}
+
 function economyRewardRows(sale) {
   const rows = sale?.ledger?.participantRewards ?? [];
   if (rows.length === 0) return note("Reward rows appear after the sale scenario is created.");
@@ -1085,78 +1461,13 @@ function economyProofBlock(sale) {
 function renderEconomyPanel(run) {
   const sale = economyByRun.get(run.id) ?? null;
   const message = economyMessages.get(run.id) ?? "";
-  const statusNote = keyed("economy-note", el("p", { class: "note", text: message }));
-  const createButton = keyed("economy-create", el("button", {
-    class: sale ? "secondary" : null,
-    text: sale ? "Recreate sale scenario" : "Create buyer sale scenario",
-    onclick: async () => {
-      const live = runRef.current ?? run;
-      economyMessages.set(live.id, "Creating deterministic contribution ledger...");
-      morphHostSnapshot(live);
-      try {
-        const created = await backendClient.createEconomySale({
-          runId: live.id,
-          modelRevisionId: latestRevisionId(live),
-        });
-        economyByRun.set(live.id, created);
-        economyMessages.set(live.id, "Sale scenario ready.");
-        morphHostSnapshot(live);
-      } catch (error) {
-        economyMessages.set(live.id, error.message);
-        morphHostSnapshot(live);
-      }
-    },
-  }));
-
-  const actions = [createButton];
-  if (sale) {
-    actions.push(keyed("economy-payment", el("button", {
-      text: sale.payment?.status === "not_created" ? "Create Mollie checkout" : "Refresh checkout",
-      onclick: async () => {
-        const live = runRef.current ?? run;
-        economyMessages.set(live.id, "Creating checkout/payment link...");
-        morphHostSnapshot(live);
-        try {
-          const updated = await backendClient.createEconomyPayment(sale.saleId, { allowMockFallback: true });
-          economyByRun.set(live.id, updated);
-          economyMessages.set(live.id, updated.payment?.mode === "mollie-test" ? "Mollie test checkout created." : "Mock checkout ready.");
-          morphHostSnapshot(live);
-        } catch (error) {
-          economyMessages.set(live.id, error.message);
-          morphHostSnapshot(live);
-        }
-      },
-    })));
-    if (sale.payment?.checkoutUrl) {
-      actions.push(keyed("economy-open", el("a", {
-        class: "button-link",
-        href: sale.payment.checkoutUrl,
-        target: "_blank",
-        rel: "noreferrer",
-        text: "Open checkout",
-      })));
-      actions.push(keyed("economy-paid", el("button", {
-        class: "secondary",
-        text: sale.payment.mode === "mollie-test" ? "Refresh payment status" : "Mark mock paid",
-        onclick: async () => {
-          const live = runRef.current ?? run;
-          economyMessages.set(live.id, "Checking payment status...");
-          morphHostSnapshot(live);
-          try {
-            const updated = await backendClient.refreshEconomyPayment(sale.saleId, {
-              markPaid: sale.payment.mode !== "mollie-test",
-            });
-            economyByRun.set(live.id, updated);
-            economyMessages.set(live.id, `Payment status: ${updated.payment?.status ?? "unknown"}.`);
-            morphHostSnapshot(live);
-          } catch (error) {
-            economyMessages.set(live.id, error.message);
-            morphHostSnapshot(live);
-          }
-        },
-      })));
-    }
-  }
+  const actions = [
+    keyed("economy-open-flow", el("a", {
+      class: "button-link",
+      href: economyRouteHref(run, sale),
+      text: isRunComplete(run) ? "Open buyer flow" : "Buyer flow after run",
+    })),
+  ];
 
   return el("div", { class: "economy-panel" }, [
     el("div", { class: "economy-head" }, [
@@ -1176,7 +1487,7 @@ function renderEconomyPanel(run) {
     economyProofBlock(sale),
     sale?.payment?.fallbackReason ? errorBox(`Payment fallback: ${sale.payment.fallbackReason}`) : null,
     el("div", { class: "economy-actions" }, actions),
-    statusNote,
+    keyed("economy-note", el("p", { class: "note", text: message })),
     sale
       ? el("p", { class: "muted" }, [
           "Simulation only: no legal payout, no securities claim, and no raw data or Mollie secret leaves the server.",
@@ -1268,6 +1579,9 @@ function buildBackendHostTree(run) {
         el("h1", {}, [`Run ${shortRunId(run)} `, stateBadge(run.state)]),
       ]),
       el("div", { class: "dashboard-head-meta" }, [
+        isRunComplete(run)
+          ? el("a", { class: "button-link buyer-flow-link", href: economyRouteHref(run, economyByRun.get(run.id)), text: "Open buyer flow" })
+          : null,
         el("span", { class: "chip", text: modeChip }),
         el("span", { class: "chip", text: `${transport} stream` }),
         el("a", { class: "text-link", href: "#/", text: "New run" }),

@@ -29,7 +29,14 @@ export function parseRoute(hash) {
     };
   }
   if (parts[0] === "host" && parts.length === 2) {
-    return { view: "host", runId: decodeURIComponent(parts[1]) };
+    return { view: "host", runId: decodeURIComponent(parts[1]), saleId: params.get("sale") ?? null };
+  }
+  if (parts[0] === "economy" && parts.length === 2) {
+    return {
+      view: "economy",
+      runId: decodeURIComponent(parts[1]),
+      saleId: params.get("sale") ?? null,
+    };
   }
   if (parts[0] === "admin" && parts.length === 2) {
     return { view: "admin", runId: decodeURIComponent(parts[1]) };
