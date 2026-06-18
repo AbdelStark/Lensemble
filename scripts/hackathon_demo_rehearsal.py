@@ -255,14 +255,19 @@ def _validate_surprise_card() -> dict[str, Any]:
     trajectory = _load_json(SURPRISE_TRAJECTORY)
     offset = json.loads(SURPRISE_OFFSET.read_text(encoding="utf-8"))
 
-    if evidence.get("schema") != "lewm-surprise/1" or evidence.get("passes") is not True:
+    if (
+        evidence.get("schema") != "lewm-surprise/1"
+        or evidence.get("passes") is not True
+    ):
         raise SystemExit(f"{SURPRISE_EVIDENCE} is not a passing lewm-surprise/1 card")
     if result_card.get("schema") != "lewm-surprise-result-card/1":
         raise SystemExit(f"{SURPRISE_RESULT_CARD} has the wrong schema")
     if trajectory.get("schema") != "lewm-surprise-traj/1":
         raise SystemExit(f"{SURPRISE_TRAJECTORY} has the wrong schema")
     if not isinstance(offset, list) or len(offset) != 12512:
-        raise SystemExit(f"{SURPRISE_OFFSET} must contain the 12,512-value adapter offset")
+        raise SystemExit(
+            f"{SURPRISE_OFFSET} must contain the 12,512-value adapter offset"
+        )
 
     display = result_card.get("display", {})
     for key, expected in {
@@ -351,7 +356,10 @@ def _economy_path(
 def _capture_assets(*, require_capture: bool) -> dict[str, Any]:
     assets: dict[str, Any] = {
         "clip": {"path": str(CAPTURE_CLIP), "present": CAPTURE_CLIP.is_file()},
-        "resultCardImage": {"path": str(CAPTURE_CARD), "present": CAPTURE_CARD.is_file()},
+        "resultCardImage": {
+            "path": str(CAPTURE_CARD),
+            "present": CAPTURE_CARD.is_file(),
+        },
     }
     if CAPTURE_CLIP.is_file():
         duration = _ffprobe_duration_seconds(CAPTURE_CLIP)

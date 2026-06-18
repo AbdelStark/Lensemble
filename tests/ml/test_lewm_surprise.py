@@ -31,9 +31,7 @@ def test_surprise_evidence_contract_matches_source_numbers() -> None:
         (EVIDENCE / "lewm_tworooms_system_probe.json").read_text(encoding="utf-8")
     )
     seedsweep = json.loads(
-        (EVIDENCE / "lewm_tworooms_probe_seedsweep.json").read_text(
-            encoding="utf-8"
-        )
+        (EVIDENCE / "lewm_tworooms_probe_seedsweep.json").read_text(encoding="utf-8")
     )
     assert payload["schema"] == "lewm-surprise/1"
     assert payload["passes"] is True
@@ -107,9 +105,7 @@ def test_surprise_pass_predicate_requires_mandatory_non_claims() -> None:
         (EVIDENCE / "lewm_tworooms_system_probe.json").read_text(encoding="utf-8")
     )
     seedsweep = json.loads(
-        (EVIDENCE / "lewm_tworooms_probe_seedsweep.json").read_text(
-            encoding="utf-8"
-        )
+        (EVIDENCE / "lewm_tworooms_probe_seedsweep.json").read_text(encoding="utf-8")
     )
     trajectory = module.build_fallback_trajectory(
         mean_pre=system["result"]["baselineMse"],

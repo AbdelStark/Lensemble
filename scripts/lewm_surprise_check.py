@@ -85,7 +85,11 @@ def build_fallback_trajectory(
     steps: int = 240,
 ) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
-    events = {84: ("teleport", 2.4), 138: ("ood-action", 2.15), 184: ("wall-teleport", 1.8)}
+    events = {
+        84: ("teleport", 2.4),
+        138: ("ood-action", 2.15),
+        184: ("wall-teleport", 1.8),
+    }
     for i in range(steps):
         phase = i / 18.0
         ripple = 0.0035 * math.sin(phase) + 0.0018 * math.sin(phase * 2.7 + 0.4)
@@ -151,7 +155,9 @@ def surprise_passes(payload: dict[str, Any]) -> bool:
             or payload.get("oodActionSpikeRatio", 0) > 1.5
         )
         and abs(payload.get("frameDiffCorrelation", 1)) < 0.6
-        and all(marker.split(":", 1)[0] in non_claims for marker in MANDATORY_NON_CLAIMS)
+        and all(
+            marker.split(":", 1)[0] in non_claims for marker in MANDATORY_NON_CLAIMS
+        )
     )
 
 

@@ -144,9 +144,9 @@ def main() -> None:
         assets = {
             "fallbackOffsetLength": len(_load_offset(fixture)),
             "trajectorySteps": len(_validate_trajectory(trajectory)["steps"]),
-            "resultCardSchema": json.loads(
-                result_card.read_text(encoding="utf-8")
-            ).get("schema"),
+            "resultCardSchema": json.loads(result_card.read_text(encoding="utf-8")).get(
+                "schema"
+            ),
         }
 
     report = {
