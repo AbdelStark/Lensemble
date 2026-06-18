@@ -105,18 +105,20 @@ for the depth under a slide.
 2. The question, *Who gets to own intelligence?*
 3. The bargain, the data deal and the turn into the alternative
 4. The alternative, *a world model the world improves together*
-5. Watch it think, what surprise is (↓ the formula)
-6. Surprise is not motion, the frame-difference contrast
-7. The room, a federated revision that made the model less surprised
-8. How it works, frozen backbone, a 12,512-param adapter, clipped deltas
-9. The proof, held-out error dropped 12.3% (↓ the five-seed table)
-10. The economy, a robotics buyer pays EUR 1,000,000 for the better model
-11. The reward ledger, the upside split by contribution weight
-12. The close, *intelligence the world improves, and the world owns*
+5. The bet, *why language models will not build robots* (the limits of the token paradigm)
+6. World models, *the ChatGPT moment for robotics* (predict the representation, JEPA)
+7. Watch it think, what surprise is (↓ the formula)
+8. Surprise is not motion, the frame-difference contrast
+9. The room, a federated revision that made the model less surprised
+10. How it works, frozen backbone, a 12,512-param adapter, clipped deltas
+11. The proof, held-out error dropped 12.3% (↓ the five-seed table)
+12. The economy, a robotics buyer pays EUR 1,000,000 for the better model
+13. The reward ledger, the upside split by contribution weight
+14. The close, *intelligence the world improves, and the world owns*
 
-**Appendix (↓ under slide 13, for the breakout and Q&A):**
+**Appendix (↓ under slide 15, for the breakout and Q&A):**
 
-13. In depth, Cartographer (see the model's mind), how the system is wired, reproducibility.
+15. In depth, Cartographer (see the model's mind), how the system is wired, reproducibility.
 
 ## Every number is sourced (verified against the evidence files)
 

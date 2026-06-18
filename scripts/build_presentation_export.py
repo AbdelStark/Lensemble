@@ -33,8 +33,8 @@ from pathlib import Path
 
 # slide hashes in talk order: each depth slide right after its parent.
 SLIDE_ORDER = [
-    "0", "1", "2", "3", "4", "4/1", "5", "6", "7", "8",
-    "8/1", "9", "10", "11", "12", "12/1", "12/2", "12/3",
+    "0", "1", "2", "3", "4", "5", "6", "6/1", "7", "8",
+    "9", "10", "10/1", "11", "12", "13", "14", "14/1", "14/2", "14/3",
 ]
 
 PRES = Path(__file__).resolve().parent.parent / (

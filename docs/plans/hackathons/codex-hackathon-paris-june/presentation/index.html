@@ -53,7 +53,7 @@
     <!-- persistent journal chrome -->
     <header class="frame frame-top">
       <span class="run-head">Sovereign world models</span>
-      <span class="folio" id="folio">Fig. 1 / 13</span>
+      <span class="folio" id="folio">Fig. 1 / 15</span>
     </header>
     <div class="frame-rule-top"></div>
     <canvas id="heartbeat" data-meter data-state="heartbeat" height="18"></canvas>
@@ -130,15 +130,82 @@
           real and measured. The upside belongs to them.
         </p>
         <div class="spacer"></div>
-        <p class="foot cite">Now watch it think.</p>
+        <p class="foot cite">But what kind of intelligence can hold a world?</p>
         <aside class="notes">
           0:40. This is the thesis. Slow down. Land "the data never leaves their
           devices" and "the upside belongs to them" as two separate promises, then
-          walk straight into the live demo.
+          turn to the question of what kind of model can actually do this.
         </aside>
       </section>
 
-      <!-- ===================================================== 5 · WATCH IT THINK -->
+      <!-- ===================================================== 5 · WHY NOT LLMs -->
+      <section data-fig="5">
+        <p class="kicker">The bet</p>
+        <h2>Language models<br/>will not build robots.</h2>
+        <p class="lede">
+          A language model learns the world secondhand, from text. A child takes in
+          more of physics by the age of four than every model trained on the whole
+          internet. Words are a thin trace of a world they never touch.
+        </p>
+        <div class="ledger-rows">
+          <div>
+            <span class="n">too thin</span>
+            <h4>Text is not the world</h4>
+            <p>No feel for gravity, for contact, for what stays true once you look away.</p>
+          </div>
+          <div>
+            <span class="n">it drifts</span>
+            <h4>Errors compound</h4>
+            <p>Every token is a guess. Over a long horizon the guesses drift into nonsense.</p>
+          </div>
+          <div>
+            <span class="n">no plan</span>
+            <h4>Nothing to plan over</h4>
+            <p>A stream of words is not a state you can search. Predicting text is not reasoning about consequences.</p>
+          </div>
+        </div>
+        <p class="aside">
+          <strong>More data makes them remember more, not understand more.</strong>
+          To act in the physical world, a machine needs a model of the world.
+        </p>
+        <aside class="notes">
+          The Yann LeCun argument, made concrete: autoregressive token models are the
+          wrong substrate for the physical world. Keep it human (the four-year-old, the
+          compounding guess) and land on "a machine needs a model of the world," the
+          handoff to JEPA.
+        </aside>
+      </section>
+
+      <!-- ===================================================== 6 · WORLD MODELS / JEPA -->
+      <section data-fig="6">
+        <p class="kicker">World models</p>
+        <h2>The ChatGPT moment<br/>for robotics.</h2>
+        <div class="with-margin">
+          <div>
+            <p class="lede">
+              ChatGPT was the moment a model understood language well enough to be
+              useful to everyone. A world model is that leap for the physical world:
+              it predicts what comes next in representation, not pixels, keeping what
+              matters and ignoring the noise it could never predict. JEPA makes it
+              stable, and small enough to run on the device in your hand.
+            </p>
+            <p class="foot cite">Predict the representation, not the pixel. That one choice is the whole bet.</p>
+          </div>
+          <ul class="margin-notes">
+            <li><b>action-conditioned</b> what if I do this?</li>
+            <li><b>causal</b> it holds when the world shifts</li>
+            <li><b>consistent</b> errors do not explode</li>
+          </ul>
+        </div>
+        <p class="turn">And you are about to <span class="hot">watch one think.</span></p>
+        <aside class="notes">
+          JEPA is LeCun's joint-embedding predictive architecture (I-JEPA, V-JEPA 2,
+          LeWM): it predicts in latent space, which is exactly what the live trace
+          measures next. Do not over-explain. Hand straight off to the demo.
+        </aside>
+      </section>
+
+      <!-- ===================================================== 7 · WATCH IT THINK -->
       <section data-fig="5">
         <section data-fig="5">
           <h2>Watch a world model realize<br/>it was wrong.</h2>
@@ -215,7 +282,7 @@
         </p>
         <div class="spacer"></div>
         <figure class="plate" style="height:118px"><canvas data-meter data-state="resolved"></canvas></figure>
-        <p class="fig-cap"><b>Fig. 7.</b> The same frozen backbone, one shared revision. The signal goes quiet</p>
+        <p class="fig-cap"><b>Fig. 9.</b> The same frozen backbone, one shared revision. The signal goes quiet</p>
         <aside class="notes">
           1:10. The federated beat. Keep it about people: "people in this room",
           "their own data", "nothing raw left their device". The cool, flat trace
@@ -268,7 +335,7 @@
             <strong>5.4%</strong> in the worst draw.
           </p>
           <figure class="plate" style="margin-top:var(--s3);height:104px"><canvas data-meter data-state="settle"></canvas></figure>
-          <p class="fig-cap"><b>Fig. 9.</b> Held-out error, before and after federation. Every seed improved</p>
+          <p class="fig-cap"><b>Fig. 11.</b> Held-out error, before and after federation. Every seed improved</p>
           <p class="foot cite">Source: <code>lewm_tworooms_system_probe.json</code> and the five-seed sweep. Press down for the full table.</p>
           <aside class="notes">
             1:25. The pre/post toggle runs on the held-out probe set, so the drop on
@@ -375,9 +442,9 @@
           <h2>In depth</h2>
           <p class="lede">The back matter, for the breakout room and your questions.</p>
           <ul class="appendix-list">
-            <li><b>13.1</b> See the model’s mind</li>
-            <li><b>13.2</b> How the system is wired</li>
-            <li><b>13.3</b> Every number is reproducible</li>
+            <li><b>15.1</b> See the model’s mind</li>
+            <li><b>15.2</b> How the system is wired</li>
+            <li><b>15.3</b> Every number is reproducible</li>
           </ul>
         </section>
 
