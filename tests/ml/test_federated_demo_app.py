@@ -675,18 +675,39 @@ def test_demo_http_api_websocket_replay_and_commands() -> None:
         server.server_close()
 
 
-def test_hackathon_demo_rehearsal_script_passes() -> None:
+def test_hackathon_demo_rehearsal_script_passes(tmp_path: Path) -> None:
     result = subprocess.run(
-        ["uv", "run", "python", "scripts/hackathon_demo_rehearsal.py"],
+        [
+            "uv",
+            "run",
+            "python",
+            "scripts/hackathon_demo_rehearsal.py",
+            "--surprise-offset-out",
+            str(tmp_path / "integrated_rehearsal_offset.json"),
+        ],
         capture_output=True,
         text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     report = json.loads(result.stdout)
     assert report["ok"] is True
+    assert report["schema"] == "sovereign-economy-rehearsal/1"
+    assert report["autonomousRung"] == "C"
     assert report["happyPath"]["state"] == "completed"
     assert report["dropoutPath"]["state"] == "completed"
     assert report["dropoutPath"]["dropped"]
+    assert report["surpriseGate"]["ok"] is True
+    assert report["surpriseCard"]["display"] == {
+        "seedMean": "+16.8%",
+        "seedWorst": "+5.4%",
+        "thisRun": "+12.3%",
+    }
+    assert report["economy"]["paymentMode"] == "mock"
+    assert report["economy"]["paymentStatus"] == "paid"
+    assert report["demoCard"]["salePrice"]["value"] == "1000000.00"
+    assert report["demoCard"]["orchestratorReward"]["value"] == "200000.00"
+    assert report["demoCard"]["communityPool"]["value"] == "800000.00"
+    assert "simulation-not-legal-payout" in report["demoCard"]["nonClaims"]["economy"]
 
 
 def test_demo_cli_exposes_one_command_server_help() -> None:

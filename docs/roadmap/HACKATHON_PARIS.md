@@ -64,6 +64,9 @@ Sibling idea [#337 (Latent Genie)](https://github.com/AbdelStark/Lensemble/issue
   `fixtures/adapter_offset.json`, `data/result_card.json`, and `data/surprise_trajectory.json`.
 - Sovereign-economy contracts `sovereign-sale/1` and `sovereign-contribution-ledger/1`.
 - Server-side Mollie test checkout path with `.env.example` placeholders and mock fallback.
+- Integrated rehearsal gate `scripts/hackathon_demo_rehearsal.py`, which emits
+  `sovereign-economy-rehearsal/1` and verifies the federated run, surprise fallback,
+  buyer sale, checkout mode, reward split, public non-claims, and local capture metadata.
 - (Stretch / #339) `cartographer-manifold/1` + `lewm-manifold/1` and `web/latent-manifold-viewer/`.
 
 ## Non-claims (carried on every surface)

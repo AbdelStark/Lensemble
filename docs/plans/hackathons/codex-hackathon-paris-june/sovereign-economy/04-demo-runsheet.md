@@ -38,6 +38,32 @@
 | C | Recorded surprise trajectory + mock checkout + deterministic ledger | Runtime fragile. |
 | D | <=20 s capture clip + result/economics card | Projector/browser fragile. |
 
+## Autonomous Gate
+
+Default deterministic rehearsal:
+
+```bash
+uv run python scripts/hackathon_demo_rehearsal.py
+```
+
+This emits `sovereign-economy-rehearsal/1` and executes rung C: synthetic
+federated run, surprise-meter rehearsal, recorded fallback assets, mock checkout,
+deterministic ledger, reward split, public non-claim string checks, and a JSON
+demo card with the required economics and surprise fields.
+
+Stage-machine rehearsal after local capture:
+
+```bash
+uv run python scripts/hackathon_demo_rehearsal.py --require-capture
+```
+
+Credentialed payment rehearsal, only when a server-side `.env` or shell already
+contains a Mollie test key:
+
+```bash
+uv run python scripts/hackathon_demo_rehearsal.py --payment-mode auto
+```
+
 ## Preflight
 
 - [ ] `.env` or shell has `MOLLIE_API_KEY` for credentialed path, or mock mode is selected.

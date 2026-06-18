@@ -18,7 +18,7 @@ Golden rule: **Milestone 0 alone is a valid demo.** The surprise-meter is the up
    [Point to the frame-diff trace.] "This isn't just motion detection. Here the agent moves fast but surprise stays low — predictable. Here it barely moves but surprise spikes — unexpected. Surprise is about *prediction*, not pixels changing."
 
 4. **The room's contribution (0:50–1:15).**
-   "Earlier, people in this room each trained a tiny adapter — 12,512 numbers, 0.07% of the model — on their own private trajectories. Nothing left their device. We averaged the clipped updates into one shared revision." [pre→post toggle on the held-out set.] "After that, the model is measurably less surprised by normal physics — held-out prediction error dropped 12% on this run, 17% on average across five seeds, and 5% in the *worst* seed." [HUD shows +12.3% **and** +5.4% worst, both sourced to the evidence file.] *(Showing the worst seed is the point — this is the honest version.)*
+   "Earlier, people in this room each continued a tiny adapter — 12,512 numbers, 0.07% of the model — on their own private trajectories while the checkpoint stayed frozen. Nothing left their device. We averaged the clipped updates into one shared revision." [pre→post toggle on the held-out set.] "After federated adapter continuation on a frozen checkpoint, the model is measurably less surprised on the held-out prediction-error task — down 12% on this run, 17% on average across five seeds, and 5% in the *worst* seed." [HUD shows +12.3% **and** +5.4% worst, both sourced to the evidence file.] *(Showing the worst seed is the point — this is the honest version.)*
 
 5. **Land it (1:15–1:30).**
    "A world model you can watch think, that a crowd improved while keeping their data private — running on a laptop, every number on screen backed by a generated, audited evidence file. And the whole thing — plan, typed contracts, the evidence gate — was built in a Codex loop. Thanks."
@@ -65,4 +65,4 @@ Default if fragile or short on time: narrate the live round for the crowd-partic
 
 ## Capture assets
 - **Clip (≤20 s):** glide (low) → perturb (spike) → frame-diff contrast → pre/post toggle (drop). 1080p.
-- **Result card:** the federated improvement as **"+12.3% this run · +16.8% mean · +5.4% worst (5 seeds)"** + "less surprised after a room trained an adapter — no data shared," citing the evidence file. Optional footer: "built in a Codex loop."
+- **Result card:** the federated improvement as **"+12.3% this run · +16.8% mean · +5.4% worst (5 seeds)"** + "less surprised after federated adapter continuation on a frozen checkpoint — no data shared," citing the evidence file. Optional footer: "built in a Codex loop."

@@ -346,7 +346,7 @@ Output schema **pinned `lewm-surprise-traj/1`** (rename from the plan's stray `c
 
 **Fallback (committed):** `web/surprise-meter/fixtures/adapter_offset.json` (len 12512) + `web/surprise-meter/data/surprise_trajectory.json`. **Both must be tracked (not under `runs/`).**
 
-**Capture:** ≤20 s clip (glide → perturb → spike → frame-diff contrast → pre/post toggle) + result card (+12.3% **and** worst-case +5.4%, "less surprised after the room trained an adapter — no data shared"), citing the evidence file.
+**Capture:** ≤20 s clip (glide → perturb → spike → frame-diff contrast → pre/post toggle) + result card (+12.3% **and** worst-case +5.4%, "less surprised after federated adapter continuation on a frozen checkpoint — no data shared"), citing the evidence file.
 
 **Acceptance:** rehearsal exits 0; committed fallbacks present and tracked; clip + card exported; pre-flight checklist (runsheet) green on the presentation browser at projector resolution with the `?ep=wasm` path confirmed.
 

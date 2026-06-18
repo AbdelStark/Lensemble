@@ -58,7 +58,7 @@ The earlier #338 issue draft was written before the feasibility spike. The spike
 2. **Milestone 1:** an in-browser **per-step surprise engine** (encode frame → predict next latent → compare to actual next latent → scalar MSE), over a live TwoRooms trajectory, using the exported ONNX graphs.
 3. A **surprise visualization**: a live meter/oscilloscope + the env canvas, with the agent/scene tinted by current surprise.
 4. **Perturbation controls** (teleport the agent, force an off-distribution action, push through the wall) that make surprise spike, with a **frame-diff baseline** panel proving *surprise ≠ motion*.
-5. A **pre- vs post-federation toggle** (apply the Milestone-0 adapter offset) showing surprise on in-distribution dynamics drops after the room trains it.
+5. A **pre- vs post-federation toggle** (apply the Milestone-0 adapter offset) showing surprise on in-distribution dynamics drops after federated adapter continuation on a frozen checkpoint.
 6. An **evidence JSON** (`lewm-surprise/1`) + producer + `tests/ml` test, sourcing the federated number from existing evidence.
 7. **Demo-day** rehearsal gate, pre-baked fallback, capture assets.
 
