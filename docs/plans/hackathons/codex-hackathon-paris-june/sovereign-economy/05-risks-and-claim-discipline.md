@@ -40,3 +40,46 @@
 - "This proves humanoid robot performance."
 - Named-company incident claims without verification.
 - "Per-pixel surprise heatmap."
+
+## Public Copy Checklist
+
+Use this before slide edits, the X post, and the 90-second stage script.
+
+### Slide Text
+
+- [ ] The opening problem says "frontier model access restrictions" and never
+      names a company or incident.
+- [ ] The technical mechanism says "federated adapter continuation on a frozen
+      checkpoint"; it never says the room trained the full world model.
+- [ ] The surprise result shows `+12.3% this run`, `+16.8% mean`, and `+5.4%
+      worst` together.
+- [ ] The buyer is "a humanoid robotics buyer" and is explicitly a placeholder.
+- [ ] The economics slide says "simulated sale", "Mollie test checkout", and
+      "demo ledger"; it does not imply real legal payouts.
+- [ ] Footer or notes preserve the non-claims: no DP, secure aggregation,
+      cryptographic proof, legal payout, or humanoid robot performance claim.
+
+### X Post
+
+- [ ] One hook only: sovereign model improvement with shared upside.
+- [ ] Includes the phrase "federated adapter continuation on a frozen
+      checkpoint" or a shorter equivalent that keeps the frozen-backbone
+      boundary.
+- [ ] Includes the worst seed if it mentions the mean: `+12.3% this run`,
+      `+16.8% mean`, `+5.4% worst`.
+- [ ] Says "Mollie test checkout" and "simulated reward ledger" if discussing
+      economics.
+- [ ] Does not name specific frontier-model companies, incidents, buyers, or
+      geopolitical claims without a separate verified source and approval.
+
+### Stage Script
+
+- [ ] Starts with sovereignty risk, then immediately shows the surprise meter
+      proof.
+- [ ] Says raw trajectories stay local; avoids saying privacy is guaranteed by
+      DP or cryptography.
+- [ ] Explains that only a 12,512-parameter adapter moves.
+- [ ] Uses the checkout as a tangible test-mode monetization step, not as real
+      revenue.
+- [ ] Ends on "sovereign model improvement with shared upside, not data
+      extraction."

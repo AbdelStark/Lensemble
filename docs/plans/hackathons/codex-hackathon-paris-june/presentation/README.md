@@ -5,10 +5,11 @@ It is the slide backdrop for the 90-second Demo-Night pitch, now grounded in the
 parent [sovereign-economy](../sovereign-economy/) plan with the
 [surprise-meter](../surprise-meter/) as the model-quality proof.
 
-> **Status: draft v0.3.** Built before the hackathon from the plans alone. Expect to edit
-> slides live as real screenshots, the live federated round, and the final capture clip land.
-> Slide content should now mirror [`sovereign-economy/04-demo-runsheet.md`](../sovereign-economy/04-demo-runsheet.md)
-> beat-for-beat; the runsheet is the source of truth for the spoken script.
+> **Status: stage v0.4.** The horizontal spine now mirrors
+> [`sovereign-economy/04-demo-runsheet.md`](../sovereign-economy/04-demo-runsheet.md)
+> beat-for-beat: sovereignty risk -> federated adapter-continuation proof ->
+> buyer checkout -> contribution-weighted reward split. The runsheet remains the
+> source of truth for the spoken script.
 
 ## Design — "The Offprint"
 
@@ -84,17 +85,19 @@ each slide.
 
 1. Title — *Sovereign robotics world-model economy*
 2. Problem — frontier model access restrictions and sovereignty risk
-3. Mechanism — community federated adapter continuation; raw data stays local
-4. Proof — surprise meter: scalar next-latent prediction error drops
-5. Buyer — a humanoid robotics buyer wants the improved revision
-6. Transaction — Mollie test checkout/payment link
-7. Rewards — orchestrator share + contribution-weighted participant split
-   · ↓ ledger table · ↓ evidence flow · ↓ claim do/don't columns
-8. Close — sovereign model improvement with shared upside + the Codex loop beat
+3. What surprise means — scalar next-latent prediction error
+4. Surprise is not motion — frame-diff contrast
+5. Federated adapter-continuation setup — raw data stays local
+6. Mechanism — 12,512-param adapter, clipped deltas, frozen backbone
+7. Proof — held-out surprise drops +12.3% this run / +16.8% mean / +5.4% worst
+   · ↓ seed table · ↓ evidence flow · ↓ claim do/don't columns
+8. Buyer — a humanoid robotics buyer wants the improved revision
+9. Rewards — Mollie test checkout boundary + orchestrator/community split ledger
+10. Close — sovereign model improvement with shared upside + the Codex loop beat
 
-**Appendix (↓ under slide 9 — off the live path, for Q&A / the breakout):**
+**Appendix (↓ under slide 11 — off the live path, for Q&A / the breakout):**
 
-9. Milestones (M0 must / M1 ship / M2 stretch) · Cartographer (#339) · Codex loop ·
+11. Milestones (M0 must / M1 ship / M2 stretch) · Cartographer (#339) · Codex loop ·
    Architecture · fallback ladder · Sources
 
 > Why the split: the runsheet's 90s never visits milestones/architecture/fallback — those

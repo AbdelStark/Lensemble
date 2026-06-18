@@ -204,7 +204,7 @@
     var el = document.getElementById("folio");
     if (!el || !window.Reveal) return;
     var idx = window.Reveal.getIndices();
-    var total = window.Reveal.getHorizontalSlides().length;
+    var total = document.querySelectorAll(".reveal .slides > section").length;
     var n = (idx.h + 1) + (idx.v ? "." + idx.v : "");
     el.textContent = "Fig. " + n + " / " + total;
   }
