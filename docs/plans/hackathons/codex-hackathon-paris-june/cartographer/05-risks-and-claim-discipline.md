@@ -13,7 +13,7 @@
 | R7 | Bake fails on the day | Low | High | Committed pre-event fallback `manifold.json` (rung C) | CART-9 |
 | R8 | Over-claim slips onto screen/X | Med | High (credibility) | The claim checklist below; nonClaims rendered from the artifact; evidence test asserts negations | all |
 | R9 | Harvest normalization mismatch (uint8/ImageNet) → garbage latents | Med | High | Verify `encode_frames` input expectation against `lewm_tworooms.py`; sanity-check eff_rank ≈ 9.86 and latent_std ≈ 0.90 against the certified system-probe diagnostics | CART-1 |
-| R10 | Time overrun (solo, one day) | Med | Med | Strict critical path (CART-1→4→7→9); CART-8 parallel on mock; v0 fallback baked Wed eve | — |
+| R10 | Time overrun (solo, one day) | Med | Med | Strict critical path (CART-1→4→7→9); CART-8 parallel on mock; v0 fallback must be baked before any live stretch demo | — |
 | R11 | Touching transformers version breaks checkpoint parity | Low | High | Do not change the env; pinned reconstruction is parity-tested; bake in the existing `uv` env | CART-1/3 |
 
 ## 2. Claim-discipline checklist (AGENTS.md §Claim Discipline is binding)

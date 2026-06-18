@@ -51,7 +51,7 @@ These were confirmed against source on 2026-06-17 and are detailed in `01-archit
 | SM-6 | ruff+pyright | `tests/ml` rehearsal gate | — | — |
 
 ## Ordering for a solo builder
-1. **Wed eve:** SM-1 to green (one-command + rehearsal); pre-bake fallback offset; scaffold `web/surprise-meter/` page from `dynamic-env-demo`.
+1. **Start of 2026-06-18:** SM-1 to green (one-command + rehearsal); pre-bake fallback offset; scaffold `web/surprise-meter/` page from `dynamic-env-demo`.
 2. **Thu AM:** SM-2 (engine + parity), then SM-3 (UI + perturbation + frame-diff).
 3. **Thu midday:** SM-4 (pre/post toggle) on the real revision.
 4. **Thu PM:** SM-5 evidence + test; SM-6 rehearsal + capture.

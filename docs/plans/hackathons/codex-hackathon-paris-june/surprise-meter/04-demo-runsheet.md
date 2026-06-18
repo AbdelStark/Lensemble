@@ -45,12 +45,12 @@ Default if fragile or short on time: narrate the live round for the crowd-partic
 | C | Recorded `surprise_trajectory.json` (`lewm-surprise-traj/1`) replayed in the meter (no live ONNX) | if WebGPU/ONNX won't run |
 | D | The ≤20 s capture clip | if the projector machine won't run the page |
 
-> ⚠️ **None of rungs B/C/D can be produced at the venue** — `onnxruntime` is absent from the uv venv, system node, and npm. **Wed-eve BLOCKING pre-req:** bake `web/surprise-meter/fixtures/adapter_offset.json` (len 12512, via `uv run --with onnxruntime --with hdf5plugin python scripts/surprise/run_clean_round.py …`) **and** `web/surprise-meter/data/surprise_trajectory.json` (via the node + `onnxruntime-node` bake, `scripts/surprise/bake_trajectory.mjs`), **and** record the ≤20 s clip. Commit all three (they live outside the gitignored `runs/`). Have rungs C and D on disk before walking on.
+> **Start-of-day BLOCKING pre-req (2026-06-18):** verify rungs B/C/D before relying on live runtime. `onnxruntime` is absent from the uv venv, system node, and npm, so bake `web/surprise-meter/fixtures/adapter_offset.json` (len 12512, via `uv run --with onnxruntime --with hdf5plugin python scripts/surprise/run_clean_round.py ...`) **and** `web/surprise-meter/data/surprise_trajectory.json` (via the node + `onnxruntime-node` bake, `scripts/surprise/bake_trajectory.mjs`), **and** record the <=20 s clip. Commit all three (they live outside the gitignored `runs/`). Have rungs C and D on disk before walking on.
 
 ---
 
 ## Pre-flight checklist (16:00–17:30)
-- [ ] Wed-eve pre-bake DONE: `web/surprise-meter/fixtures/adapter_offset.json` (len 12512, nonzero), `web/surprise-meter/data/surprise_trajectory.json` (`lewm-surprise-traj/1`), and the ≤20 s clip all committed (R13).
+- [ ] Start-of-day pre-bake DONE: `web/surprise-meter/fixtures/adapter_offset.json` (len 12512, nonzero), `web/surprise-meter/data/surprise_trajectory.json` (`lewm-surprise-traj/1`), and the <=20 s clip all committed (R13).
 - [ ] `scripts/surprise/rehearsal.py` green; `docs/evidence/lewm_tworooms_surprise.json` passes its test.
 - [ ] Milestone-0 one-command run reproduces audited evidence; the offset sidecar (len 12512) is produced.
 - [ ] **ONNX integrity (fail-closed gate):** the committed `model/lewm-tworooms/*.onnx` are fully present and their SHA-256 match `manifest.json` (sizes: encoder 25,923,986 · predictor 46,910,027 · action 641,851). A stale/partial graph throws `hash-mismatch` before the meter starts — verify with a 3-line node/python check at pre-flight.

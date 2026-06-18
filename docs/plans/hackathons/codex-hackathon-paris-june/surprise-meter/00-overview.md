@@ -127,7 +127,7 @@ Critical path: **SM-1 → SM-2 → SM-3 → SM-6**. Full breakdown: `03-workstre
 
 | Block | Work |
 |-------|------|
-| Pre-hack (Wed eve) | SM-1: get the clean federated run one-command + rehearsal green; pre-bake a fallback post-federation offset. Scaffold `web/surprise-meter/` page. |
+| Start of 2026-06-18 | SM-1: get the clean adapter-continuation round one-command + rehearsal green; pre-bake a fallback post-federation offset. Scaffold `web/surprise-meter/` page. |
 | 09:00–11:00 | SM-2 surprise engine (per-step loop, parity vs `lewm_probe.mjs`). |
 | 11:00–13:00 | SM-3 UI: meter/oscilloscope + env tint + perturbation + frame-diff baseline. |
 | 13:00–14:30 | SM-4 pre/post-federation toggle on the real revision. |

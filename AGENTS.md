@@ -16,6 +16,29 @@ comments as public claim surfaces, not scratch notes.
 - Do not rewrite generated evidence artifacts by hand. Regenerate them through
   their producer scripts or update the human-facing docs that summarize them.
 
+## Hackathon Today — 2026-06-18
+
+The active event is the Codex Hackathon in Paris. Treat today as ship mode:
+optimize every action for a reliable Demo-Night-ready `#338` delivery, not for
+new research scope.
+
+- Start with [`docs/plans/hackathons/codex-hackathon-paris-june/`](docs/plans/hackathons/codex-hackathon-paris-june/)
+  and the active tracker [#338](https://github.com/AbdelStark/Lensemble/issues/338).
+- Primary deliverable: **Less Surprised / surprise-meter**. The queue is
+  `#349` -> `#350` -> `#351` -> `#352` -> `#353` -> `#354`.
+- Open `#349` first. A clean federated adapter-continuation round plus
+  fallbacks is a valid standalone demo; do not let later UI work break that.
+- Do not work on Cartographer `#339`, Latent Genie `#337`, or other stretch
+  ideas until `#338` has a green rehearsal gate and fallback bundle.
+- If a path is blocked for more than a short build/debug cycle, choose the
+  demo-preserving fallback from the runsheet instead of widening scope.
+- Stage-ready assets have priority over elegance: one-command clean round,
+  committed adapter offset, recorded trajectory fallback, evidence JSON, <=20 s
+  capture, and claim-safe result card.
+- Keep the on-stage language exact: "federated adapter continuation on a frozen
+  checkpoint"; scalar surprise is next-latent MSE; show +12.3% this run,
+  +16.8% mean, and +5.4% worst seed together.
+
 ## Claim Discipline
 
 - The SO-100 MVP is a gauge-only result. It demonstrates that anchored

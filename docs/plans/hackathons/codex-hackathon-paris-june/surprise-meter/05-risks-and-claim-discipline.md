@@ -16,7 +16,7 @@
 | R10 | Committed fallback offset can't live at `runs/…` (gitignored) | High | Med | Commit it at `web/surprise-meter/fixtures/adapter_offset.json` (tracked, served); keep `runs/surprise/` as throwaway. | SM-1/6 |
 | R11 | `mean(post)<mean(pre)` not guaranteed on a free-running live trajectory (certified +12.3% is held-out-pairs only; worst seed +5.4%) | Med | High | The toggle runs on the **held-out probe-pair set** via `collectResidentPairs` (seed 991), computed once at load (Decision S10) → the drop *is* the certified number. Perturbation spikes stay on the pre-only meter. | SM-4 |
 | R12 | Node-based offline bake can't load local ONNX (global `fetch` has no `file://`) | Med | Med | The node bake injects a `readFileSync`-backed `fetchFn` and forces `preferredProviders:["cpu"]` (`01-architecture.md` §7). The pure-JS `surprise_selftest.mjs` needs no runtime. | SM-2/6 |
-| R13 | `onnxruntime` absent from uv venv, system node, **and** npm — no offline runtime for validation/bake | High | High | Wed-eve BLOCKING pre-req: Python bake via `uv run --with onnxruntime --with hdf5plugin …`; node trajectory bake via a throwaway `npm install onnxruntime-node`. R1 validation is **in-browser only**. | SM-1/6 |
+| R13 | `onnxruntime` absent from uv venv, system node, **and** npm — no offline runtime for validation/bake | High | High | Start-of-day BLOCKING pre-req (2026-06-18): Python bake via `uv run --with onnxruntime --with hdf5plugin ...`; node trajectory bake via a throwaway `npm install onnxruntime-node`. R1 validation is **in-browser only**. | SM-1/6 |
 
 ## 2. Claim-discipline checklist (AGENTS.md §Claim Discipline + spike #335 are binding)
 

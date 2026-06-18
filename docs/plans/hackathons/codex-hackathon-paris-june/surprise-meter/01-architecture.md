@@ -321,7 +321,7 @@ for t in range(2, n):                                                  # WARM-UP
 
 ## 7. WS5 — Rehearsal + fallback + capture (`SM-6`)
 
-**Pre-flight 0 (Wed-eve, BLOCKING): install an offline ONNX runtime.** `onnxruntime` is absent from the uv venv, system node, and npm — so **no fallback can be baked today** without this. Two routes:
+**Pre-flight 0 (start-of-day 2026-06-18, BLOCKING): install an offline ONNX runtime.** `onnxruntime` is absent from the uv venv, system node, and npm — so **no fallback can be baked at the venue** without this. Two routes:
 - **Python (offset, via h5):** `uv run --with onnxruntime --with hdf5plugin python scripts/surprise/run_clean_round.py --h5 ~/.cache/lensemble-lewm/tworoom.h5` (h5 present, 12.7 GB).
 - **Node (trajectory, via rendered env frames):** `cd web/surprise-meter && npm init -y && npm install onnxruntime-node@1.*` (build-time only — do **not** add a root dependency). The node bake **must** pass `preferredProviders:["cpu"]` (onnxruntime-node has no webgpu/wasm EP) and **must inject a `file://` fetchFn** (node global `fetch` cannot load `file://`):
 

@@ -6,6 +6,23 @@ The primary Codex-hackathon deliverable (working title **Less Surprised**): a cl
 
 > Parent: [#338](https://github.com/AbdelStark/Lensemble/issues/338). Stretch sibling: [Cartographer / #339](../cartographer/). Hackathon index: [`../README.md`](../README.md).
 
+## Today - ship queue
+
+It is hackathon day (2026-06-18). Do not reopen scope. Execute this order:
+
+1. `#349` - make Milestone 0 clean, one-command, audited, and fallback-safe.
+2. `#350` - build the per-step scalar surprise engine using the verified runtime
+   APIs.
+3. `#351` - put the meter, perturbation spike, and frame-diff baseline on
+   screen.
+4. `#352` - wire the held-out probe-pair pre/post toggle and source the
+   certified numbers.
+5. `#353` - generate/test `lewm-surprise/1`.
+6. `#354` - rehearse, bake fallback assets, capture the clip/card.
+
+Critical path: `#349 -> #350 -> #351 -> #354`. Cartographer is blocked until
+this path is stage-ready.
+
 ## Two milestones
 - **Milestone 0 (must):** a reliable, one-command, end-to-end federated adapter-continuation run + committed audited evidence + rehearsal gate. Standalone-demoable.
 - **Milestone 1 (ship):** the live surprise-meter (scalar prediction-error signal, perturbation spikes, frame-diff baseline, pre/post-federation toggle).

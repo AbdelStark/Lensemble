@@ -3,6 +3,15 @@
 Status tracker for the hackathon demo built on the LeWM federated stack. Detailed plans live under
 [`docs/plans/hackathons/codex-hackathon-paris-june/`](../plans/hackathons/codex-hackathon-paris-june/).
 
+## Today — 2026-06-18 start mode
+
+The hackathon is active now. The only winning path is to ship [#338](https://github.com/AbdelStark/Lensemble/issues/338)
+first. Start with [#349](https://github.com/AbdelStark/Lensemble/issues/349) and preserve a standalone
+Milestone-0 demo at every step: clean federated adapter-continuation round, audited evidence, exported
+adapter offset, fallback trajectory, short capture, and claim-safe result card. Cartographer
+[#339](https://github.com/AbdelStark/Lensemble/issues/339) remains planned stretch work until `#338` has
+a green rehearsal gate.
+
 ## Framing (claim discipline)
 
 The hackathon demo is built on **federated adapter continuation on a frozen LeWorldModel TwoRooms
@@ -16,9 +25,9 @@ and seed-robust (`docs/evidence/lewm_tworooms_system_probe.json`, `..._probe_see
 
 | Priority | Milestone | Issue(s) | Status |
 |---|---|---|---|
-| **0 — must** | A **clean federated training run** (adapter continuation): one-command end-to-end run, committed audited evidence, headless rehearsal gate, live-browser QR runbook. | #338 → SM-1 | Planned |
-| **1 — ship** | **Less Surprised / surprise-meter** (#338): live scalar prediction-error meter; perturbation spikes; frame-diff baseline; pre/post-federation toggle (on the held-out probe-pair set). | [#338](https://github.com/AbdelStark/Lensemble/issues/338) (SM-1…SM-6) | Planned |
-| **2 — stretch** | **Cartographer** (#339): WebGPU latent-manifold + planning viewer. Build only if #338 ships early. | [#339](https://github.com/AbdelStark/Lensemble/issues/339) (CART-1…CART-9) | Planned (stretch) |
+| **0 — must** | A **clean federated adapter-continuation round**: one-command end-to-end run, committed audited evidence, headless rehearsal gate, live-browser QR runbook. | [#338](https://github.com/AbdelStark/Lensemble/issues/338) -> [#349](https://github.com/AbdelStark/Lensemble/issues/349) | **Active now** |
+| **1 — ship** | **Less Surprised / surprise-meter** (#338): live scalar prediction-error meter; perturbation spikes; frame-diff baseline; pre/post-federation toggle (on the held-out probe-pair set). | [#350](https://github.com/AbdelStark/Lensemble/issues/350) -> [#354](https://github.com/AbdelStark/Lensemble/issues/354) | Next after #349 |
+| **2 — stretch** | **Cartographer** (#339): WebGPU latent-manifold + planning viewer. Build only if #338 ships early. | [#339](https://github.com/AbdelStark/Lensemble/issues/339) (CART-1…CART-9) | Locked until #338 rehearsal-green |
 
 Sibling idea [#337 (Latent Genie)](https://github.com/AbdelStark/Lensemble/issues/337) is **not pursued**
 (blocked by the no-decoder finding from the feasibility spike).
