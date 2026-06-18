@@ -211,6 +211,23 @@ def test_browser_files_do_not_expose_mollie_secrets() -> None:
     assert re.search(r"(?:test|live)_[A-Za-z0-9]{24,}", text) is None
 
 
+def test_economy_dashboard_cites_surprise_proof_contract() -> None:
+    app = Path("web/federated-demo/app.mjs").read_text(encoding="utf-8")
+    for needle in (
+        "Model-quality proof",
+        "+12.3%",
+        "+16.8%",
+        "+5.4%",
+        "docs/evidence/lewm_tworooms_surprise.json",
+        "docs/evidence/lewm_tworooms_system_probe.json",
+        "docs/evidence/lewm_tworooms_probe_seedsweep.json",
+        "Open surprise meter",
+        "run id",
+        "model revision",
+    ):
+        assert needle in app, needle
+
+
 def _money(amount: dict[str, Any]) -> Decimal:
     return Decimal(str(amount["value"]))
 

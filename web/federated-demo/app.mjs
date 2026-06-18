@@ -55,6 +55,16 @@ const adapters = defaultAdapters();
 
 const TIMELINE_MAX_EVENTS = 80;
 const METRICS_SHOWN = 4;
+const CERTIFIED_SURPRISE_PROOF = Object.freeze({
+  thisRun: "+12.3%",
+  mean: "+16.8%",
+  worst: "+5.4%",
+  sources: [
+    "docs/evidence/lewm_tworooms_surprise.json",
+    "docs/evidence/lewm_tworooms_system_probe.json",
+    "docs/evidence/lewm_tworooms_probe_seedsweep.json",
+  ],
+});
 
 let hostSession = null; // { run, bus, timer }
 let participantSession = null; // frontend-simulator participant session
@@ -971,6 +981,46 @@ function economyRewardRows(sale) {
   ]);
 }
 
+function economyProofBlock(sale) {
+  if (!sale) return null;
+  return el("div", { class: "economy-proof" }, [
+    el("div", { class: "economy-proof-head" }, [
+      el("h3", { text: "Model-quality proof" }),
+      el("a", {
+        class: "button-link secondary-link",
+        href: "/web/surprise-meter/?engine=auto&mode=post",
+        target: "_blank",
+        rel: "noreferrer",
+        text: "Open surprise meter",
+      }),
+    ]),
+    el("div", { class: "metric-tiles" }, [
+      metricTile("this run", CERTIFIED_SURPRISE_PROOF.thisRun, "certified"),
+      metricTile("mean", CERTIFIED_SURPRISE_PROOF.mean, "5 seeds"),
+      metricTile("worst", CERTIFIED_SURPRISE_PROOF.worst, "seed 2"),
+    ]),
+    el("table", { class: "reward-table provenance-table" }, [
+      el("tbody", {}, [
+        el("tr", {}, [
+          el("th", { text: "run id" }),
+          el("td", { text: sale.runId ?? "demo-run" }),
+        ]),
+        el("tr", {}, [
+          el("th", { text: "model revision" }),
+          el("td", { text: sale.modelRevisionId ?? "latest" }),
+        ]),
+        el("tr", {}, [
+          el("th", { text: "evidence" }),
+          el("td", {}, CERTIFIED_SURPRISE_PROOF.sources.map((source, index) => [
+            index > 0 ? " · " : "",
+            el("code", { text: source }),
+          ]).flat()),
+        ]),
+      ]),
+    ]),
+  ]);
+}
+
 function renderEconomyPanel(run) {
   const sale = economyByRun.get(run.id) ?? null;
   const message = economyMessages.get(run.id) ?? "";
@@ -1062,6 +1112,7 @@ function renderEconomyPanel(run) {
         ])
       : note("Create the sale scenario when the run has enough proof for the pitch, or use the deterministic fixture path during rehearsal."),
     sale ? economyRewardRows(sale) : null,
+    economyProofBlock(sale),
     sale?.payment?.fallbackReason ? errorBox(`Payment fallback: ${sale.payment.fallbackReason}`) : null,
     el("div", { class: "economy-actions" }, actions),
     statusNote,

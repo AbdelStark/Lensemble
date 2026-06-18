@@ -269,6 +269,33 @@ button:disabled {
   justify-content: space-between;
 }
 
+.economy-proof {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.economy-proof-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.economy-proof h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.secondary-link {
+  background: var(--surface-2);
+  color: var(--accent);
+  border-color: var(--line-strong);
+  box-shadow: none;
+}
+
 .reward-table {
   width: 100%;
   border-collapse: collapse;
@@ -293,6 +320,15 @@ button:disabled {
 .reward-table .num {
   text-align: right;
   font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.provenance-table th {
+  width: 118px;
+}
+
+.provenance-table td {
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
 }
 
 /* ------------------------------------------------------------------ badges */
