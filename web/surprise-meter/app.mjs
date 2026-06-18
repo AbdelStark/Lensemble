@@ -259,12 +259,13 @@ function setMode(mode) {
   engine.setMode(mode);
   surpRec.setBaseline(engine.baselineLevel());
   $("modeLabel").textContent = mode === "post" ? "post-federation" : "pre-federation";
-  if (mode === "post" && livePrePost) {
-    $("fedDelta").textContent = `browser held-out error ↓ ${(livePrePost.surpriseDropRatioLive * 100).toFixed(1)}% (${livePrePost.count} pairs); evidence ${pct(certified.relativeImprovement)}`;
+  if (mode === "post") {
+    const certifiedDrop = `certified held-out error ↓ ${pct(certified.relativeImprovement)} vs pre-federation`;
+    $("fedDelta").textContent = livePrePost
+      ? `${certifiedDrop}; browser spot-check ${pct(livePrePost.surpriseDropRatioLive)} (${livePrePost.count} pairs)`
+      : certifiedDrop;
   } else {
-    $("fedDelta").textContent = mode === "post"
-      ? "held-out error ↓ " + (certified.relativeImprovement * 100).toFixed(1) + "% vs pre-federation"
-      : "";
+    $("fedDelta").textContent = "";
   }
   document.querySelectorAll(".seg-btn").forEach((b) => b.classList.toggle("is-on", b.dataset.mode === mode));
 }

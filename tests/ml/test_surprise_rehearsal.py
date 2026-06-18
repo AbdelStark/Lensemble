@@ -38,7 +38,9 @@ def test_surprise_meter_page_carries_live_and_fallback_contracts() -> None:
         "collectResidentPairs",
         "buildPrePostStreams",
         "../federated-demo/model/lewm-tworooms/",
-        "browser held-out error",
+        "browser held-out check",
+        "certified held-out error",
+        "browser spot-check",
     ):
         assert needle in app, needle
     assert "?engine=live&ep=wasm" in readme
