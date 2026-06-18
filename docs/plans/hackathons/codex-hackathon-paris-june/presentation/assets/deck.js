@@ -1,5 +1,5 @@
 /* ============================================================================
-   Less Surprised — "The Offprint"
+   Less Surprised: "The Offprint"
    The surprise signal as a registered ink seismograph: a sweep-recorder that
    plots a single ink-blue hairline, overdraws the spiking segment in oxblood,
    drops an event rule, and leaves a faint ghost of the prior pass. No glow,
@@ -13,13 +13,13 @@
     window.matchMedia &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  // sRGB hex of the OKLCH print tokens — set explicitly so the canvas renders
+  // sRGB hex of the OKLCH print tokens: set explicitly so the canvas renders
   // identically regardless of a browser's oklch()-in-canvas support.
   var INK = "#222f3c";       // --trace-ink: calm recorded signal
   var ACCENT = "#96282b";    // --accent: oxblood
   var RESOLVED = "#3f6264";  // --resolved: "after federation", quiet & cool
-  var LEDGER = "rgba(37,28,22,0.07)"; // --ink @ 7% — graph reticule
-  var RULE = "rgba(37,28,22,0.22)";   // --ink @ 22% — baseline
+  var LEDGER = "rgba(37,28,22,0.07)"; // --ink @ 7%: graph reticule
+  var RULE = "rgba(37,28,22,0.22)";   // --ink @ 22%: baseline
   function loadColors() {}
 
   // Organic-but-deterministic baseline wander (no Math.random storms).
@@ -35,16 +35,22 @@
   function Seismo(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d");
-    this.state = canvas.dataset.state || "live"; // live | busy | calm | resolved | heartbeat
+    this.state = canvas.dataset.state || "live"; // live | busy | calm | resolved | settle | heartbeat
     this.heartbeat = this.state === "heartbeat";
+    // "settle": the before/after proof figure. A loud, oxblood "before" on the
+    // LEFT decays into a quiet ink "after" on the RIGHT, deterministically, so
+    // the most load-bearing figure always reads as improvement, never the
+    // reverse. The decay is a screen-space envelope applied at draw time.
+    this.settle = this.state === "settle";
 
     // Per-state character.
     var lv = {
-      live: 0.17, busy: 0.24, calm: 0.07, resolved: 0.05, heartbeat: 0.05,
+      live: 0.17, busy: 0.24, calm: 0.07, resolved: 0.05, settle: 0.30, heartbeat: 0.05,
     }[this.state];
     this.level = parseFloat(canvas.dataset.level || lv);
-    // the header heartbeat is a calm idling baseline (no decorative spikes) —
-    // the real signal only spikes on the captioned plates, as data.
+    // the header heartbeat is a calm idling baseline (no decorative spikes); the
+    // real signal only spikes on the captioned plates, as data. "settle" gets its
+    // loud-before from the envelope, not from random spikes, so it stays steady.
     this.spikes = this.state === "live" || this.state === "busy";
     this.spikeEvery = this.state === "busy" ? 2.6 : this.heartbeat ? 5.5 : 3.8;
     this.color = this.state === "resolved" ? RESOLVED : INK;
@@ -90,7 +96,7 @@
         this.spikeTimer = this.spikeEvery * (0.8 + 0.4 * Math.abs(Math.sin(this.t)));
       }
     }
-    this.spikeEnergy *= Math.pow(0.10, dt); // ink-recorder decay — the event lingers a beat
+    this.spikeEnergy *= Math.pow(0.10, dt); // ink-recorder decay: the event lingers a beat
     var base = wander(this.t, this.seed) * this.level;
     var spiking = this.spikeEnergy > 0.14;
     var transient = this.spikeEnergy * Math.sin(this.t * 30) * 0.95;
@@ -106,8 +112,19 @@
     var s = this.samples, hot = this.hots, self = this;
     ctx.clearRect(0, 0, w, h);
 
+    // "settle": a screen-space decay envelope (loud LEFT -> quiet RIGHT) and a
+    // positional hot mask (the left ~38% is the oxblood "before"). Everything
+    // else is identity, so the rest of the deck is untouched.
+    var envOf = this.settle
+      ? function (i) { return 0.12 + 0.98 * Math.pow(1 - i / (self.N - 1), 1.6); }
+      : function () { return 1; };
+    if (this.settle) {
+      hot = new Array(this.N);
+      for (var hi = 0; hi < this.N; hi++) hot[hi] = hi < this.N * 0.38 ? 1 : 0;
+    }
+
     if (!this.heartbeat) {
-      // engraved graph reticule + baseline — reads as plotting paper, not UI
+      // engraved graph reticule + baseline: reads as plotting paper, not UI
       ctx.strokeStyle = LEDGER; ctx.lineWidth = 1; ctx.beginPath();
       var cols = 12;
       for (var c = 1; c < cols; c++) { var gx = (c / cols) * w; ctx.moveTo(gx, h * 0.12); ctx.lineTo(gx, h * 0.88); }
@@ -119,7 +136,7 @@
       if (to - from < 2) return;
       ctx.beginPath();
       for (var i = from; i < to; i++) {
-        var x = self._x(i), y = mid - s[i] * amp;
+        var x = self._x(i), y = mid - s[i] * amp * envOf(i);
         if (i === from) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       }
       ctx.stroke();
@@ -127,7 +144,7 @@
 
     ctx.lineJoin = "round"; ctx.lineCap = "round";
 
-    // the full recorded signal — one continuous ink hairline
+    // the full recorded signal: one continuous ink hairline
     ctx.strokeStyle = this.color;
     ctx.lineWidth = this.heartbeat ? 1.3 : 2.0;
     poly(0, this.N);
@@ -141,7 +158,7 @@
         var st = i, peakI = i, peakV = Math.abs(s[i]);
         while (i < this.N && hot[i]) { if (Math.abs(s[i]) > peakV) { peakV = Math.abs(s[i]); peakI = i; } i++; }
         poly(Math.max(0, st - 1), Math.min(this.N, i + 1));
-        if (!this.heartbeat) {
+        if (!this.heartbeat && !this.settle) {
           var ex = this._x(peakI), ey = mid - s[peakI] * amp;
           ctx.save(); ctx.globalAlpha = 0.45; ctx.lineWidth = 1;
           ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ex, mid); ctx.stroke(); ctx.restore();

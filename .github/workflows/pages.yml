@@ -1,0 +1,71 @@
+# Deploy the Demo-Night deck to GitHub Pages as the project site root.
+#
+# The presentation lives at docs/plans/hackathons/codex-hackathon-paris-june/presentation/.
+# This workflow vendors reveal.js + the variable fonts into that directory (so the published
+# site has zero runtime CDN dependency, matching the deck's offline-first ethos), points the
+# deck at the vendored copies, and publishes the directory as the Pages site root. Visiting the
+# Pages URL then shows index.html (the deck) directly, not a subfolder.
+#
+# One-time setup: repo Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/plans/hackathons/codex-hackathon-paris-june/presentation/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+# Least-privilege plus the tokens the Pages deployment needs.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel an in-flight Pages deploy; queue the next one instead.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  DECK_DIR: docs/plans/hackathons/codex-hackathon-paris-june/presentation
+
+jobs:
+  build:
+    name: build deck site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vendor reveal.js + fonts (self-contained, no runtime CDN)
+        working-directory: ${{ env.DECK_DIR }}
+        run: |
+          chmod +x vendor.sh
+          ./vendor.sh
+
+      - name: Point the deck at the vendored assets
+        working-directory: ${{ env.DECK_DIR }}
+        run: |
+          sed -i 's/window.DECK_USE_VENDOR = false;/window.DECK_USE_VENDOR = true;/' index.html
+          grep -q 'window.DECK_USE_VENDOR = true;' index.html
+
+      - name: Disable Jekyll (serve files as-is, e.g. the reveal.js@5.1.0 dir)
+        working-directory: ${{ env.DECK_DIR }}
+        run: touch .nojekyll
+
+      - name: Upload Pages artifact (presentation dir = site root)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ env.DECK_DIR }}
+
+  deploy:
+    name: deploy to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

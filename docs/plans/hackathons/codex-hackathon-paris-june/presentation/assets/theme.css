@@ -1,5 +1,5 @@
 /* ============================================================================
-   Less Surprised — "The Offprint"
+   Less Surprised: "The Offprint"
    A demo presented as an article torn from a scientific journal.
    Warm bone paper · oxblood pigment · Fraunces + Newsreader + Spline Sans Mono ·
    the surprise signal as a registered ink seismograph · figure-number chrome.
@@ -14,10 +14,10 @@
   --ink:        oklch(0.236 0.018 60);
   --ink-2:      oklch(0.452 0.020 62);
   --ink-3:      oklch(0.572 0.020 64);
-  --accent:     oklch(0.452 0.146 24);   /* oxblood — the one pigment */
+  --accent:     oklch(0.452 0.146 24);   /* oxblood: the one pigment */
   --accent-deep:oklch(0.382 0.140 25);
   --trace-ink:  oklch(0.300 0.030 250);  /* calm recorded signal */
-  --resolved:   oklch(0.470 0.040 200);  /* "after federation" — quiet & cool */
+  --resolved:   oklch(0.470 0.040 200);  /* "after federation": quiet & cool */
   --ok:         oklch(0.430 0.075 145);  /* herbarium green, ✓ only */
   --rule:       oklch(0.236 0.018 60 / 0.18);
   --rule-strong:oklch(0.236 0.018 60 / 0.62);
@@ -30,7 +30,7 @@
   --font-mono:    "Spline Sans Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
 
   /* fixed scale (rem): the slide is a fixed 1280x720 canvas reveal scales
-     uniformly, so vw/vh inside slides would double-scale — use rem only here. */
+     uniformly, so vw/vh inside slides would double-scale: use rem only here. */
   --step--1: 0.80rem;
   --step-0:  1.05rem;
   --step-1:  1.55rem;
@@ -55,7 +55,7 @@ html, body, .reveal-viewport, .reveal { background: var(--paper); }
 .reveal .slides { text-align: left; }
 
 /* every slide is a typeset page, flush-left, with journal margins. reveal
-   (center:true) vertically centres each block between the journal rules — one
+   (center:true) vertically centres each block between the journal rules: one
    consistent vertical system across the whole deck. */
 .reveal .slides > section,
 .reveal .slides > section > section {
@@ -65,7 +65,7 @@ html, body, .reveal-viewport, .reveal { background: var(--paper); }
   padding: 44px 92px;       /* fixed px (≈7.2vw at 1280); vw is ambiguous inside the scaled canvas */
   text-align: left;
 }
-/* Centre the article block vertically — but ONLY on the present slide, so we don't
+/* Centre the article block vertically: but ONLY on the present slide, so we don't
    override reveal's inline display:none on hidden slides (which would unhide them).
    reveal sets display:block inline on the current slide; !important beats it. */
 .reveal .slides section.present {
@@ -92,7 +92,7 @@ html, body, .reveal-viewport, .reveal { background: var(--paper); }
 .reveal h3 { font-size: var(--step-1); font-weight: 520; }
 .reveal h4 { font-size: var(--step-0); font-weight: 600; letter-spacing: 0; }
 
-/* the one emphasized phrase per slide — true Fraunces italic, never a gradient */
+/* the one emphasized phrase per slide: true Fraunces italic, never a gradient */
 .ital { font-style: italic; font-variation-settings: "SOFT" 40, "WONK" 1; color: var(--accent); }
 
 .reveal em { font-style: italic; color: var(--accent-deep); }
@@ -162,7 +162,11 @@ code { background: none; padding: 0; }
 .folio { color: var(--accent); }
 .foot-l, .foot-r { color: var(--ink-2); }
 
-#heartbeat { position: fixed; left: 7.2vw; right: 7.2vw; top: 6.9vh; height: 15px;
+/* the always-on instrument. a <canvas> is a replaced element: with left+right
+   but no explicit width it falls back to its 300px intrinsic width and the
+   trace reads as a broken stub. give it a definite width so it spans the
+   full measure, margin to margin. */
+#heartbeat { position: fixed; left: 7.2vw; width: 85.6vw; top: 6.9vh; height: 15px;
   z-index: 29; pointer-events: none; opacity: 0.5; }
 
 /* --- the seismograph plate (the signature figure) ----------------------- */
@@ -193,7 +197,9 @@ code { background: none; padding: 0; }
 .fig-cap b { color: var(--accent); font-weight: 420; }
 
 /* --- masthead (cover & close) ------------------------------------------- */
-.masthead .display { margin-bottom: var(--s1); }
+/* give the big italic display headline room so its descenders clear the lede
+   on the emotional-peak slides (cover, alternative, the room, close). */
+.masthead .display { margin-bottom: var(--s2); }
 
 /* drop-initial for the first article paragraph */
 .drop-initial::first-letter {
@@ -204,7 +210,10 @@ code { background: none; padding: 0; }
 }
 
 /* --- right-margin marginalia (replaces pill chips) ---------------------- */
-.with-margin { display: grid; grid-template-columns: 1fr 9.5em; gap: 2.6rem; align-items: start; }
+/* the note rail hugs the text measure, the way a journal sets margin notes,
+   rather than floating off at the far slide edge. */
+.with-margin { display: grid; grid-template-columns: minmax(0, 27em) 11em;
+  gap: var(--s4); justify-content: start; align-items: start; margin-top: var(--s2); }
 .margin-notes { border-left: 1px solid var(--rule); padding-left: var(--s2); }
 .margin-notes li {
   font-family: var(--font-mono); font-size: 0.66rem; line-height: 1.5;
@@ -234,7 +243,7 @@ code { background: none; padding: 0; }
 .ledger-rows .tag { font-family: var(--font-mono); font-size: 0.6rem; color: var(--ink-3);
   letter-spacing: 0.06em; margin-top: var(--s1); display: block; }
 
-/* a ruled aside — the frozen-backbone proof note */
+/* a ruled aside: the frozen-backbone proof note */
 .aside {
   border-left: 2px solid var(--accent);
   padding-left: var(--s3);
@@ -242,6 +251,38 @@ code { background: none; padding: 0; }
   line-height: 1.4; max-width: 40em;
 }
 .aside strong { color: var(--ink); }
+
+/* --- the provocation: an epigraph question + the confident pivot line --- */
+/* the question slides carry no figure; they breathe. set the question as a
+   typeset epigraph in true Fraunces italic, one clause inked in oxblood. */
+.epigraph {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-variation-settings: "SOFT" 44, "WONK" 1, "opsz" 96;
+  font-weight: 480;
+  font-size: 2.08rem;
+  line-height: 1.12;
+  letter-spacing: -0.012em;
+  color: var(--ink);
+  max-width: 19em;
+  margin: var(--s3) 0 0;
+  text-wrap: balance;
+}
+.epigraph .hot { color: var(--accent); }
+
+/* the hinge of the talk: "We can do better. Here is how." */
+.turn {
+  font-family: var(--font-display);
+  font-weight: 560;
+  font-size: var(--step-1);
+  color: var(--ink);
+  letter-spacing: -0.006em;
+  margin-top: var(--s3);
+}
+.turn .hot {
+  color: var(--accent); font-style: italic;
+  font-variation-settings: "SOFT" 44, "WONK" 1;
+}
 
 /* --- the formula specimen ----------------------------------------------- */
 .formula {
@@ -264,6 +305,11 @@ code { background: none; padding: 0; }
   font-feature-settings: "tnum" 1;
 }
 
+/* the sale figure as a hero specimen: the money should detonate the way the
+   proof number does, not hide in a row. */
+.offer { font-size: var(--step-2); line-height: 1; margin: var(--s2) 0 0; }
+.offer .bignum { font-size: 1.9em; }
+
 /* --- ruled ledger tables ------------------------------------------------ */
 .ledger {
   width: 100%; border-collapse: collapse; font-family: var(--font-mono);
@@ -281,6 +327,8 @@ code { background: none; padding: 0; }
 .ledger .pos { color: var(--ink); }
 .ledger .worst { background: var(--wash); }
 .ledger .worst td { color: var(--accent-deep); }
+/* the largest contributor: let one real payout catch the eye */
+.ledger tr.lead td:last-child { color: var(--accent-deep); font-weight: 600; }
 .ledger .tagx { font-family: var(--font-display); font-style: italic; font-size: 0.86em;
   color: var(--ink-3); margin-right: 0.5em; font-variation-settings: "SOFT" 40; }
 .ledger .num { display: inline-block; }
@@ -296,40 +344,8 @@ code { background: none; padding: 0; }
 .steps .n { font-family: var(--font-mono); font-size: 0.58rem; color: var(--accent);
   letter-spacing: 0.12em; display: block; margin-bottom: var(--s1); }
 
-/* --- claim discipline: two hairline-ruled columns (the .fig-pair wraps) -- */
-.claims h4 { font-variation-settings: "opsz" 30; margin-bottom: var(--s2); }
-.claims.say h4 { color: var(--ok); }
-.claims.no  h4 { color: var(--accent); }
-.claims ul { margin: 0; padding: 0; }
-.claims li { list-style: none; font-family: var(--font-body); font-size: var(--step-0);
-  color: var(--ink-2); line-height: 1.32; margin: 0 0 var(--s2); padding-left: 1.1em;
-  text-indent: -1.1em; }
-.claims li::before { content: "—  "; color: var(--ink-3); }
-.claims.say li::before { content: "✓  "; color: var(--ok); }
-.claims.no  li::before { content: "✗  "; color: var(--accent); }
-.claims li strong { color: var(--ink); }
-
-/* --- milestones as ledger rows ------------------------------------------ */
-.runs { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--rule-strong);
-  border-bottom: 1px solid var(--rule-strong); margin: var(--s3) 0; }
-.runs > div { padding: var(--s2) var(--s3) var(--s3) 0; }
-.runs > div + div { border-left: 1px solid var(--rule); padding-left: var(--s3); }
-.runs .n { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.14em;
-  text-transform: uppercase; color: var(--accent); display: block; margin-bottom: var(--s2); }
-.runs.stretch .n { color: var(--ink-3); }
-.runs h4 { font-variation-settings: "opsz" 30; margin: 0 0 var(--s1); }
-.runs p { font-family: var(--font-body); font-size: var(--step-0); color: var(--ink-2);
-  line-height: 1.36; margin: 0; }
-
-/* --- codex build-loop as engraved nomenclature -------------------------- */
-.codex-line { font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.06em;
-  color: var(--ink-2); margin-top: var(--s2); }
-.codex-line .lbl { color: var(--accent); text-transform: uppercase; letter-spacing: 0.14em;
-  font-size: 0.62rem; margin-right: var(--s2); }
-.codex-line .sep { color: var(--ink-3); margin: 0 0.5em; }
-
 /* --- appendix code plates ----------------------------------------------- */
-/* code set on bare paper with a single hairline — no fill/box (keep the no-card discipline) */
+/* code set on bare paper with a single hairline: no fill/box (keep the no-card discipline) */
 .codeplate { background: none; border: none; border-top: 1px solid var(--rule-strong);
   padding: var(--s2) 0 0; margin: var(--s1) 0 0; }
 .codeplate pre { font-family: var(--font-mono); font-size: 0.62rem; line-height: 1.5;
@@ -348,11 +364,6 @@ code { background: none; padding: 0; }
 .sources li { font-family: var(--font-body); font-size: var(--step-0); color: var(--ink-2);
   padding: 0.4em 0; border-bottom: 1px solid var(--rule); }
 .sources code { color: var(--accent-deep); }
-
-/* draft mark, very quiet, in the bottom margin */
-.draft-tag { position: fixed; bottom: 3.3vh; left: 50%; transform: translateX(-50%);
-  font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.2em; text-transform: uppercase;
-  color: var(--ink-3); z-index: 30; pointer-events: none; }
 
 /* --- reveal chrome: hidden. The figure folio (Fig. n / 9) is the wayfinding;
    the generic chevrons + progress bar are the most off-voice thing in a

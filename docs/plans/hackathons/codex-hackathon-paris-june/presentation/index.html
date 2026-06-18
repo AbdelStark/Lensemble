@@ -3,19 +3,18 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sovereign Robotics World-Model Economy — Codex Hackathon Paris</title>
+  <title>Sovereign world models · Lensemble</title>
   <link rel="icon" href="data:," />
 
   <!--
-    Stage deck (v0.4) — "The Offprint" — for the Codex Hackathon, Paris.
-    The demo as an article torn from a scientific journal: warm bone paper,
-    oxblood pigment, Fraunces + Newsreader + Spline Sans Mono, and the surprise
-    signal as a registered ink seismograph (assets/deck.js). Grounded in
-    docs/plans/hackathons/codex-hackathon-paris-june/. Copy & every number are
-    locked to the claim-discipline doc; this is a visual system only.
+    "The Offprint": the talk presented as an article torn from a scientific
+    journal: warm bone paper, one oxblood pigment, Fraunces + Newsreader +
+    Spline Sans Mono, and the surprise signal as a registered ink seismograph
+    (assets/deck.js). One gesture per page. No glow, no gradient, no card.
 
-    Live spine (RIGHT arrow): Sovereignty · federated run · surprise proof ·
-    buyer checkout · reward split. Press DOWN for judge/breakout depth + Appendix.
+    Spine (RIGHT arrow): the question · the bargain · the alternative · watch it
+    think · surprise is not motion · the room makes it less surprised · how ·
+    the proof · a buyer · the reward ledger · the vision. Press DOWN for depth.
 
     Offline: run ./vendor.sh once, then set DECK_USE_VENDOR = true below.
   -->
@@ -53,8 +52,8 @@
 
     <!-- persistent journal chrome -->
     <header class="frame frame-top">
-      <span class="run-head">Sovereign world-model economy · surprise proof + reward ledger</span>
-      <span class="folio" id="folio">Fig. 1 / 11</span>
+      <span class="run-head">Sovereign world models</span>
+      <span class="folio" id="folio">Fig. 1 / 13</span>
     </header>
     <div class="frame-rule-top"></div>
     <canvas id="heartbeat" data-meter data-state="heartbeat" height="18"></canvas>
@@ -63,185 +62,225 @@
       <span class="foot-l">Lensemble · A federated JEPA world model</span>
       <span class="foot-r">github.com/AbdelStark/Lensemble</span>
     </footer>
-    <p class="draft-tag">Stage v0.4 · #359 sovereign economy</p>
 
     <div class="slides">
 
       <!-- ===================================================== 1 · COVER -->
       <section data-fig="1" class="masthead">
-        <p class="kicker">Codex Hackathon · Paris · Demo Night</p>
-        <h1 class="display">Sovereign world models</h1>
+        <p class="kicker">Codex Hackathon · Paris</p>
+        <h1 class="display">Sovereign<br/>world models</h1>
         <p class="lede">
-          A community improves a robotics world model without surrendering raw data,
-          then shares the simulated upside when a buyer pays for the revision.
+          The world model that learns your factory, your hospital, your city.
+          Made smarter by the people who use it. Owned by no one who can take it
+          away.
         </p>
         <div class="spacer"></div>
-        <figure class="plate" style="height:140px"><canvas data-meter data-state="live"></canvas></figure>
-        <p class="fig-cap"><b>Fig. 1</b> — next-latent prediction error, recorded live · arbitrary units</p>
-        <p class="foot cite">Federated adapter continuation · Mollie test checkout · contribution-weighted reward ledger.</p>
+        <figure class="plate" style="height:128px"><canvas data-meter data-state="live"></canvas></figure>
+        <p class="fig-cap"><b>Fig. 1.</b> Next-latent prediction error, recorded live</p>
         <aside class="notes">
-          Cover stays up while the agent is already gliding in the live demo. Don't read the
-          slide — go to the spike. The trace at the top of the page is the same instrument the
-          whole talk is recorded on.
+          The cover stays up while the live agent is already gliding behind you. Do
+          not read the slide. Point at the spike. The trace under the running head
+          is the same instrument the whole talk is recorded on.
         </aside>
       </section>
 
-      <!-- ===================================================== 2 · HOOK -->
+      <!-- ===================================================== 2 · THE QUESTION -->
       <section data-fig="2">
-        <h2 class="display">Robotics intelligence is becoming infrastructure.</h2>
+        <p class="kicker">The question</p>
+        <h2 class="display">Who gets to own<br/>intelligence?</h2>
         <p class="lede">
-          Frontier model access restrictions are a sovereignty risk: the world model that
-          understands your factory, lab, or city can be controlled somewhere else.
+          Robotics world models are becoming infrastructure. The model that
+          understands a factory, a hospital, a city is being built somewhere else,
+          and it can be priced, throttled, or switched off on terms you never
+          agreed to, by people you will never meet.
         </p>
-        <div class="spacer"></div>
-        <figure class="plate" style="height:236px"><canvas data-meter data-state="live"></canvas></figure>
-        <p class="fig-cap"><b>Fig. 2</b> — the technical proof will be a surprise trace, but the reason is sovereignty</p>
+        <p class="epigraph">A handful of companies, <span class="hot">or all of us?</span></p>
         <aside class="notes">
-          0:00–0:15 — start with the sovereignty risk, not model jargon. Use the approved
-          placeholder "frontier model access restrictions"; do not name companies or incidents.
-          Then point at the trace: "the technical proof is that we can make a robotics world
-          model less surprised without extracting people's raw trajectories."
+          0:10. Open on the stakes, not the model. Say it plainly: whoever owns the
+          world model owns how the physical world is allowed to act. Let the
+          question sit for a beat before you move.
         </aside>
       </section>
 
-      <!-- ===================================================== 3 · WHAT YOU SAW -->
+      <!-- ===================================================== 3 · THE BARGAIN -->
       <section data-fig="3">
-        <section data-fig="3">
-          <h2>That spike is a world model<br/>realizing it was wrong.</h2>
+        <p class="kicker">The bargain</p>
+        <h2 class="display">Look at the deal<br/>on the table.</h2>
+        <p class="lede">
+          Hand over your data. Let it train a mind you will never see inside. Then
+          pay to rent that intelligence back, on terms you do not set.
+        </p>
+        <p class="epigraph">Are we really fine giving the world away to train
+          something we are <span class="hot">not allowed to own?</span></p>
+        <p class="turn">We can do better. <span class="hot">So we built it.</span></p>
+        <aside class="notes">
+          0:25. This is the personal beat after the macro one. Keep it human and a
+          little angry. Then turn hard into the alternative. The turn line is the
+          hinge of the whole talk.
+        </aside>
+      </section>
+
+      <!-- ===================================================== 4 · THE ALTERNATIVE -->
+      <section data-fig="4" class="masthead">
+        <p class="kicker">The alternative</p>
+        <h2 class="display">A world model the world<br/>improves <span class="ital">together.</span></h2>
+        <p class="lede">
+          Thousands of people, each holding a sliver of the real world, make one
+          shared model smarter. The data never leaves their devices. The gains are
+          real and measured. The upside belongs to them.
+        </p>
+        <div class="spacer"></div>
+        <p class="foot cite">Now watch it think.</p>
+        <aside class="notes">
+          0:40. This is the thesis. Slow down. Land "the data never leaves their
+          devices" and "the upside belongs to them" as two separate promises, then
+          walk straight into the live demo.
+        </aside>
+      </section>
+
+      <!-- ===================================================== 5 · WATCH IT THINK -->
+      <section data-fig="5">
+        <section data-fig="5">
+          <h2>Watch a world model realize<br/>it was wrong.</h2>
           <div class="with-margin">
             <div>
               <p class="lede drop-initial">
-                A JEPA world model predicts what the world will look like next — in
-                <em>latent space</em>, not pixels. Surprise is the gap between what it
-                predicted and what actually happened.
+                It predicts what comes next, every frame. Surprise is the moment the
+                world does something it did not expect, measured in latent space,
+                not pixels. One number, and you can watch it spike.
               </p>
-              <p class="foot">Down for the exact quantity · ~6 ms/step on CPU (&gt;80 fps).</p>
+              <p class="foot">About 6 ms per step on a plain CPU, over 80 frames a second.</p>
             </div>
             <ul class="margin-notes">
-              <li><b>192-d</b> CLS latent, one vector per frame</li>
+              <li><b>192-d</b> latent, one vector per frame</li>
               <li><b>3-frame</b> predictor window</li>
               <li><b>no</b> pixel decoder</li>
             </ul>
           </div>
           <aside class="notes">
-            0:15–0:35. The model predicted all of that — low surprise. Then the world did
-            something it didn't expect → spike. "That spike is prediction error in latent
-            space — literally the signal this model is trained on."
+            0:50. The model predicted all of that, so the trace was flat. Then the
+            world did something it did not expect and the trace spiked. "That spike
+            is prediction error in latent space, the exact signal this model is
+            trained on."
           </aside>
         </section>
-        <section data-fig="3">
+        <section data-fig="5">
           <h3>Surprise is one number per frame</h3>
           <p class="formula">
             surprise<sub>t</sub> &nbsp;=&nbsp; ‖ <span class="pred">predicted next latent</span>
-            &nbsp;−&nbsp; <span class="true">actual next latent</span> ‖²
+            &nbsp;&minus;&nbsp; <span class="true">actual next latent</span> ‖²
           </p>
           <p class="lede">
-            A scalar prediction error in latent space — <strong>not</strong> a per-pixel
-            heatmap. The CLS-latent model emits one 192-d vector per frame, so surprise is a
-            recorded signal, not a picture.
+            A scalar prediction error in latent space, not a per-pixel heatmap. The
+            model emits one 192-d vector per frame, so surprise is a recorded
+            signal, the kind a journal once printed from an instrument.
           </p>
-          <p class="foot cite">Already implemented — <code>web/federated-demo/lewm_probe.mjs</code>. The recorder just runs it per step.</p>
+          <p class="foot cite">Implemented in <code>web/federated-demo/lewm_probe.mjs</code>. The recorder runs it once per frame.</p>
         </section>
       </section>
 
-      <!-- ===================================================== 4 · SURPRISE ≠ MOTION -->
-      <section data-fig="4">
+      <!-- ===================================================== 6 · SURPRISE ≠ MOTION -->
+      <section data-fig="6">
         <h2>Surprise is not motion.</h2>
         <div class="fig-pair">
           <div>
             <figure class="plate" style="height:118px"><canvas data-meter data-state="calm"></canvas></figure>
             <h4>Fast, predictable</h4>
-            <p>The agent sprints across the room — many pixels change, but the model saw it
-               coming. The trace stays flat.</p>
+            <p>The agent sprints across the room. A thousand pixels change, but the
+               model saw it coming, so the trace stays flat.</p>
           </div>
           <div>
             <figure class="plate" style="height:118px"><canvas data-meter data-state="busy"></canvas></figure>
             <h4>Tiny, unexpected</h4>
-            <p>The agent barely moves but does something off-distribution. Few pixels change —
-               the trace spikes.</p>
+            <p>The agent barely moves but does something off-distribution. Almost
+               nothing changes on screen, yet the trace spikes.</p>
           </div>
         </div>
-        <p class="foot cite">It is about <em>prediction</em>, not pixels changing — a live frame-diff trace runs alongside on stage to prove it.</p>
+        <p class="foot cite">It measures prediction, not pixels changing. A live frame-difference trace runs beside it on stage to prove the point.</p>
         <aside class="notes">
-          0:35–0:50. Point at the frame-diff trace; this kills the "it's just a motion detector"
-          objection. Pick moments where motion and surprise diverge.
+          1:00. Point at the frame-difference trace. This kills the "it is just a
+          motion detector" objection. Pick the moments where motion and surprise
+          clearly disagree.
         </aside>
       </section>
 
-      <!-- ===================================================== 5 · TWIST -->
-      <section data-fig="5">
-        <h2 class="display">Now a room of strangers<br/>makes an adapter <span class="ital">less surprised.</span></h2>
+      <!-- ===================================================== 7 · THE ROOM -->
+      <section data-fig="7" class="masthead">
+        <h2 class="display">A room of strangers just made it<br/><span class="ital">less surprised.</span></h2>
         <p class="lede">
-          Earlier, people in this room each continued a tiny adapter on a frozen checkpoint —
-          on their <strong>own private trajectories.</strong> Nothing raw left their device.
+          Minutes ago, people in this room each trained a small piece of this model
+          on their own private trajectories. Nothing raw ever left a single device.
+          No account, no upload, just a model that came back better than the one
+          they walked in with.
         </p>
         <div class="spacer"></div>
-        <figure class="plate" style="height:122px"><canvas data-meter data-state="resolved"></canvas></figure>
-        <p class="fig-cap"><b>Fig. 5</b> — the same frozen backbone plus a shared adapter revision · the signal goes quiet</p>
+        <figure class="plate" style="height:118px"><canvas data-meter data-state="resolved"></canvas></figure>
+        <p class="fig-cap"><b>Fig. 7.</b> The same frozen backbone, one shared revision. The signal goes quiet</p>
         <aside class="notes">
-          0:50 setup — the federated beat. Keep it human: "people in this room", "their own
-          data", "nothing raw left their device". Do not say the room trained the full model.
-          The cool, flat trace foreshadows the payoff.
+          1:10. The federated beat. Keep it about people: "people in this room",
+          "their own data", "nothing raw left their device". The cool, flat trace
+          is the payoff foreshadowed on the cover.
         </aside>
       </section>
 
-      <!-- ===================================================== 6 · HOW -->
-      <section data-fig="6">
-        <h2>How: federated adapter continuation</h2>
+      <!-- ===================================================== 8 · HOW -->
+      <section data-fig="8">
+        <h2>How it works</h2>
         <div class="ledger-rows">
           <div>
-            <span class="n">i · each participant</span>
-            <h4>Trains a 12,512-param adapter</h4>
-            <p>on their local TwoRooms trajectories.</p>
-            <span class="tag">0.069% of the model</span>
+            <span class="n">i · on every device</span>
+            <h4>Train a tiny adapter</h4>
+            <p>12,512 parameters, learned on your own local trajectories.</p>
+            <span class="tag">0.07% of the model</span>
           </div>
           <div>
-            <span class="n">ii · clipped delta</span>
-            <h4>Only the offset leaves</h4>
-            <p>the adapter delta is clipped and sent — never raw data.</p>
+            <span class="n">ii · what leaves</span>
+            <h4>Only an offset</h4>
+            <p>A clipped adapter delta is sent. The data itself stays put.</p>
           </div>
           <div>
-            <span class="n">iii · aggregate</span>
+            <span class="n">iii · together</span>
             <h4>One shared revision</h4>
-            <p>the mean of the clipped deltas updates the model.</p>
+            <p>The offsets are averaged into a single update to the model.</p>
           </div>
         </div>
         <p class="aside">
-          <strong>The backbone stays frozen — only the adapter moves.</strong> Federated adapter
-          continuation on a frozen checkpoint, <u>not</u> federated world-model training.
+          <strong>The backbone stays frozen. Only the adapter moves.</strong> The
+          data never leaves the device it was made on, and the model still gets
+          better for everyone.
         </p>
         <aside class="notes">
-          The honest mechanism. Spike #335: full-model federated training in-browser is a
-          GPU-scale NO-GO, so the backbone is frozen and only the 12,512-param (0.07%) adapter
-          trains and federates. If a judge asks "did you train a world model on phones?" — no,
-          and say so plainly. That honesty is the differentiator at a research table.
+          1:20. The honest mechanism. The backbone is frozen; a 12,512-parameter
+          adapter (0.07% of the model) is what trains and federates. We do not train
+          the full world model on the device, and saying that plainly is what makes
+          the claim trustworthy.
         </aside>
       </section>
 
-      <!-- ===================================================== 7 · RESULT (+ depth) -->
-      <section data-fig="7">
-        <section data-fig="7">
-          <h2>The model is measurably less surprised.</h2>
+      <!-- ===================================================== 9 · THE PROOF (+ depth) -->
+      <section data-fig="9">
+        <section data-fig="9">
+          <h2>The model is measurably<br/>less surprised.</h2>
           <p class="result-prose">
-            Held-out next-step prediction error fell <span class="bignum">+12.3%</span>
-            on this run — and across five independent seeds it never did worse than
-            <strong>+5.4%</strong>, averaging <strong>+16.8%</strong>. We always show the
-            worst seed beside the mean.
+            Held-out prediction error dropped <span class="bignum">12.3%</span>.
+            Across five independent seeds it dropped every single time, by
+            <strong>16.8%</strong> on average, and never less than
+            <strong>5.4%</strong> in the worst draw.
           </p>
-          <figure class="plate" style="margin-top:var(--s3);height:108px"><canvas data-meter data-state="busy"></canvas></figure>
-          <p class="fig-cap"><b>Fig. 7</b> — held-out error, before → after federation · all five seeds improved, no collapse</p>
-          <p class="foot cite">Source — <code>lewm_tworooms_system_probe.json</code> · <code>…_probe_seedsweep.json</code>. Down for the seed table, the audit, and what we never claim.</p>
+          <figure class="plate" style="margin-top:var(--s3);height:104px"><canvas data-meter data-state="settle"></canvas></figure>
+          <p class="fig-cap"><b>Fig. 9.</b> Held-out error, before and after federation. Every seed improved</p>
+          <p class="foot cite">Source: <code>lewm_tworooms_system_probe.json</code> and the five-seed sweep. Press down for the full table.</p>
           <aside class="notes">
-            0:50–1:15. The pre/post toggle runs on the held-out probe-pair set, so the drop IS
-            the certified number. "Held-out prediction error dropped 12% on this run, 17% on
-            average, and 5% in the WORST seed." Showing the worst seed is the point.
+            1:25. The pre/post toggle runs on the held-out probe set, so the drop on
+            screen is the certified number. Say it three ways: "12% on this run, 17%
+            on average, 5% in the worst seed." Showing the worst seed is the point.
           </aside>
         </section>
 
-        <section data-fig="7">
-          <h3>All five seeds — system-composed probe</h3>
+        <section data-fig="9">
+          <h3>Five seeds, the same federated path</h3>
           <table class="ledger">
-            <caption>real adapter deltas through the real server aggregation path</caption>
+            <caption>real adapter deltas through the real aggregation path</caption>
             <thead>
               <tr><th>seed</th><th>baseline MSE</th><th>adapted MSE</th><th>improvement</th></tr>
             </thead>
@@ -253,247 +292,153 @@
               <tr><td>4</td><td>0.0738</td><td>0.0497</td><td class="pos"><span class="tagx">best</span><span class="num">+32.6%</span></td></tr>
             </tbody>
             <tfoot>
-              <tr><td>mean · stdev · verdict</td><td></td><td></td><td>+16.8% · 0.11 · all improved</td></tr>
+              <tr><td>mean · stdev · verdict</td><td></td><td></td><td>+16.8% mean · 11 pts stdev · every seed improved</td></tr>
             </tfoot>
           </table>
-          <p class="foot cite">The headline cites the worst-case draw, not the best.</p>
-        </section>
-
-        <section data-fig="7">
-          <h3>Every number on screen is audited</h3>
-          <div class="steps">
-            <div><span class="n">i</span>a number on screen</div>
-            <div><span class="n">ii</span>a committed evidence JSON</div>
-            <div><span class="n">iii</span>the repo claim-audit</div>
-            <div><span class="n">iv</span>a test asserts the negations</div>
-          </div>
-          <p class="lede">
-            The anti-hype stance is the differentiator at a research table:
-            <em>here is the worst seed too.</em>
-          </p>
-          <p class="foot">Down for what we explicitly do not claim.</p>
-        </section>
-
-        <section data-fig="7">
-          <h3>Claim discipline</h3>
-          <div class="fig-pair">
-            <div class="claims say">
-              <h4>What we say</h4>
-              <ul>
-                <li>Federated adapter continuation on a <strong>frozen</strong> checkpoint</li>
-                <li>Scalar next-latent prediction error (CLS-latent)</li>
-                <li>+12.3% this run · <strong>+5.4% worst</strong> / +16.8% mean</li>
-                <li>Illustrative on the TwoRooms backbone</li>
-              </ul>
-            </div>
-            <div class="claims no">
-              <h4>What we never claim</h4>
-              <ul>
-                <li>“Federated world-model training” / “the room trained the model”</li>
-                <li>A per-pixel or spatial surprise heatmap</li>
-                <li>Differential privacy or cryptographic proof on this path</li>
-                <li>Beats local-only · anomaly detector · paper-scale</li>
-              </ul>
-            </div>
-          </div>
-          <aside class="notes">
-            On privacy: nothing leaves the device on this path, but we do NOT claim DP or secure
-            aggregation here — that plumbing exists elsewhere in the repo, not in this path.
-          </aside>
+          <p class="foot cite">Even the worst of the five seeds still improved, by 5.4%.</p>
         </section>
       </section>
 
-      <!-- ===================================================== 8 · BUYER -->
-      <section data-fig="8">
-        <p class="kicker">Economy</p>
-        <h2>A humanoid robotics buyer wants the improved revision.</h2>
-        <div class="ledger-rows">
-          <div>
-            <span class="n">buyer offer</span>
-            <h4>EUR 1,000,000</h4>
-            <p>the simulated value of the improved world-model revision.</p>
-          </div>
-          <div>
-            <span class="n">checkout</span>
-            <h4>Mollie test link</h4>
-            <p>server-side only; browser sees a checkout URL, never an API key.</p>
-          </div>
-          <div>
-            <span class="n">proof</span>
-            <h4>+12.3% this run</h4>
-            <p>the buyer pays for a measured revision, not a vague AI demo.</p>
-          </div>
-        </div>
+      <!-- ===================================================== 10 · BUYER -->
+      <section data-fig="10">
+        <p class="kicker">The economy</p>
+        <h2>A robotics company wants<br/>the better model.</h2>
+        <p class="offer"><span class="bignum">EUR 1,000,000</span></p>
+        <p class="lede" style="margin-top:var(--s2)">
+          What the improvement is worth to a buyer who needs it. They are paying for
+          a measured result, not a promise.
+        </p>
         <p class="aside">
-          The buyer is a placeholder and the checkout is test/simulation mode. This is a demo
-          economy contract, not revenue recognition or a legal sale.
+          <strong>The money flows to the people who made the model better, not to
+          whoever happens to host it.</strong> Not the platform. Not a lab. Them.
         </p>
         <aside class="notes">
-          0:55–1:15. "A humanoid robotics buyer wants access to the improved revision."
-          Open the checkout/payment link if live; otherwise use the mock checkout rung. Say
-          "Mollie test checkout" and "simulated sale amount" explicitly.
+          1:35. Open the checkout if it is live. The point is not the payment rails,
+          it is the direction of the money: into the network, to the contributors,
+          for a proven improvement.
         </aside>
       </section>
 
-      <!-- ===================================================== 9 · REWARDS -->
-      <section data-fig="9">
-        <p class="kicker">Reward ledger</p>
-        <h2>The simulated upside is split by contribution weight.</h2>
+      <!-- ===================================================== 11 · REWARDS -->
+      <section data-fig="11">
+        <p class="kicker">The reward ledger</p>
+        <h2>The upside goes back to the<br/>people who built it.</h2>
         <table class="ledger">
-          <caption>default demo ledger · sale EUR 1,000,000 · community pool EUR 800,000</caption>
+          <caption>sale EUR 1,000,000 · community pool EUR 800,000</caption>
           <thead>
-            <tr><th>row</th><th>weight</th><th>simulated reward</th></tr>
+            <tr><th>contributor</th><th>weight</th><th>reward</th></tr>
           </thead>
           <tbody>
-            <tr><td>L'Ensemble Labs · orchestrator</td><td>20% share</td><td>EUR 200,000.00</td></tr>
-            <tr><td>Ada</td><td>4122.1740</td><td>EUR 363,136.75</td></tr>
-            <tr><td>Ben</td><td>3123.0300</td><td>EUR 275,118.65</td></tr>
-            <tr><td>Chloe</td><td>1426.7360</td><td>EUR 125,686.17</td></tr>
-            <tr><td>Dan</td><td>409.3200</td><td>EUR 36,058.43</td></tr>
+            <tr><td>L'Ensemble Labs · the network</td><td>20% share</td><td>EUR 200,000.00</td></tr>
+            <tr class="lead"><td>Ada</td><td>4122.1740</td><td>EUR 363,136.75</td></tr>
+            <tr><td>Tomás</td><td>3123.0300</td><td>EUR 275,118.65</td></tr>
+            <tr><td>Priya</td><td>1426.7360</td><td>EUR 125,686.17</td></tr>
+            <tr><td>Mateo</td><td>409.3200</td><td>EUR 36,058.43</td></tr>
           </tbody>
           <tfoot>
-            <tr><td>cent-balanced total</td><td></td><td>EUR 1,000,000.00</td></tr>
+            <tr><td>balanced to the cent</td><td></td><td>EUR 1,000,000.00</td></tr>
           </tfoot>
         </table>
         <p class="foot cite">
-          Formula — sample count + local steps + runtime proxy, multiplied by accepted rounds,
-          update health, and demo-safe caps. Simulation only; not a legal payout.
+          Ada trained on the most data, so Ada earns the most. Every share is earned:
+          data trained on, rounds joined, how much each update actually helped. The
+          ledger balances to the cent.
         </p>
         <aside class="notes">
-          1:15–1:30. The point is not payment law; the point is an auditable incentive surface.
-          "The orchestrator keeps a configured share, the community pool is split by contribution
-          weight, and the ledger balances to the cent."
+          1:45. The point is an auditable incentive surface. "The network keeps a
+          configured share, the rest is split by contribution weight, and the whole
+          ledger balances to the cent." Then move to the close.
         </aside>
       </section>
 
-      <!-- ===================================================== 10 · CLOSE -->
-      <section data-fig="10" class="masthead">
-        <h2 class="display">A world model you can<br/>watch <span class="ital">think.</span></h2>
+      <!-- ===================================================== 12 · CLOSE -->
+      <section data-fig="12" class="masthead">
+        <h2 class="display">Intelligence the world improves,<br/>and the world <span class="ital">owns.</span></h2>
         <p class="lede">
-          Improved by federated adapter continuation. Monetized through a test checkout.
-          Split by an auditable contribution ledger. Every number on screen is backed by a
-          generated evidence file.
+          A world model you can watch think. Made smarter by a crowd that kept its
+          data. Paid for by those who need it. Owned by no one who can take it away.
         </p>
         <div class="spacer"></div>
-        <figure class="plate" style="height:106px"><canvas data-meter data-state="resolved"></canvas></figure>
-        <p class="codex-line"><span class="lbl">Built in a Codex loop</span>plan <span class="sep">→</span> typed contracts <span class="sep">→</span> evidence gate <span class="sep">↺</span></p>
-        <p class="foot cite">github.com/AbdelStark/Lensemble · Less Surprised · Codex Hackathon Paris</p>
+        <figure class="plate" style="height:96px"><canvas data-meter data-state="resolved"></canvas></figure>
+        <p class="turn" style="margin-top:var(--s3)">This is what <span class="hot">sovereign intelligence</span> looks like.</p>
+        <p class="foot cite">Open. Come build it: github.com/AbdelStark/Lensemble</p>
         <aside class="notes">
-          1:15–1:30. "A world model you can watch think, that a crowd improved while keeping
-          raw data local — then monetized and split through an auditable demo ledger. And the
-          whole thing — plan, typed contracts, the evidence gate — was built in a Codex loop.
-          Thanks." Codex is how it was built, not a claim the result was model-generated.
+          1:55. "A world model you can watch think, that a crowd improved while
+          keeping its data, then monetized and split through a ledger that pays the
+          contributors. Intelligence the world improves, and the world owns. Thanks."
         </aside>
       </section>
 
-      <!-- ===================================================== 11 · APPENDIX -->
-      <section data-fig="11">
-        <section data-fig="11">
-          <h2>Appendix</h2>
-          <p class="lede">Off the live path — the article’s back-matter, for judges and the breakout. Down to read on.</p>
+      <!-- ===================================================== 13 · IN DEPTH -->
+      <section data-fig="13">
+        <section data-fig="13">
+          <h2>In depth</h2>
+          <p class="lede">The back matter, for the breakout room and your questions.</p>
           <ul class="appendix-list">
-            <li><b>11.1</b> Milestones — what ships, in priority order</li>
-            <li><b>11.2</b> Cartographer — the stretch (#339)</li>
-            <li><b>11.3</b> Built in a Codex loop</li>
-            <li><b>11.4</b> Architecture · fallback ladder · sources</li>
+            <li><b>13.1</b> See the model’s mind</li>
+            <li><b>13.2</b> How the system is wired</li>
+            <li><b>13.3</b> Every number is reproducible</li>
           </ul>
         </section>
 
-        <section data-fig="11">
-          <h3>Milestones — always something to show</h3>
-          <div class="runs">
-            <div><span class="n">M0 · must</span><h4>A clean federated adapter-continuation round</h4>
-              <p>One command, end-to-end, committed audited evidence, rehearsal gate. <strong>Standalone-demoable.</strong></p></div>
-            <div><span class="n">M1 · ship</span><h4>The surprise-meter</h4>
-              <p>Live per-step surprise, perturbation spikes, frame-diff baseline, pre/post-federation toggle. The full deliverable.</p></div>
-            <div class="stretch"><span class="n">M2 · stretch</span><h4>Cartographer</h4>
-              <p>The WebGPU latent-manifold + planning viewer (#339). Built only if M1 ships with time to spare.</p></div>
-          </div>
-          <p class="aside" style="border-color:var(--ink-3)"><strong>Golden rule.</strong> Milestone 0 alone is a valid demo at every hour. Everything above only adds to it.</p>
-        </section>
-
-        <section data-fig="11">
-          <p class="kicker">Stretch · #339</p>
-          <h2>Cartographer — map its imagination</h2>
+        <section data-fig="13">
+          <p class="kicker">Cartographer</p>
+          <h2>See the model’s mind.</h2>
           <div class="with-margin">
             <div>
               <p class="lede">
-                The same model, turned into a rotating 3-D point cloud of its latent states,
-                with MPC planning trajectories igniting toward a goal.
+                The same model, turned into a rotating point cloud of its latent
+                states, with planning trajectories igniting toward a goal. You can
+                literally watch it imagine its next move.
               </p>
-              <p class="foot cite">Fully scoped, fully pre-baked — nothing hangs live. Built only if there is time.</p>
+              <p class="foot cite">A healthy model spreads across many dimensions. A collapsed one folds into a line.</p>
             </div>
             <ul class="margin-notes">
-              <li><b>eff-rank 9.86 → 1.0</b> healthy vs collapsed <span style="color:var(--ink-3)">illustrative rank-1 floor</span></li>
+              <li><b>eff-rank 9.86</b> healthy spread of latent states</li>
+              <li><b>rank 1.0</b> the collapse you never want</li>
               <li>plans on a laptop, in latent space</li>
-              <li>pre/post-federation toggle</li>
             </ul>
           </div>
         </section>
 
-        <section data-fig="11">
-          <h3>Built in a Codex loop</h3>
-          <p class="codex-line" style="font-size:0.9rem"><span class="lbl">the build</span>plan <span class="sep">→</span> typed contracts <span class="sep">→</span> evidence gate <span class="sep">↺</span></p>
-          <p class="lede">
-            The plan, the typed data contracts, and the evidence gate that backs every number —
-            assembled agentically. It is a Codex hackathon; this is <em>how it was built.</em>
-          </p>
-          <p class="foot">Not a claim that the model or the result was model-generated — just the build loop.</p>
-        </section>
-
-        <section data-fig="11">
-          <h3>Architecture</h3>
+        <section data-fig="13">
+          <h3>How the system is wired</h3>
           <div class="arch-grid">
             <div>
-              <div class="h">M0 — federated adapter-continuation run <span>(mostly exists)</span></div>
-              <div class="codeplate"><pre>browser federated-demo (QR join)
-  local trainer → adapter delta
-  → submit_update → aggregate
-  → model revision + offset
-system_probe.py (headless)
-  → docs/evidence/…_system_probe.json</pre></div>
+              <div class="h">The federated round</div>
+              <div class="codeplate"><pre>browser join (scan a QR code)
+  local trainer  -> adapter delta
+  -> submit_update -> aggregate
+  -> model revision + shared offset
+headless probe
+  -> docs/evidence/...system_probe.json</pre></div>
             </div>
             <div>
-              <div class="h">M1 — surprise-meter <span>(new page)</span></div>
-              <div class="codeplate"><pre>web/surprise-meter/  (imports federated-demo)
-  tworooms_env → live trajectory
-  lewm_runtime → encode / predict (ONNX)
-  surprise = MSE(pred_next, actual)
-  lewm_adapter → pre/post offset
-  → recorder + perturbation + frame-diff</pre></div>
+              <div class="h">The surprise meter</div>
+              <div class="codeplate"><pre>tworooms_env  -> live trajectory
+lewm_runtime  -> encode / predict (ONNX)
+surprise = MSE(pred_next, actual)
+lewm_adapter  -> before / after offset
+  -> recorder + perturbation + frame-diff</pre></div>
             </div>
           </div>
-          <p class="foot">WebGPU EP with WASM fallback (<code>?ep=wasm</code>). The recorder itself is 2-D canvas — no GPU dependency.</p>
+          <p class="foot">Runs on WebGPU with a WASM fallback. The seismograph recorder is pure 2-D canvas, so it never depends on a GPU.</p>
         </section>
 
-        <section data-fig="11">
-          <h3>Fallback ladder &amp; sources</h3>
-          <div class="fig-pair">
-            <div>
-              <table class="ledger">
-                <caption>use the highest rung that works</caption>
-                <tbody>
-                  <tr><td>A</td><td style="text-align:left">live round → recorder (pre/post from evidence)</td></tr>
-                  <tr><td>B</td><td style="text-align:left">live recorder, pre-baked offset</td></tr>
-                  <tr><td>C</td><td style="text-align:left">recorded trajectory replayed</td></tr>
-                  <tr><td>D</td><td style="text-align:left">the ≤20 s capture clip</td></tr>
-                </tbody>
-              </table>
-            </div>
-            <div>
-              <ul class="sources">
-                <li><code>lewm_tworooms_system_probe.json</code> — this-run +12.3%</li>
-                <li><code>lewm_tworooms_probe_seedsweep.json</code> — 5-seed mean/worst</li>
-                <li><code>AGENTS.md § Claim Discipline</code> — binding language</li>
-                <li>Spike #335 — full-model federated training in-browser is NO-GO</li>
-              </ul>
-            </div>
+        <section data-fig="13">
+          <h3>Every number is reproducible</h3>
+          <div class="steps">
+            <div><span class="n">i</span>a number on screen</div>
+            <div><span class="n">ii</span>a committed evidence file</div>
+            <div><span class="n">iii</span>a repo claim-audit</div>
+            <div><span class="n">iv</span>a test that asserts it</div>
           </div>
-          <aside class="notes">
-            Start-of-day BLOCKING pre-bake: commit the adapter offset + recorded trajectory + the
-            <=20 s clip before walking on — onnxruntime is absent at the venue, so rungs B/C/D
-            can't be produced there. Have C and D on disk before stage.
-          </aside>
+          <ul class="sources">
+            <li><code>lewm_tworooms_system_probe.json</code> &nbsp; this run, +12.3%</li>
+            <li><code>lewm_tworooms_probe_seedsweep.json</code> &nbsp; five-seed mean and worst</li>
+            <li><code>AGENTS.md § Claim Discipline</code> &nbsp; the binding language</li>
+          </ul>
+          <p class="foot">Nothing on the wall is hand-typed. Each figure traces back to a file you can open.</p>
         </section>
       </section>
 
