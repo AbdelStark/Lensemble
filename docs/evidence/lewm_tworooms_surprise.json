@@ -10,14 +10,15 @@
   "federatedSeedWorst": 0.054144202317108696,
   "federatedSeedStdev": 0.10969915982049769,
   "federatedWorstSeed": 2,
-  "perturbationSpikeRatio": 7.5015502624855355,
-  "oodActionSpikeRatio": 0.0,
-  "frameDiffCorrelation": 0.37520405025681947,
+  "perturbationSpikeRatio": 3.3298819586924173,
+  "oodActionSpikeRatio": 3.206321285640135,
+  "frameDiffCorrelation": -0.09868023004947606,
   "stepLatencyMsCpu": 6.2,
   "sources": {
     "systemProbe": "docs/evidence/lewm_tworooms_system_probe.json#result",
     "seedSweep": "docs/evidence/lewm_tworooms_probe_seedsweep.json#distribution",
-    "trajectory": "web/surprise-meter/data/surprise_trajectory.json"
+    "trajectory": "web/surprise-meter/data/surprise_trajectory.json",
+    "perturbationScenario": "scripts/lewm_surprise_check.py::build_fallback_trajectory(include_events=True)"
   },
   "crossCheck": {
     "systemProbePasses": true,

@@ -95,6 +95,11 @@ def _validate_trajectory(path: Path) -> dict[str, Any]:
         raise SystemExit(f"{path} must contain non-empty steps")
     if len(steps) > 600:
         raise SystemExit(f"{path} exceeds the 600-step fallback cap")
+    event_rows = [row for row in steps if isinstance(row, dict) and row.get("event")]
+    if event_rows:
+        raise SystemExit(
+            f"{path} must not autoplay perturbation events; found {len(event_rows)} event rows"
+        )
     return payload
 
 

@@ -16,7 +16,8 @@
   "sources": {
     "systemProbe": "docs/evidence/lewm_tworooms_system_probe.json#result",
     "seedSweep": "docs/evidence/lewm_tworooms_probe_seedsweep.json#distribution",
-    "trajectory": "web/surprise-meter/data/surprise_trajectory.json"
+    "trajectory": "web/surprise-meter/data/surprise_trajectory.json",
+    "perturbationScenario": "scripts/lewm_surprise_check.py::build_fallback_trajectory(include_events=True)"
   },
   "nonClaims": [
     "adapter-continuation-not-training: federated adapter continuation on a frozen checkpoint, not federated world-model training.",

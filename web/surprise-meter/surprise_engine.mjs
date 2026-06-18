@@ -223,11 +223,7 @@ export async function buildLiveSurpriseTrajectory({
   offset = null,
   steps = 96,
   seed = 20260618,
-  perturbations = [
-    { step: 34, kind: "teleport" },
-    { step: 56, kind: "ood" },
-    { step: 78, kind: "wall" },
-  ],
+  perturbations = [],
   policyOptions = { actionNoise: 1.0, actionRepeatProb: 0 },
 } = {}) {
   if (!runtime) throw new Error("runtime is required");

@@ -133,6 +133,12 @@ assert.equal(live.steps[1].surprisePre, null);
 assert.ok(Number.isFinite(live.steps[2].surprisePre));
 assert.equal(live.steps[4].event, "ood");
 
+const calmLive = await buildLiveSurpriseTrajectory({
+  runtime: liveRuntime,
+  steps: 8,
+});
+assert.ok(calmLive.steps.every((row) => row.event === null));
+
 const replay = new SurpriseEngine({
   trajectory: [
     { t: 0, agent: { x: 0.45, y: 0.5 }, surprisePre: 0.05, surprisePost: 0.04, frameDiff: 0.2 },

@@ -1,6 +1,6 @@
 {
   "schema": "lewm-surprise-traj/1",
-  "source": "deterministic fallback trajectory for rehearsal rung C; illustrative perturbations only",
+  "source": "deterministic fallback trajectory for rehearsal rung C; calm default replay; perturbations are user-triggered controls",
   "warmupSteps": 2,
   "steps": [
     {
@@ -10,10 +10,10 @@
         "x": 0.5,
         "y": 0.64681
       },
-      "surprisePre": 0.44448644,
-      "surprisePost": 0.3295246,
-      "frameDiff": 0.92041732,
-      "event": "wall-teleport"
+      "surprisePre": 0.06107993,
+      "surprisePost": 0.05347192,
+      "frameDiff": 0.64041732,
+      "event": null
     },
     {
       "i": 1,
@@ -22,10 +22,10 @@
         "x": 0.50999,
         "y": 0.65625
       },
-      "surprisePre": 0.44492067,
-      "surprisePost": 0.32983725,
-      "frameDiff": 0.95785049,
-      "event": "wall-teleport"
+      "surprisePre": 0.06151416,
+      "surprisePost": 0.05378456,
+      "frameDiff": 0.67785049,
+      "event": null
     },
     {
       "i": 2,
@@ -34,10 +34,10 @@
         "x": 0.51997,
         "y": 0.66538
       },
-      "surprisePre": 0.44533317,
-      "surprisePost": 0.33013425,
-      "frameDiff": 0.99107351,
-      "event": "wall-teleport"
+      "surprisePre": 0.06192666,
+      "surprisePost": 0.05408156,
+      "frameDiff": 0.71107351,
+      "event": null
     },
     {
       "i": 3,
@@ -46,10 +46,10 @@
         "x": 0.52994,
         "y": 0.67417
       },
-      "surprisePre": 0.44571843,
-      "surprisePost": 0.33041164,
-      "frameDiff": 1.0,
-      "event": "wall-teleport"
+      "surprisePre": 0.06231192,
+      "surprisePost": 0.05435895,
+      "frameDiff": 0.73803509,
+      "event": null
     },
     {
       "i": 4,
@@ -58,10 +58,10 @@
         "x": 0.53989,
         "y": 0.68262
       },
-      "surprisePre": 0.44607153,
-      "surprisePost": 0.33066587,
-      "frameDiff": 1.0,
-      "event": "wall-teleport"
+      "surprisePre": 0.06266502,
+      "surprisePost": 0.05461318,
+      "frameDiff": 0.75700886,
+      "event": null
     },
     {
       "i": 5,
@@ -70,10 +70,10 @@
         "x": 0.54981,
         "y": 0.69071
       },
-      "surprisePre": 0.44638823,
-      "surprisePost": 0.33089389,
-      "frameDiff": 1.0,
-      "event": "wall-teleport"
+      "surprisePre": 0.06298172,
+      "surprisePost": 0.0548412,
+      "frameDiff": 0.76671584,
+      "event": null
     },
     {
       "i": 6,
@@ -82,10 +82,10 @@
         "x": 0.55969,
         "y": 0.69842
       },
-      "surprisePre": 0.44666507,
-      "surprisePost": 0.33109322,
-      "frameDiff": 1.0,
-      "event": "wall-teleport"
+      "surprisePre": 0.06325856,
+      "surprisePost": 0.05504053,
+      "frameDiff": 0.76641611,
+      "event": null
     },
     {
       "i": 7,
@@ -94,10 +94,10 @@
         "x": 0.56954,
         "y": 0.70572
       },
-      "surprisePre": 0.44689943,
-      "surprisePost": 0.33126196,
-      "frameDiff": 1.0,
-      "event": "wall-teleport"
+      "surprisePre": 0.06349292,
+      "surprisePost": 0.05520927,
+      "frameDiff": 0.75596294,
+      "event": null
     },
     {
       "i": 8,
@@ -106,10 +106,10 @@
         "x": 0.57933,
         "y": 0.71262
       },
-      "surprisePre": 0.44708957,
-      "surprisePost": 0.33139885,
-      "frameDiff": 1.0,
-      "event": "wall-teleport"
+      "surprisePre": 0.06368306,
+      "surprisePost": 0.05534617,
+      "frameDiff": 0.73581551,
+      "event": null
     },
     {
       "i": 9,
@@ -118,10 +118,10 @@
         "x": 0.58907,
         "y": 0.7191
       },
-      "surprisePre": 0.44723465,
-      "surprisePost": 0.33150332,
-      "frameDiff": 0.98700932,
-      "event": "wall-teleport"
+      "surprisePre": 0.06382814,
+      "surprisePost": 0.05545063,
+      "frameDiff": 0.70700932,
+      "event": null
     },
     {
       "i": 10,
@@ -130,10 +130,10 @@
         "x": 0.59875,
         "y": 0.72513
       },
-      "surprisePre": 0.44733478,
-      "surprisePost": 0.33157541,
-      "frameDiff": 0.95108623,
-      "event": "wall-teleport"
+      "surprisePre": 0.06392827,
+      "surprisePost": 0.05552272,
+      "frameDiff": 0.67108623,
+      "event": null
     },
     {
       "i": 11,
@@ -142,10 +142,10 @@
         "x": 0.60836,
         "y": 0.73072
       },
-      "surprisePre": 0.44739096,
-      "surprisePost": 0.33161586,
-      "frameDiff": 0.90998931,
-      "event": "wall-teleport"
+      "surprisePre": 0.06398445,
+      "surprisePost": 0.05556317,
+      "frameDiff": 0.62998931,
+      "event": null
     },
     {
       "i": 12,
@@ -154,10 +154,10 @@
         "x": 0.6179,
         "y": 0.73584
       },
-      "surprisePre": 0.44740508,
-      "surprisePost": 0.33162602,
-      "frameDiff": 0.86592997,
-      "event": "wall-teleport"
+      "surprisePre": 0.06399857,
+      "surprisePost": 0.05557333,
+      "frameDiff": 0.58592997,
+      "event": null
     },
     {
       "i": 13,
@@ -166,10 +166,10 @@
         "x": 0.62736,
         "y": 0.7405
       },
-      "surprisePre": 0.44737983,
-      "surprisePost": 0.33160784,
-      "frameDiff": 0.82123695,
-      "event": "wall-teleport"
+      "surprisePre": 0.06397332,
+      "surprisePost": 0.05555516,
+      "frameDiff": 0.54123695,
+      "event": null
     },
     {
       "i": 14,
@@ -178,10 +178,10 @@
         "x": 0.63672,
         "y": 0.74467
       },
-      "surprisePre": 0.44731868,
-      "surprisePost": 0.33156382,
-      "frameDiff": 0.77819794,
-      "event": "wall-teleport"
+      "surprisePre": 0.06391217,
+      "surprisePost": 0.05551113,
+      "frameDiff": 0.49819794,
+      "event": null
     },
     {
       "i": 15,
@@ -190,10 +190,10 @@
         "x": 0.646,
         "y": 0.74836
       },
-      "surprisePre": 0.44722576,
-      "surprisePost": 0.33149691,
-      "frameDiff": 0.73890534,
-      "event": "wall-teleport"
+      "surprisePre": 0.06381925,
+      "surprisePost": 0.05544423,
+      "frameDiff": 0.45890534,
+      "event": null
     },
     {
       "i": 16,
@@ -202,10 +202,10 @@
         "x": 0.65517,
         "y": 0.75155
       },
-      "surprisePre": 0.44710577,
-      "surprisePost": 0.33141052,
-      "frameDiff": 0.70511702,
-      "event": "wall-teleport"
+      "surprisePre": 0.06369926,
+      "surprisePost": 0.05535783,
+      "frameDiff": 0.42511702,
+      "event": null
     },
     {
       "i": 17,
@@ -214,10 +214,10 @@
         "x": 0.66423,
         "y": 0.75423
       },
-      "surprisePre": 0.44696385,
-      "surprisePost": 0.33130834,
-      "frameDiff": 0.67814225,
-      "event": "wall-teleport"
+      "surprisePre": 0.06355734,
+      "surprisePost": 0.05525565,
+      "frameDiff": 0.39814225,
+      "event": null
     },
     {
       "i": 18,
@@ -226,10 +226,10 @@
         "x": 0.67318,
         "y": 0.75641
       },
-      "surprisePre": 0.44680548,
-      "surprisePost": 0.33119431,
-      "frameDiff": 0.65876073,
-      "event": "wall-teleport"
+      "surprisePre": 0.06339897,
+      "surprisePost": 0.05514163,
+      "frameDiff": 0.37876073,
+      "event": null
     },
     {
       "i": 19,
@@ -238,10 +238,10 @@
         "x": 0.68201,
         "y": 0.75808
       },
-      "surprisePre": 0.44663635,
-      "surprisePost": 0.33107254,
-      "frameDiff": 0.64718052,
-      "event": "wall-teleport"
+      "surprisePre": 0.06322984,
+      "surprisePost": 0.05501985,
+      "frameDiff": 0.36718052,
+      "event": null
     },
     {
       "i": 20,
@@ -250,10 +250,10 @@
         "x": 0.69072,
         "y": 0.75923
       },
-      "surprisePre": 0.44646219,
-      "surprisePost": 0.33094714,
-      "frameDiff": 0.64303772,
-      "event": "wall-teleport"
+      "surprisePre": 0.06305568,
+      "surprisePost": 0.05489445,
+      "frameDiff": 0.36303772,
+      "event": null
     },
     {
       "i": 21,
@@ -262,10 +262,10 @@
         "x": 0.69929,
         "y": 0.75986
       },
-      "surprisePre": 0.44628868,
-      "surprisePost": 0.33082221,
-      "frameDiff": 0.64543775,
-      "event": "wall-teleport"
+      "surprisePre": 0.06288217,
+      "surprisePost": 0.05476953,
+      "frameDiff": 0.36543775,
+      "event": null
     },
     {
       "i": 22,
@@ -274,10 +274,10 @@
         "x": 0.70773,
         "y": 0.75998
       },
-      "surprisePre": 0.4461213,
-      "surprisePost": 0.3307017,
-      "frameDiff": 0.65303503,
-      "event": "wall-teleport"
+      "surprisePre": 0.06271479,
+      "surprisePost": 0.05464901,
+      "frameDiff": 0.37303503,
+      "event": null
     },
     {
       "i": 23,
@@ -286,10 +286,10 @@
         "x": 0.71602,
         "y": 0.75958
       },
-      "surprisePre": 0.44596518,
-      "surprisePost": 0.3305893,
-      "frameDiff": 0.66414514,
-      "event": "wall-teleport"
+      "surprisePre": 0.06255867,
+      "surprisePost": 0.05453661,
+      "frameDiff": 0.38414514,
+      "event": null
     },
     {
       "i": 24,
@@ -298,10 +298,10 @@
         "x": 0.72417,
         "y": 0.75865
       },
-      "surprisePre": 0.44582503,
-      "surprisePost": 0.33048839,
-      "frameDiff": 0.67688109,
-      "event": "wall-teleport"
+      "surprisePre": 0.06241852,
+      "surprisePost": 0.0544357,
+      "frameDiff": 0.39688109,
+      "event": null
     },
     {
       "i": 25,
@@ -310,10 +310,10 @@
         "x": 0.73215,
         "y": 0.75721
       },
-      "surprisePre": 0.44570497,
-      "surprisePost": 0.33040194,
-      "frameDiff": 0.68930358,
-      "event": "wall-teleport"
+      "surprisePre": 0.06229846,
+      "surprisePost": 0.05434926,
+      "frameDiff": 0.40930358,
+      "event": null
     },
     {
       "i": 26,
@@ -322,10 +322,10 @@
         "x": 0.73998,
         "y": 0.75526
       },
-      "surprisePre": 0.44560849,
-      "surprisePost": 0.33033248,
-      "frameDiff": 0.69957441,
-      "event": "wall-teleport"
+      "surprisePre": 0.06220198,
+      "surprisePost": 0.05427979,
+      "frameDiff": 0.41957441,
+      "event": null
     },
     {
       "i": 27,
@@ -334,10 +334,10 @@
         "x": 0.74764,
         "y": 0.7528
       },
-      "surprisePre": 0.44553833,
-      "surprisePost": 0.33028196,
-      "frameDiff": 0.70610141,
-      "event": "wall-teleport"
+      "surprisePre": 0.06213182,
+      "surprisePost": 0.05422928,
+      "frameDiff": 0.42610141,
+      "event": null
     },
     {
       "i": 28,
@@ -346,10 +346,10 @@
         "x": 0.75513,
         "y": 0.74983
       },
-      "surprisePre": 0.44549644,
-      "surprisePost": 0.3302518,
-      "frameDiff": 0.70766449,
-      "event": "wall-teleport"
+      "surprisePre": 0.06208993,
+      "surprisePost": 0.05419911,
+      "frameDiff": 0.42766449,
+      "event": null
     },
     {
       "i": 29,
@@ -358,10 +358,10 @@
         "x": 0.76245,
         "y": 0.74637
       },
-      "surprisePre": 0.44548392,
-      "surprisePost": 0.33024279,
-      "frameDiff": 0.70351345,
-      "event": "wall-teleport"
+      "surprisePre": 0.06207741,
+      "surprisePost": 0.0541901,
+      "frameDiff": 0.42351345,
+      "event": null
     },
     {
       "i": 30,
@@ -370,10 +370,10 @@
         "x": 0.76958,
         "y": 0.74241
       },
-      "surprisePre": 0.445501,
-      "surprisePost": 0.33025509,
-      "frameDiff": 0.69343028,
-      "event": "wall-teleport"
+      "surprisePre": 0.06209449,
+      "surprisePost": 0.0542024,
+      "frameDiff": 0.41343028,
+      "event": null
     },
     {
       "i": 31,
@@ -382,10 +382,10 @@
         "x": 0.77653,
         "y": 0.73797
       },
-      "surprisePre": 0.44554705,
-      "surprisePost": 0.33028824,
-      "frameDiff": 0.6777514,
-      "event": "wall-teleport"
+      "surprisePre": 0.06214054,
+      "surprisePost": 0.05423555,
+      "frameDiff": 0.3977514,
+      "event": null
     },
     {
       "i": 32,
@@ -394,10 +394,10 @@
         "x": 0.78328,
         "y": 0.73305
       },
-      "surprisePre": 0.44562056,
-      "surprisePost": 0.33034117,
-      "frameDiff": 0.65734809,
-      "event": "wall-teleport"
+      "surprisePre": 0.06221405,
+      "surprisePost": 0.05428849,
+      "frameDiff": 0.37734809,
+      "event": null
     },
     {
       "i": 33,
@@ -406,10 +406,10 @@
         "x": 0.78984,
         "y": 0.72767
       },
-      "surprisePre": 0.44571922,
-      "surprisePost": 0.33041221,
-      "frameDiff": 0.63356658,
-      "event": "wall-teleport"
+      "surprisePre": 0.06231271,
+      "surprisePost": 0.05435952,
+      "frameDiff": 0.35356658,
+      "event": null
     },
     {
       "i": 34,
@@ -418,10 +418,10 @@
         "x": 0.7962,
         "y": 0.72183
       },
-      "surprisePre": 0.44583993,
-      "surprisePost": 0.33049912,
-      "frameDiff": 0.60813191,
-      "event": "wall-teleport"
+      "surprisePre": 0.06243342,
+      "surprisePost": 0.05444643,
+      "frameDiff": 0.32813191,
+      "event": null
     },
     {
       "i": 35,
@@ -430,10 +430,10 @@
         "x": 0.80236,
         "y": 0.71555
       },
-      "surprisePre": 0.44597891,
-      "surprisePost": 0.33059918,
-      "frameDiff": 0.58302277,
-      "event": "wall-teleport"
+      "surprisePre": 0.0625724,
+      "surprisePost": 0.05454649,
+      "frameDiff": 0.30302277,
+      "event": null
     },
     {
       "i": 36,
@@ -442,10 +442,10 @@
         "x": 0.8083,
         "y": 0.70884
       },
-      "surprisePre": 0.44613175,
-      "surprisePost": 0.33070922,
-      "frameDiff": 0.56032617,
-      "event": "wall-teleport"
+      "surprisePre": 0.06272524,
+      "surprisePost": 0.05465654,
+      "frameDiff": 0.28032617,
+      "event": null
     },
     {
       "i": 37,
@@ -454,10 +454,10 @@
         "x": 0.81404,
         "y": 0.70171
       },
-      "surprisePre": 0.44629354,
-      "surprisePost": 0.33082572,
-      "frameDiff": 0.54208267,
-      "event": "wall-teleport"
+      "surprisePre": 0.06288703,
+      "surprisePost": 0.05477303,
+      "frameDiff": 0.26208267,
+      "event": null
     },
     {
       "i": 38,
@@ -466,10 +466,10 @@
         "x": 0.81955,
         "y": 0.69418
       },
-      "surprisePre": 0.44645901,
-      "surprisePost": 0.33094485,
-      "frameDiff": 0.53013341,
-      "event": "wall-teleport"
+      "surprisePre": 0.0630525,
+      "surprisePost": 0.05489217,
+      "frameDiff": 0.25013341,
+      "event": null
     },
     {
       "i": 39,
@@ -478,10 +478,10 @@
         "x": 0.82485,
         "y": 0.68626
       },
-      "surprisePre": 0.44662258,
-      "surprisePost": 0.33106262,
-      "frameDiff": 0.52598003,
-      "event": "wall-teleport"
+      "surprisePre": 0.06321607,
+      "surprisePost": 0.05500993,
+      "frameDiff": 0.24598003,
+      "event": null
     },
     {
       "i": 40,
@@ -490,10 +490,10 @@
         "x": 0.82992,
         "y": 0.67797
       },
-      "surprisePre": 0.44677855,
-      "surprisePost": 0.33117492,
-      "frameDiff": 0.53066787,
-      "event": "wall-teleport"
+      "surprisePre": 0.06337204,
+      "surprisePost": 0.05512223,
+      "frameDiff": 0.25066787,
+      "event": null
     },
     {
       "i": 41,
@@ -502,10 +502,10 @@
         "x": 0.83476,
         "y": 0.66932
       },
-      "surprisePre": 0.44692122,
-      "surprisePost": 0.33127764,
-      "frameDiff": 0.54470086,
-      "event": "wall-teleport"
+      "surprisePre": 0.06351471,
+      "surprisePost": 0.05522496,
+      "frameDiff": 0.26470086,
+      "event": null
     },
     {
       "i": 42,
@@ -514,10 +514,10 @@
         "x": 0.83937,
         "y": 0.66034
       },
-      "surprisePre": 0.44704502,
-      "surprisePost": 0.33136678,
-      "frameDiff": 0.56799456,
-      "event": "wall-teleport"
+      "surprisePre": 0.06363851,
+      "surprisePost": 0.05531409,
+      "frameDiff": 0.28799456,
+      "event": null
     },
     {
       "i": 43,
@@ -526,10 +526,10 @@
         "x": 0.84375,
         "y": 0.65103
       },
-      "surprisePre": 0.44714464,
-      "surprisePost": 0.33143851,
-      "frameDiff": 0.59987072,
-      "event": "wall-teleport"
+      "surprisePre": 0.06373813,
+      "surprisePost": 0.05538582,
+      "frameDiff": 0.31987072,
+      "event": null
     },
     {
       "i": 44,
@@ -538,10 +538,10 @@
         "x": 0.84789,
         "y": 0.64143
       },
-      "surprisePre": 0.44721518,
-      "surprisePost": 0.3314893,
-      "frameDiff": 0.63909408,
-      "event": "wall-teleport"
+      "surprisePre": 0.06380867,
+      "surprisePost": 0.05543661,
+      "frameDiff": 0.35909408,
+      "event": null
     },
     {
       "i": 45,
@@ -550,10 +550,10 @@
         "x": 0.85179,
         "y": 0.63154
       },
-      "surprisePre": 0.44725223,
-      "surprisePost": 0.33151597,
-      "frameDiff": 0.68394873,
-      "event": "wall-teleport"
+      "surprisePre": 0.06384572,
+      "surprisePost": 0.05546328,
+      "frameDiff": 0.40394873,
+      "event": null
     },
     {
       "i": 46,
@@ -562,10 +562,10 @@
         "x": 0.85544,
         "y": 0.62139
       },
-      "surprisePre": 0.447252,
-      "surprisePost": 0.3315158,
-      "frameDiff": 0.73234869,
-      "event": "wall-teleport"
+      "surprisePre": 0.06384549,
+      "surprisePost": 0.05546312,
+      "frameDiff": 0.45234869,
+      "event": null
     },
     {
       "i": 47,
@@ -574,10 +574,10 @@
         "x": 0.85885,
         "y": 0.61099
       },
-      "surprisePre": 0.44721141,
-      "surprisePost": 0.33148658,
-      "frameDiff": 0.78197498,
-      "event": "wall-teleport"
+      "surprisePre": 0.0638049,
+      "surprisePost": 0.0554339,
+      "frameDiff": 0.50197498,
+      "event": null
     },
     {
       "i": 48,
@@ -586,10 +586,10 @@
         "x": 0.86201,
         "y": 0.60038
       },
-      "surprisePre": 0.4471282,
-      "surprisePost": 0.33142667,
-      "frameDiff": 0.83042922,
-      "event": "wall-teleport"
+      "surprisePre": 0.06372169,
+      "surprisePost": 0.05537398,
+      "frameDiff": 0.55042922,
+      "event": null
     },
     {
       "i": 49,
@@ -598,10 +598,10 @@
         "x": 0.86493,
         "y": 0.58956
       },
-      "surprisePre": 0.44700092,
-      "surprisePost": 0.33133503,
-      "frameDiff": 0.87539289,
-      "event": "wall-teleport"
+      "surprisePre": 0.06359441,
+      "surprisePost": 0.05528234,
+      "frameDiff": 0.59539289,
+      "event": null
     },
     {
       "i": 50,
@@ -610,10 +610,10 @@
         "x": 0.86758,
         "y": 0.57857
       },
-      "surprisePre": 0.44682903,
-      "surprisePost": 0.33121127,
-      "frameDiff": 0.9147809,
-      "event": "wall-teleport"
+      "surprisePre": 0.06342252,
+      "surprisePost": 0.05515858,
+      "frameDiff": 0.6347809,
+      "event": null
     },
     {
       "i": 51,
@@ -622,10 +622,10 @@
         "x": 0.86999,
         "y": 0.56742
       },
-      "surprisePre": 0.44661292,
-      "surprisePost": 0.33105567,
-      "frameDiff": 0.94687838,
-      "event": "wall-teleport"
+      "surprisePre": 0.06320641,
+      "surprisePost": 0.05500298,
+      "frameDiff": 0.66687838,
+      "event": null
     },
     {
       "i": 52,
@@ -634,10 +634,10 @@
         "x": 0.87214,
         "y": 0.55613
       },
-      "surprisePre": 0.44635388,
-      "surprisePost": 0.33086916,
-      "frameDiff": 0.97045111,
-      "event": "wall-teleport"
+      "surprisePre": 0.06294737,
+      "surprisePost": 0.05481647,
+      "frameDiff": 0.69045111,
+      "event": null
     },
     {
       "i": 53,
@@ -646,10 +646,10 @@
         "x": 0.87403,
         "y": 0.54473
       },
-      "surprisePre": 0.44605412,
-      "surprisePost": 0.33065333,
-      "frameDiff": 0.9848216,
-      "event": "wall-teleport"
+      "surprisePre": 0.06264761,
+      "surprisePost": 0.05460064,
+      "frameDiff": 0.7048216,
+      "event": null
     },
     {
       "i": 54,
@@ -658,10 +658,10 @@
         "x": 0.87567,
         "y": 0.53325
       },
-      "surprisePre": 0.44571668,
-      "surprisePost": 0.33041038,
-      "frameDiff": 0.98990549,
-      "event": "wall-teleport"
+      "surprisePre": 0.06231017,
+      "surprisePost": 0.05435769,
+      "frameDiff": 0.70990549,
+      "event": null
     },
     {
       "i": 55,
@@ -670,10 +670,10 @@
         "x": 0.87704,
         "y": 0.52169
       },
-      "surprisePre": 0.44534545,
-      "surprisePost": 0.33014309,
-      "frameDiff": 0.98620591,
-      "event": "wall-teleport"
+      "surprisePre": 0.06193894,
+      "surprisePost": 0.0540904,
+      "frameDiff": 0.70620591,
+      "event": null
     },
     {
       "i": 56,
@@ -682,10 +682,10 @@
         "x": 0.87815,
         "y": 0.51009
       },
-      "surprisePre": 0.44494501,
-      "surprisePost": 0.32985477,
-      "frameDiff": 0.97476613,
-      "event": "wall-teleport"
+      "surprisePre": 0.0615385,
+      "surprisePost": 0.05380208,
+      "frameDiff": 0.69476613,
+      "event": null
     },
     {
       "i": 57,
@@ -694,10 +694,10 @@
         "x": 0.87901,
         "y": 0.49848
       },
-      "surprisePre": 0.44452059,
-      "surprisePost": 0.32954919,
-      "frameDiff": 0.95708431,
-      "event": "wall-teleport"
+      "surprisePre": 0.06111408,
+      "surprisePost": 0.05349651,
+      "frameDiff": 0.67708431,
+      "event": null
     },
     {
       "i": 58,
@@ -706,10 +706,10 @@
         "x": 0.8796,
         "y": 0.48686
       },
-      "surprisePre": 0.44407797,
-      "surprisePost": 0.3292305,
-      "frameDiff": 0.93499646,
-      "event": "wall-teleport"
+      "surprisePre": 0.06067146,
+      "surprisePost": 0.05317782,
+      "frameDiff": 0.65499646,
+      "event": null
     },
     {
       "i": 59,
@@ -718,10 +718,10 @@
         "x": 0.87993,
         "y": 0.47527
       },
-      "surprisePre": 0.44362331,
-      "surprisePost": 0.32890315,
-      "frameDiff": 0.91053636,
-      "event": "wall-teleport"
+      "surprisePre": 0.0602168,
+      "surprisePost": 0.05285046,
+      "frameDiff": 0.63053636,
+      "event": null
     },
     {
       "i": 60,
@@ -730,10 +730,10 @@
         "x": 0.87999,
         "y": 0.46374
       },
-      "surprisePre": 0.4431631,
-      "surprisePost": 0.3285718,
-      "frameDiff": 0.88578259,
-      "event": "wall-teleport"
+      "surprisePre": 0.05975659,
+      "surprisePost": 0.05251911,
+      "frameDiff": 0.60578259,
+      "event": null
     },
     {
       "i": 61,
@@ -742,10 +742,10 @@
         "x": 0.87979,
         "y": 0.45227
       },
-      "surprisePre": 0.44270394,
-      "surprisePost": 0.3282412,
-      "frameDiff": 0.86270387,
-      "event": "wall-teleport"
+      "surprisePre": 0.05929743,
+      "surprisePost": 0.05218851,
+      "frameDiff": 0.58270387,
+      "event": null
     },
     {
       "i": 62,
@@ -754,10 +754,10 @@
         "x": 0.87934,
         "y": 0.4409
       },
-      "surprisePre": 0.44225247,
-      "surprisePost": 0.32791614,
-      "frameDiff": 0.84301404,
-      "event": "wall-teleport"
+      "surprisePre": 0.05884596,
+      "surprisePost": 0.05186346,
+      "frameDiff": 0.56301404,
+      "event": null
     },
     {
       "i": 63,
@@ -766,10 +766,10 @@
         "x": 0.87861,
         "y": 0.42965
       },
-      "surprisePre": 0.44181521,
-      "surprisePost": 0.32760131,
-      "frameDiff": 0.82804711,
-      "event": "wall-teleport"
+      "surprisePre": 0.0584087,
+      "surprisePost": 0.05154863,
+      "frameDiff": 0.54804711,
+      "event": null
     },
     {
       "i": 64,
@@ -778,10 +778,10 @@
         "x": 0.87763,
         "y": 0.41853
       },
-      "surprisePre": 0.44139841,
-      "surprisePost": 0.32730122,
-      "frameDiff": 0.81866165,
-      "event": "wall-teleport"
+      "surprisePre": 0.0579919,
+      "surprisePost": 0.05124853,
+      "frameDiff": 0.53866165,
+      "event": null
     },
     {
       "i": 65,
@@ -790,10 +790,10 @@
         "x": 0.87639,
         "y": 0.40758
       },
-      "surprisePre": 0.44100795,
-      "surprisePost": 0.32702009,
-      "frameDiff": 0.81518122,
-      "event": "wall-teleport"
+      "surprisePre": 0.05760144,
+      "surprisePost": 0.0509674,
+      "frameDiff": 0.53518122,
+      "event": null
     },
     {
       "i": 66,
@@ -802,10 +802,10 @@
         "x": 0.87488,
         "y": 0.39682
       },
-      "surprisePre": 0.44064918,
-      "surprisePost": 0.32676178,
-      "frameDiff": 0.81737532,
-      "event": "wall-teleport"
+      "surprisePre": 0.05724267,
+      "surprisePost": 0.05070909,
+      "frameDiff": 0.53737532,
+      "event": null
     },
     {
       "i": 67,
@@ -814,10 +814,10 @@
         "x": 0.87312,
         "y": 0.38626
       },
-      "surprisePre": 0.44032687,
-      "surprisePost": 0.32652971,
-      "frameDiff": 0.82448204,
-      "event": "wall-teleport"
+      "surprisePre": 0.05692036,
+      "surprisePost": 0.05047702,
+      "frameDiff": 0.54448204,
+      "event": null
     },
     {
       "i": 68,
@@ -826,10 +826,10 @@
         "x": 0.8711,
         "y": 0.37593
       },
-      "surprisePre": 0.44004503,
-      "surprisePost": 0.32632679,
-      "frameDiff": 0.83527088,
-      "event": "wall-teleport"
+      "surprisePre": 0.05663852,
+      "surprisePost": 0.0502741,
+      "frameDiff": 0.55527088,
+      "event": null
     },
     {
       "i": 69,
@@ -838,10 +838,10 @@
         "x": 0.86882,
         "y": 0.36584
       },
-      "surprisePre": 0.43980692,
-      "surprisePost": 0.32615535,
-      "frameDiff": 0.84814084,
-      "event": "wall-teleport"
+      "surprisePre": 0.05640041,
+      "surprisePost": 0.05010266,
+      "frameDiff": 0.56814084,
+      "event": null
     },
     {
       "i": 70,
@@ -850,10 +850,10 @@
         "x": 0.86629,
         "y": 0.35603
       },
-      "surprisePre": 0.4396149,
-      "surprisePost": 0.32601709,
-      "frameDiff": 0.86124676,
-      "event": "wall-teleport"
+      "surprisePre": 0.05620839,
+      "surprisePost": 0.04996441,
+      "frameDiff": 0.58124676,
+      "event": null
     },
     {
       "i": 71,
@@ -862,10 +862,10 @@
         "x": 0.8635,
         "y": 0.3465
       },
-      "surprisePre": 0.43947046,
-      "surprisePost": 0.3259131,
-      "frameDiff": 0.87264452,
-      "event": "wall-teleport"
+      "surprisePre": 0.05606395,
+      "surprisePost": 0.04986041,
+      "frameDiff": 0.59264452,
+      "event": null
     },
     {
       "i": 72,
@@ -874,10 +874,10 @@
         "x": 0.86046,
         "y": 0.33728
       },
-      "surprisePre": 0.43937416,
-      "surprisePost": 0.32584376,
-      "frameDiff": 0.88044443,
-      "event": "wall-teleport"
+      "surprisePre": 0.05596765,
+      "surprisePost": 0.04979107,
+      "frameDiff": 0.60044443,
+      "event": null
     },
     {
       "i": 73,
@@ -886,10 +886,10 @@
         "x": 0.85718,
         "y": 0.32838
       },
-      "surprisePre": 0.43932561,
-      "surprisePost": 0.32580881,
-      "frameDiff": 0.88296152,
-      "event": "wall-teleport"
+      "surprisePre": 0.0559191,
+      "surprisePost": 0.04975612,
+      "frameDiff": 0.60296152,
+      "event": null
     },
     {
       "i": 74,
@@ -898,10 +898,10 @@
         "x": 0.85365,
         "y": 0.31982
       },
-      "surprisePre": 0.43932353,
-      "surprisePost": 0.32580731,
-      "frameDiff": 0.87885167,
-      "event": "wall-teleport"
+      "surprisePre": 0.05591702,
+      "surprisePost": 0.04975462,
+      "frameDiff": 0.59885167,
+      "event": null
     },
     {
       "i": 75,
@@ -910,10 +910,10 @@
         "x": 0.84987,
         "y": 0.31163
       },
-      "surprisePre": 0.43936574,
-      "surprisePost": 0.3258377,
-      "frameDiff": 0.86722352,
-      "event": "wall-teleport"
+      "surprisePre": 0.05595923,
+      "surprisePost": 0.04978501,
+      "frameDiff": 0.58722352,
+      "event": null
     },
     {
       "i": 76,
@@ -922,10 +922,10 @@
         "x": 0.84585,
         "y": 0.30381
       },
-      "surprisePre": 0.43944925,
-      "surprisePost": 0.32589783,
-      "frameDiff": 0.84771787,
-      "event": "wall-teleport"
+      "surprisePre": 0.05604274,
+      "surprisePost": 0.04984514,
+      "frameDiff": 0.56771787,
+      "event": null
     },
     {
       "i": 77,
@@ -934,10 +934,10 @@
         "x": 0.84159,
         "y": 0.29638
       },
-      "surprisePre": 0.43957033,
-      "surprisePost": 0.325985,
-      "frameDiff": 0.82054859,
-      "event": "wall-teleport"
+      "surprisePre": 0.05616382,
+      "surprisePost": 0.04993232,
+      "frameDiff": 0.54054859,
+      "event": null
     },
     {
       "i": 78,
@@ -946,10 +946,10 @@
         "x": 0.8371,
         "y": 0.28936
       },
-      "surprisePre": 0.43972457,
-      "surprisePost": 0.32609606,
-      "frameDiff": 0.78650189,
-      "event": "wall-teleport"
+      "surprisePre": 0.05631806,
+      "surprisePost": 0.05004337,
+      "frameDiff": 0.50650189,
+      "event": null
     },
     {
       "i": 79,
@@ -958,10 +958,10 @@
         "x": 0.83237,
         "y": 0.28276
       },
-      "surprisePre": 0.43990702,
-      "surprisePost": 0.32622742,
-      "frameDiff": 0.74689395,
-      "event": "wall-teleport"
+      "surprisePre": 0.05650051,
+      "surprisePost": 0.05017474,
+      "frameDiff": 0.46689395,
+      "event": null
     },
     {
       "i": 80,
@@ -970,10 +970,10 @@
         "x": 0.82741,
         "y": 0.2766
       },
-      "surprisePre": 0.44011229,
-      "surprisePost": 0.32637522,
-      "frameDiff": 0.70348953,
-      "event": "wall-teleport"
+      "surprisePre": 0.05670578,
+      "surprisePost": 0.05032253,
+      "frameDiff": 0.42348953,
+      "event": null
     },
     {
       "i": 81,
@@ -982,10 +982,10 @@
         "x": 0.82223,
         "y": 0.27088
       },
-      "surprisePre": 0.44033467,
-      "surprisePost": 0.32653533,
-      "frameDiff": 0.6583876,
-      "event": "wall-teleport"
+      "surprisePre": 0.05692816,
+      "surprisePost": 0.05048264,
+      "frameDiff": 0.3783876,
+      "event": null
     },
     {
       "i": 82,
@@ -994,10 +994,10 @@
         "x": 0.81682,
         "y": 0.26562
       },
-      "surprisePre": 0.44056826,
-      "surprisePost": 0.32670351,
-      "frameDiff": 0.61388189,
-      "event": "wall-teleport"
+      "surprisePre": 0.05716175,
+      "surprisePost": 0.05065083,
+      "frameDiff": 0.33388189,
+      "event": null
     },
     {
       "i": 83,
@@ -1006,10 +1006,10 @@
         "x": 0.8112,
         "y": 0.26082
       },
-      "surprisePre": 0.44080714,
-      "surprisePost": 0.32687551,
-      "frameDiff": 0.5723065,
-      "event": "wall-teleport"
+      "surprisePre": 0.05740063,
+      "surprisePost": 0.05082282,
+      "frameDiff": 0.2923065,
+      "event": null
     },
     {
       "i": 84,
@@ -1018,10 +1018,10 @@
         "x": 0.80536,
         "y": 0.25651
       },
-      "surprisePre": 0.44104545,
-      "surprisePost": 0.32704709,
-      "frameDiff": 0.53587746,
-      "event": "wall-teleport"
+      "surprisePre": 0.05763894,
+      "surprisePost": 0.0509944,
+      "frameDiff": 0.25587746,
+      "event": null
     },
     {
       "i": 85,
@@ -1030,10 +1030,10 @@
         "x": 0.79931,
         "y": 0.25268
       },
-      "surprisePre": 0.40922368,
-      "surprisePost": 0.30413542,
-      "frameDiff": 0.50654174,
-      "event": "wall-teleport"
+      "surprisePre": 0.05787105,
+      "surprisePost": 0.05116152,
+      "frameDiff": 0.22654174,
+      "event": null
     },
     {
       "i": 86,
@@ -1042,10 +1042,10 @@
         "x": 0.79305,
         "y": 0.24934
       },
-      "surprisePre": 0.38448073,
-      "surprisePost": 0.28632049,
-      "frameDiff": 0.48584455,
-      "event": "wall-teleport"
+      "surprisePre": 0.05809168,
+      "surprisePost": 0.05132038,
+      "frameDiff": 0.20584455,
+      "event": null
     },
     {
       "i": 87,
@@ -1054,10 +1054,10 @@
         "x": 0.78659,
         "y": 0.24651
       },
-      "surprisePre": 0.36524341,
-      "surprisePost": 0.27246962,
-      "frameDiff": 0.47482431,
-      "event": "wall-teleport"
+      "surprisePre": 0.05829603,
+      "surprisePost": 0.05146751,
+      "frameDiff": 0.19482431,
+      "event": null
     },
     {
       "i": 88,
@@ -1066,10 +1066,10 @@
         "x": 0.77993,
         "y": 0.24418
       },
-      "surprisePre": 0.35028605,
-      "surprisePost": 0.26170032,
-      "frameDiff": 0.473943,
-      "event": "wall-teleport"
+      "surprisePre": 0.05847984,
+      "surprisePost": 0.05159985,
+      "frameDiff": 0.193943,
+      "event": null
     },
     {
       "i": 89,
@@ -1078,10 +1078,10 @@
         "x": 0.77308,
         "y": 0.24236
       },
-      "surprisePre": 0.3386538,
-      "surprisePost": 0.25332511,
-      "frameDiff": 0.48305681,
-      "event": "wall-teleport"
+      "surprisePre": 0.05863956,
+      "surprisePost": 0.05171485,
+      "frameDiff": 0.20305681,
+      "event": null
     },
     {
       "i": 90,
@@ -1090,10 +1090,10 @@
         "x": 0.76604,
         "y": 0.24105
       },
-      "surprisePre": 0.32960301,
-      "surprisePost": 0.24680853,
-      "frameDiff": 0.50142911,
-      "event": "wall-teleport"
+      "surprisePre": 0.05877236,
+      "surprisePost": 0.05181046,
+      "frameDiff": 0.22142911,
+      "event": null
     },
     {
       "i": 91,
@@ -1102,10 +1102,10 @@
         "x": 0.75881,
         "y": 0.24027
       },
-      "surprisePre": 0.32255468,
-      "surprisePost": 0.24173374,
-      "frameDiff": 0.52778489,
-      "event": "wall-teleport"
+      "surprisePre": 0.05887622,
+      "surprisePost": 0.05188524,
+      "frameDiff": 0.24778489,
+      "event": null
     },
     {
       "i": 92,
@@ -1114,10 +1114,10 @@
         "x": 0.75141,
         "y": 0.24
       },
-      "surprisePre": 0.31705831,
-      "surprisePost": 0.23777635,
-      "frameDiff": 0.56040256,
-      "event": "wall-teleport"
+      "surprisePre": 0.05894997,
+      "surprisePost": 0.05193835,
+      "frameDiff": 0.28040256,
+      "event": null
     },
     {
       "i": 93,
@@ -1126,10 +1126,10 @@
         "x": 0.74383,
         "y": 0.24025
       },
-      "surprisePre": 0.31276366,
-      "surprisePost": 0.2346842,
-      "frameDiff": 0.59723663,
-      "event": "wall-teleport"
+      "surprisePre": 0.05899334,
+      "surprisePost": 0.05196957,
+      "frameDiff": 0.31723663,
+      "event": null
     },
     {
       "i": 94,
@@ -1138,10 +1138,10 @@
         "x": 0.73609,
         "y": 0.24102
       },
-      "surprisePre": 0.30939876,
-      "surprisePost": 0.23226147,
-      "frameDiff": 0.63606218,
-      "event": "wall-teleport"
+      "surprisePre": 0.0590069,
+      "surprisePost": 0.05197933,
+      "frameDiff": 0.35606218,
+      "event": null
     },
     {
       "i": 95,
@@ -1150,10 +1150,10 @@
         "x": 0.72818,
         "y": 0.24231
       },
-      "surprisePre": 0.30675281,
-      "surprisePost": 0.23035639,
-      "frameDiff": 0.67463091,
-      "event": "wall-teleport"
+      "surprisePre": 0.05899209,
+      "surprisePost": 0.05196867,
+      "frameDiff": 0.39463091,
+      "event": null
     },
     {
       "i": 96,
@@ -1162,10 +1162,10 @@
         "x": 0.72011,
         "y": 0.24411
       },
-      "surprisePre": 0.30466276,
-      "surprisePost": 0.22885156,
-      "frameDiff": 0.71082728,
-      "event": "wall-teleport"
+      "surprisePre": 0.05895118,
+      "surprisePost": 0.05193921,
+      "frameDiff": 0.43082728,
+      "event": null
     },
     {
       "i": 97,
@@ -1174,10 +1174,10 @@
         "x": 0.71189,
         "y": 0.24642
       },
-      "surprisePre": 0.3030029,
-      "surprisePost": 0.22765646,
-      "frameDiff": 0.74281371,
-      "event": "wall-teleport"
+      "surprisePre": 0.05888719,
+      "surprisePost": 0.05189314,
+      "frameDiff": 0.46281371,
+      "event": null
     },
     {
       "i": 98,
@@ -1186,10 +1186,10 @@
         "x": 0.70353,
         "y": 0.24924
       },
-      "surprisePre": 0.30167668,
-      "surprisePost": 0.22670157,
-      "frameDiff": 0.76915421,
-      "event": "wall-teleport"
+      "surprisePre": 0.05880382,
+      "surprisePost": 0.05183312,
+      "frameDiff": 0.48915421,
+      "event": null
     },
     {
       "i": 99,
@@ -1198,10 +1198,10 @@
         "x": 0.69502,
         "y": 0.25256
       },
-      "surprisePre": 0.30061032,
-      "surprisePost": 0.22593379,
-      "frameDiff": 0.78890772,
-      "event": "wall-teleport"
+      "surprisePre": 0.05870541,
+      "surprisePost": 0.05176226,
+      "frameDiff": 0.50890772,
+      "event": null
     },
     {
       "i": 100,
@@ -1210,10 +1210,10 @@
         "x": 0.68638,
         "y": 0.25638
       },
-      "surprisePre": 0.29974781,
-      "surprisePost": 0.22531279,
-      "frameDiff": 0.80168446,
-      "event": "wall-teleport"
+      "surprisePre": 0.05859674,
+      "surprisePost": 0.05168402,
+      "frameDiff": 0.52168446,
+      "event": null
     },
     {
       "i": 101,
@@ -1222,10 +1222,10 @@
         "x": 0.67761,
         "y": 0.26068
       },
-      "surprisePre": 0.29904698,
-      "surprisePost": 0.22480819,
-      "frameDiff": 0.80766132,
-      "event": "wall-teleport"
+      "surprisePre": 0.05848299,
+      "surprisePost": 0.05160212,
+      "frameDiff": 0.52766132,
+      "event": null
     },
     {
       "i": 102,
@@ -1234,10 +1234,10 @@
         "x": 0.66872,
         "y": 0.26546
       },
-      "surprisePre": 0.29686658,
-      "surprisePost": 0.2232383,
-      "frameDiff": 0.80755545,
-      "event": "wall-teleport"
+      "surprisePre": 0.05836962,
+      "surprisePost": 0.05152049,
+      "frameDiff": 0.52755545,
+      "event": null
     },
     {
       "i": 103,
@@ -1246,10 +1246,10 @@
         "x": 0.65971,
         "y": 0.2707
       },
-      "surprisePre": 0.29675913,
-      "surprisePost": 0.22316094,
-      "frameDiff": 0.80255794,
-      "event": "wall-teleport"
+      "surprisePre": 0.05826216,
+      "surprisePost": 0.05144312,
+      "frameDiff": 0.52255794,
+      "event": null
     },
     {
       "i": 104,
@@ -1258,10 +1258,10 @@
         "x": 0.6506,
         "y": 0.27641
       },
-      "surprisePre": 0.29666314,
-      "surprisePost": 0.22309183,
-      "frameDiff": 0.79423276,
-      "event": "wall-teleport"
+      "surprisePre": 0.05816618,
+      "surprisePost": 0.05137401,
+      "frameDiff": 0.51423276,
+      "event": null
     },
     {
       "i": 105,
@@ -1270,10 +1270,10 @@
         "x": 0.64137,
         "y": 0.28256
       },
-      "surprisePre": 0.29658402,
-      "surprisePost": 0.22303486,
-      "frameDiff": 0.78438845,
-      "event": "wall-teleport"
+      "surprisePre": 0.05808706,
+      "surprisePost": 0.05131705,
+      "frameDiff": 0.50438845,
+      "event": null
     },
     {
       "i": 106,
@@ -1282,10 +1282,10 @@
         "x": 0.63205,
         "y": 0.28915
       },
-      "surprisePre": 0.29652689,
-      "surprisePost": 0.22299373,
-      "frameDiff": 0.77493189,
-      "event": "wall-teleport"
+      "surprisePre": 0.05802993,
+      "surprisePost": 0.05127591,
+      "frameDiff": 0.49493189,
+      "event": null
     },
     {
       "i": 107,
@@ -1294,10 +1294,10 @@
         "x": 0.62264,
         "y": 0.29615
       },
-      "surprisePre": 0.29649647,
-      "surprisePost": 0.22297182,
-      "frameDiff": 0.7677152,
-      "event": "wall-teleport"
+      "surprisePre": 0.05799951,
+      "surprisePost": 0.05125401,
+      "frameDiff": 0.4877152,
+      "event": null
     },
     {
       "i": 108,
@@ -1306,10 +1306,10 @@
         "x": 0.61314,
         "y": 0.30357
       },
-      "surprisePre": 0.29649695,
-      "surprisePost": 0.22297217,
-      "frameDiff": 0.76438689,
-      "event": "wall-teleport"
+      "surprisePre": 0.05799999,
+      "surprisePost": 0.05125436,
+      "frameDiff": 0.48438689,
+      "event": null
     },
     {
       "i": 109,
@@ -1318,10 +1318,10 @@
         "x": 0.60357,
         "y": 0.31137
       },
-      "surprisePre": 0.29653192,
-      "surprisePost": 0.22299735,
-      "frameDiff": 0.76625829,
-      "event": "wall-teleport"
+      "surprisePre": 0.05803496,
+      "surprisePost": 0.05127953,
+      "frameDiff": 0.48625829,
+      "event": null
     },
     {
       "i": 110,
@@ -1330,10 +1330,10 @@
         "x": 0.59392,
         "y": 0.31956
       },
-      "surprisePre": 0.29660423,
-      "surprisePost": 0.22304941,
-      "frameDiff": 0.77419519,
-      "event": "wall-teleport"
+      "surprisePre": 0.05810726,
+      "surprisePost": 0.0513316,
+      "frameDiff": 0.49419519,
+      "event": null
     },
     {
       "i": 111,
@@ -1342,10 +1342,10 @@
         "x": 0.58421,
         "y": 0.3281
       },
-      "surprisePre": 0.29671594,
-      "surprisePost": 0.22312984,
-      "frameDiff": 0.78854256,
-      "event": "wall-teleport"
+      "surprisePre": 0.05821898,
+      "surprisePost": 0.05141203,
+      "frameDiff": 0.50854256,
+      "event": null
     },
     {
       "i": 112,
@@ -1354,10 +1354,10 @@
         "x": 0.57444,
         "y": 0.33699
       },
-      "surprisePre": 0.29686828,
-      "surprisePost": 0.22323953,
-      "frameDiff": 0.80908822,
-      "event": "wall-teleport"
+      "surprisePre": 0.05837132,
+      "surprisePost": 0.05152172,
+      "frameDiff": 0.52908822,
+      "event": null
     },
     {
       "i": 113,
@@ -1366,10 +1366,10 @@
         "x": 0.56462,
         "y": 0.3462
       },
-      "surprisePre": 0.29706158,
-      "surprisePost": 0.2233787,
-      "frameDiff": 0.83506794,
-      "event": "wall-teleport"
+      "surprisePre": 0.05856462,
+      "surprisePost": 0.05166089,
+      "frameDiff": 0.55506794,
+      "event": null
     },
     {
       "i": 114,
@@ -1378,10 +1378,10 @@
         "x": 0.55475,
         "y": 0.35572
       },
-      "surprisePre": 0.29729526,
-      "surprisePost": 0.22354695,
-      "frameDiff": 0.86521204,
-      "event": "wall-teleport"
+      "surprisePre": 0.0587983,
+      "surprisePost": 0.05182914,
+      "frameDiff": 0.58521204,
+      "event": null
     },
     {
       "i": 115,
@@ -1390,10 +1390,10 @@
         "x": 0.54485,
         "y": 0.36552
       },
-      "surprisePre": 0.29756783,
-      "surprisePost": 0.22374321,
-      "frameDiff": 0.89782988,
-      "event": "wall-teleport"
+      "surprisePre": 0.05907087,
+      "surprisePost": 0.05202539,
+      "frameDiff": 0.61782988,
+      "event": null
     },
     {
       "i": 116,
@@ -1402,10 +1402,10 @@
         "x": 0.53492,
         "y": 0.3756
       },
-      "surprisePre": 0.29787694,
-      "surprisePost": 0.22396576,
-      "frameDiff": 0.93092651,
-      "event": "wall-teleport"
+      "surprisePre": 0.05937998,
+      "surprisePost": 0.05224795,
+      "frameDiff": 0.65092651,
+      "event": null
     },
     {
       "i": 117,
@@ -1414,10 +1414,10 @@
         "x": 0.52496,
         "y": 0.38592
       },
-      "surprisePre": 0.29821937,
-      "surprisePost": 0.22421231,
-      "frameDiff": 0.96234293,
-      "event": "wall-teleport"
+      "surprisePre": 0.05972241,
+      "surprisePost": 0.0524945,
+      "frameDiff": 0.68234293,
+      "event": null
     },
     {
       "i": 118,
@@ -1426,10 +1426,10 @@
         "x": 0.51498,
         "y": 0.39648
       },
-      "surprisePre": 0.29859113,
-      "surprisePost": 0.22447998,
-      "frameDiff": 0.98990977,
-      "event": "wall-teleport"
+      "surprisePre": 0.06009417,
+      "surprisePost": 0.05276217,
+      "frameDiff": 0.70990977,
+      "event": null
     },
     {
       "i": 119,
@@ -1438,10 +1438,10 @@
         "x": 0.50499,
         "y": 0.40724
       },
-      "surprisePre": 0.29898752,
-      "surprisePost": 0.22476538,
-      "frameDiff": 1.0,
-      "event": "wall-teleport"
+      "surprisePre": 0.06049056,
+      "surprisePost": 0.05304757,
+      "frameDiff": 0.73160345,
+      "event": null
     },
     {
       "i": 120,
@@ -1450,10 +1450,10 @@
         "x": 0.49501,
         "y": 0.41818
       },
-      "surprisePre": 0.29940325,
-      "surprisePost": 0.22506471,
-      "frameDiff": 1.0,
-      "event": "wall-teleport"
+      "surprisePre": 0.06090629,
+      "surprisePost": 0.05334689,
+      "frameDiff": 0.74569338,
+      "event": null
     },
     {
       "i": 121,
@@ -1462,10 +1462,10 @@
         "x": 0.48502,
         "y": 0.42929
       },
-      "surprisePre": 0.29983251,
-      "surprisePost": 0.22537377,
-      "frameDiff": 1.0,
-      "event": "wall-teleport"
+      "surprisePre": 0.06133554,
+      "surprisePost": 0.05365596,
+      "frameDiff": 0.75086951,
+      "event": null
     },
     {
       "i": 122,
@@ -1474,10 +1474,10 @@
         "x": 0.47504,
         "y": 0.44054
       },
-      "surprisePre": 0.3002691,
-      "surprisePost": 0.22568812,
-      "frameDiff": 1.0,
-      "event": "wall-teleport"
+      "surprisePre": 0.06177214,
+      "surprisePost": 0.0539703,
+      "frameDiff": 0.74634097,
+      "event": null
     },
     {
       "i": 123,
@@ -1486,10 +1486,10 @@
         "x": 0.46508,
         "y": 0.4519
       },
-      "surprisePre": 0.30070659,
-      "surprisePost": 0.22600311,
-      "frameDiff": 1.0,
-      "event": "wall-teleport"
+      "surprisePre": 0.06220962,
+      "surprisePost": 0.0542853,
+      "frameDiff": 0.73189864,
+      "event": null
     },
     {
       "i": 124,
@@ -1498,10 +1498,10 @@
         "x": 0.45515,
         "y": 0.46337
       },
-      "surprisePre": 0.30113841,
-      "surprisePost": 0.22631402,
-      "frameDiff": 0.98793693,
-      "event": "wall-teleport"
+      "surprisePre": 0.06264145,
+      "surprisePost": 0.05459621,
+      "frameDiff": 0.70793693,
+      "event": null
     },
     {
       "i": 125,
@@ -1510,10 +1510,10 @@
         "x": 0.44525,
         "y": 0.4749
       },
-      "surprisePre": 0.30155803,
-      "surprisePost": 0.22661615,
-      "frameDiff": 0.95543326,
-      "event": "wall-teleport"
+      "surprisePre": 0.06306107,
+      "surprisePost": 0.05489833,
+      "frameDiff": 0.67543326,
+      "event": null
     },
     {
       "i": 126,
@@ -1522,10 +1522,10 @@
         "x": 0.43538,
         "y": 0.48649
       },
-      "surprisePre": 0.30195905,
-      "surprisePost": 0.22690488,
-      "frameDiff": 0.91588643,
-      "event": "wall-teleport"
+      "surprisePre": 0.06346209,
+      "surprisePost": 0.05518707,
+      "frameDiff": 0.63588643,
+      "event": null
     },
     {
       "i": 127,
@@ -1534,10 +1534,10 @@
         "x": 0.42556,
         "y": 0.49811
       },
-      "surprisePre": 0.30233538,
-      "surprisePost": 0.22717584,
-      "frameDiff": 0.8712185,
-      "event": "wall-teleport"
+      "surprisePre": 0.06383842,
+      "surprisePost": 0.05545803,
+      "frameDiff": 0.5912185,
+      "event": null
     },
     {
       "i": 128,
@@ -1546,10 +1546,10 @@
         "x": 0.41579,
         "y": 0.50972
       },
-      "surprisePre": 0.30268133,
-      "surprisePost": 0.22742492,
-      "frameDiff": 0.82364689,
-      "event": "wall-teleport"
+      "surprisePre": 0.06418437,
+      "surprisePost": 0.05570711,
+      "frameDiff": 0.54364689,
+      "event": null
     },
     {
       "i": 129,
@@ -1558,10 +1558,10 @@
         "x": 0.40608,
         "y": 0.52132
       },
-      "surprisePre": 0.30299176,
-      "surprisePost": 0.22764843,
-      "frameDiff": 0.77553606,
-      "event": "wall-teleport"
+      "surprisePre": 0.0644948,
+      "surprisePost": 0.05593062,
+      "frameDiff": 0.49553606,
+      "event": null
     },
     {
       "i": 130,
@@ -1570,10 +1570,10 @@
         "x": 0.39643,
         "y": 0.53288
       },
-      "surprisePre": 0.30326216,
-      "surprisePost": 0.22784312,
-      "frameDiff": 0.72923929,
-      "event": "wall-teleport"
+      "surprisePre": 0.0647652,
+      "surprisePost": 0.05612531,
+      "frameDiff": 0.44923929,
+      "event": null
     },
     {
       "i": 131,
@@ -1582,10 +1582,10 @@
         "x": 0.38686,
         "y": 0.54437
       },
-      "surprisePre": 0.30348878,
-      "surprisePost": 0.22800629,
-      "frameDiff": 0.68694187,
-      "event": "wall-teleport"
+      "surprisePre": 0.06499182,
+      "surprisePost": 0.05628847,
+      "frameDiff": 0.40694187,
+      "event": null
     },
     {
       "i": 132,
@@ -1594,10 +1594,10 @@
         "x": 0.37736,
         "y": 0.55577
       },
-      "surprisePre": 0.30366866,
-      "surprisePost": 0.2281358,
-      "frameDiff": 0.65051693,
-      "event": "wall-teleport"
+      "surprisePre": 0.06517169,
+      "surprisePost": 0.05641799,
+      "frameDiff": 0.37051693,
+      "event": null
     },
     {
       "i": 133,
@@ -1606,10 +1606,10 @@
         "x": 0.36795,
         "y": 0.56706
       },
-      "surprisePre": 0.30379972,
-      "surprisePost": 0.22823016,
-      "frameDiff": 0.62140425,
-      "event": "wall-teleport"
+      "surprisePre": 0.06530276,
+      "surprisePost": 0.05651235,
+      "frameDiff": 0.34140425,
+      "event": null
     },
     {
       "i": 134,
@@ -1618,10 +1618,10 @@
         "x": 0.35863,
         "y": 0.57821
       },
-      "surprisePre": 0.3038808,
-      "surprisePost": 0.22828854,
-      "frameDiff": 0.60052057,
-      "event": "wall-teleport"
+      "surprisePre": 0.06538384,
+      "surprisePost": 0.05657073,
+      "frameDiff": 0.32052057,
+      "event": null
     },
     {
       "i": 135,
@@ -1630,10 +1630,10 @@
         "x": 0.3494,
         "y": 0.58921
       },
-      "surprisePre": 0.30391168,
-      "surprisePost": 0.22831078,
-      "frameDiff": 0.58820779,
-      "event": "wall-teleport"
+      "surprisePre": 0.06541472,
+      "surprisePost": 0.05659297,
+      "frameDiff": 0.30820779,
+      "event": null
     },
     {
       "i": 136,
@@ -1642,10 +1642,10 @@
         "x": 0.34029,
         "y": 0.60004
       },
-      "surprisePre": 0.30389307,
-      "surprisePost": 0.22829738,
-      "frameDiff": 0.58422265,
-      "event": "wall-teleport"
+      "surprisePre": 0.06539611,
+      "surprisePost": 0.05657957,
+      "frameDiff": 0.30422265,
+      "event": null
     },
     {
       "i": 137,
@@ -1654,10 +1654,10 @@
         "x": 0.33128,
         "y": 0.61066
       },
-      "surprisePre": 0.30382659,
-      "surprisePost": 0.22824951,
-      "frameDiff": 0.58776838,
-      "event": "wall-teleport"
+      "surprisePre": 0.06532963,
+      "surprisePost": 0.0565317,
+      "frameDiff": 0.30776838,
+      "event": null
     },
     {
       "i": 138,
@@ -1666,10 +1666,10 @@
         "x": 0.32239,
         "y": 0.62106
       },
-      "surprisePre": 0.30371475,
-      "surprisePost": 0.22816898,
-      "frameDiff": 0.59756598,
-      "event": "wall-teleport"
+      "surprisePre": 0.06521778,
+      "surprisePost": 0.05645117,
+      "frameDiff": 0.31756598,
+      "event": null
     },
     {
       "i": 139,
@@ -1678,10 +1678,10 @@
         "x": 0.31362,
         "y": 0.63122
       },
-      "surprisePre": 0.27484592,
-      "surprisePost": 0.20738343,
-      "frameDiff": 0.61195965,
-      "event": "wall-teleport"
+      "surprisePre": 0.06506389,
+      "surprisePost": 0.05634036,
+      "frameDiff": 0.33195965,
+      "event": null
     },
     {
       "i": 140,
@@ -1690,10 +1690,10 @@
         "x": 0.30498,
         "y": 0.64112
       },
-      "surprisePre": 0.25229081,
-      "surprisePost": 0.19114375,
-      "frameDiff": 0.62904869,
-      "event": "wall-teleport"
+      "surprisePre": 0.06487199,
+      "surprisePost": 0.0562022,
+      "frameDiff": 0.34904869,
+      "event": null
     },
     {
       "i": 141,
@@ -1702,10 +1702,10 @@
         "x": 0.29647,
         "y": 0.65073
       },
-      "surprisePre": 0.23464912,
-      "surprisePost": 0.17844174,
-      "frameDiff": 0.64683599,
-      "event": "wall-teleport"
+      "surprisePre": 0.06464679,
+      "surprisePost": 0.05604006,
+      "frameDiff": 0.36683599,
+      "event": null
     },
     {
       "i": 142,
@@ -1714,10 +1714,10 @@
         "x": 0.28811,
         "y": 0.66005
       },
-      "surprisePre": 0.2208319,
-      "surprisePost": 0.16849333,
-      "frameDiff": 0.6633824,
-      "event": "wall-teleport"
+      "surprisePre": 0.06439354,
+      "surprisePost": 0.05585772,
+      "frameDiff": 0.3833824,
+      "event": null
     },
     {
       "i": 143,
@@ -1726,10 +1726,10 @@
         "x": 0.27989,
         "y": 0.66904
       },
-      "surprisePre": 0.20999262,
-      "surprisePost": 0.16068905,
-      "frameDiff": 0.67695551,
-      "event": "wall-teleport"
+      "surprisePre": 0.06411789,
+      "surprisePost": 0.05565925,
+      "frameDiff": 0.39695551,
+      "event": null
     },
     {
       "i": 144,
@@ -1738,10 +1738,10 @@
         "x": 0.27182,
         "y": 0.6777
       },
-      "surprisePre": 0.20147356,
-      "surprisePost": 0.15455533,
-      "frameDiff": 0.68616193,
-      "event": "wall-teleport"
+      "surprisePre": 0.0638258,
+      "surprisePost": 0.05544894,
+      "frameDiff": 0.40616193,
+      "event": null
     },
     {
       "i": 145,
@@ -1750,10 +1750,10 @@
         "x": 0.26391,
         "y": 0.686
       },
-      "surprisePre": 0.19476397,
-      "surprisePost": 0.14972443,
-      "frameDiff": 0.69005355,
-      "event": "wall-teleport"
+      "surprisePre": 0.06352338,
+      "surprisePost": 0.0552312,
+      "frameDiff": 0.41005355,
+      "event": null
     },
     {
       "i": 146,
@@ -1762,10 +1762,10 @@
         "x": 0.25617,
         "y": 0.69393
       },
-      "surprisePre": 0.18946746,
-      "surprisePost": 0.14591094,
-      "frameDiff": 0.68819976,
-      "event": "wall-teleport"
+      "surprisePre": 0.06321678,
+      "surprisePost": 0.05501044,
+      "frameDiff": 0.40819976,
+      "event": null
     },
     {
       "i": 147,
@@ -1774,10 +1774,10 @@
         "x": 0.24859,
         "y": 0.70147
       },
-      "surprisePre": 0.18527655,
-      "surprisePost": 0.14289348,
-      "frameDiff": 0.68072058,
-      "event": "wall-teleport"
+      "surprisePre": 0.06291201,
+      "surprisePost": 0.05479102,
+      "frameDiff": 0.40072058,
+      "event": null
     },
     {
       "i": 148,
@@ -1786,10 +1786,10 @@
         "x": 0.24119,
         "y": 0.70861
       },
-      "surprisePre": 0.18195289,
-      "surprisePost": 0.14050045,
-      "frameDiff": 0.66827812,
-      "event": "wall-teleport"
+      "surprisePre": 0.06261488,
+      "surprisePost": 0.05457708,
+      "frameDiff": 0.38827812,
+      "event": null
     },
     {
       "i": 149,
@@ -1798,10 +1798,10 @@
         "x": 0.23396,
         "y": 0.71534
       },
-      "surprisePre": 0.17931173,
-      "surprisePost": 0.13859881,
-      "frameDiff": 0.65202704,
-      "event": "wall-teleport"
+      "surprisePre": 0.06233079,
+      "surprisePost": 0.05437253,
+      "frameDiff": 0.37202704,
+      "event": null
     },
     {
       "i": 150,
@@ -1810,10 +1810,10 @@
         "x": 0.22692,
         "y": 0.72163
       },
-      "surprisePre": 0.17720993,
-      "surprisePost": 0.13708552,
-      "frameDiff": 0.63352759,
-      "event": "wall-teleport"
+      "surprisePre": 0.06206467,
+      "surprisePost": 0.05418093,
+      "frameDiff": 0.35352759,
+      "event": null
     },
     {
       "i": 151,
@@ -1822,10 +1822,10 @@
         "x": 0.22007,
         "y": 0.72749
       },
-      "surprisePre": 0.17553648,
-      "surprisePost": 0.13588063,
-      "frameDiff": 0.61462769,
-      "event": "wall-teleport"
+      "surprisePre": 0.06182086,
+      "surprisePost": 0.05400538,
+      "frameDiff": 0.33462769,
+      "event": null
     },
     {
       "i": 152,
@@ -1834,10 +1834,10 @@
         "x": 0.21341,
         "y": 0.73288
       },
-      "surprisePre": 0.17420522,
-      "surprisePost": 0.13492212,
-      "frameDiff": 0.59732251,
-      "event": "wall-teleport"
+      "surprisePre": 0.06160299,
+      "surprisePost": 0.05384852,
+      "frameDiff": 0.31732251,
+      "event": null
     },
     {
       "i": 153,
@@ -1846,10 +1846,10 @@
         "x": 0.20695,
         "y": 0.73782
       },
-      "surprisePre": 0.17314907,
-      "surprisePost": 0.1341617,
-      "frameDiff": 0.58360194,
-      "event": "wall-teleport"
+      "surprisePre": 0.06141396,
+      "surprisePost": 0.05371242,
+      "frameDiff": 0.30360194,
+      "event": null
     },
     {
       "i": 154,
@@ -1858,10 +1858,10 @@
         "x": 0.20069,
         "y": 0.74227
       },
-      "surprisePre": 0.17231563,
-      "surprisePost": 0.13356162,
-      "frameDiff": 0.57529706,
-      "event": "wall-teleport"
+      "surprisePre": 0.06125583,
+      "surprisePost": 0.05359856,
+      "frameDiff": 0.29529706,
+      "event": null
     },
     {
       "i": 155,
@@ -1870,10 +1870,10 @@
         "x": 0.19464,
         "y": 0.74625
       },
-      "surprisePre": 0.17166366,
-      "surprisePost": 0.1330922,
-      "frameDiff": 0.57393694,
-      "event": "wall-teleport"
+      "surprisePre": 0.06112979,
+      "surprisePost": 0.05350781,
+      "frameDiff": 0.29393694,
+      "event": null
     },
     {
       "i": 156,
@@ -1882,10 +1882,10 @@
         "x": 0.1888,
         "y": 0.74973
       },
-      "surprisePre": 0.16971833,
-      "surprisePost": 0.13169156,
-      "frameDiff": 0.58062614,
-      "event": "wall-teleport"
+      "surprisePre": 0.06103617,
+      "surprisePost": 0.05344041,
+      "frameDiff": 0.30062614,
+      "event": null
     },
     {
       "i": 157,
@@ -1894,10 +1894,10 @@
         "x": 0.18318,
         "y": 0.75271
       },
-      "surprisePre": 0.16965657,
-      "surprisePost": 0.1316471,
-      "frameDiff": 0.59595219,
-      "event": "wall-teleport"
+      "surprisePre": 0.06097441,
+      "surprisePost": 0.05339594,
+      "frameDiff": 0.31595219,
+      "event": null
     },
     {
       "i": 158,
@@ -1906,10 +1906,10 @@
         "x": 0.17777,
         "y": 0.75519
       },
-      "surprisePre": 0.16962525,
-      "surprisePost": 0.13162455,
-      "frameDiff": 0.61992962,
-      "event": "wall-teleport"
+      "surprisePre": 0.06094309,
+      "surprisePost": 0.05337339,
+      "frameDiff": 0.33992962,
+      "event": null
     },
     {
       "i": 159,
@@ -1918,10 +1918,10 @@
         "x": 0.17259,
         "y": 0.75716
       },
-      "surprisePre": 0.16962213,
-      "surprisePost": 0.1316223,
-      "frameDiff": 0.65198507,
-      "event": "wall-teleport"
+      "surprisePre": 0.06093997,
+      "surprisePost": 0.05337115,
+      "frameDiff": 0.37198507,
+      "event": null
     },
     {
       "i": 160,
@@ -1930,10 +1930,10 @@
         "x": 0.16763,
         "y": 0.75862
       },
-      "surprisePre": 0.16964422,
-      "surprisePost": 0.1316382,
-      "frameDiff": 0.69098448,
-      "event": "wall-teleport"
+      "surprisePre": 0.06096206,
+      "surprisePost": 0.05338705,
+      "frameDiff": 0.41098448,
+      "event": null
     },
     {
       "i": 161,
@@ -1942,10 +1942,10 @@
         "x": 0.1629,
         "y": 0.75955
       },
-      "surprisePre": 0.16968783,
-      "surprisePost": 0.13166961,
-      "frameDiff": 0.7353007,
-      "event": "wall-teleport"
+      "surprisePre": 0.06100567,
+      "surprisePost": 0.05341845,
+      "frameDiff": 0.4553007,
+      "event": null
     },
     {
       "i": 162,
@@ -1954,10 +1954,10 @@
         "x": 0.15841,
         "y": 0.75998
       },
-      "surprisePre": 0.1697487,
-      "surprisePost": 0.13171343,
-      "frameDiff": 0.78291683,
-      "event": "wall-teleport"
+      "surprisePre": 0.06106654,
+      "surprisePost": 0.05346228,
+      "frameDiff": 0.50291683,
+      "event": null
     },
     {
       "i": 163,
@@ -1966,10 +1966,10 @@
         "x": 0.15415,
         "y": 0.75988
       },
-      "surprisePre": 0.16982207,
-      "surprisePost": 0.13176626,
-      "frameDiff": 0.83155776,
-      "event": "wall-teleport"
+      "surprisePre": 0.06113991,
+      "surprisePost": 0.0535151,
+      "frameDiff": 0.55155776,
+      "event": null
     },
     {
       "i": 164,
@@ -1978,10 +1978,10 @@
         "x": 0.15013,
         "y": 0.75926
       },
-      "surprisePre": 0.16990283,
-      "surprisePost": 0.1318244,
-      "frameDiff": 0.87884086,
-      "event": "wall-teleport"
+      "surprisePre": 0.06122067,
+      "surprisePost": 0.05357324,
+      "frameDiff": 0.59884086,
+      "event": null
     },
     {
       "i": 165,
@@ -1990,10 +1990,10 @@
         "x": 0.14635,
         "y": 0.75812
       },
-      "surprisePre": 0.16998559,
-      "surprisePost": 0.13188399,
-      "frameDiff": 0.92243474,
-      "event": "wall-teleport"
+      "surprisePre": 0.06130343,
+      "surprisePost": 0.05363284,
+      "frameDiff": 0.64243474,
+      "event": null
     },
     {
       "i": 166,
@@ -2002,10 +2002,10 @@
         "x": 0.14282,
         "y": 0.75647
       },
-      "surprisePre": 0.17006491,
-      "surprisePost": 0.1319411,
-      "frameDiff": 0.96021493,
-      "event": "wall-teleport"
+      "surprisePre": 0.06138275,
+      "surprisePost": 0.05368995,
+      "frameDiff": 0.68021493,
+      "event": null
     },
     {
       "i": 167,
@@ -2014,10 +2014,10 @@
         "x": 0.13954,
         "y": 0.75431
       },
-      "surprisePre": 0.17013532,
-      "surprisePost": 0.1319918,
-      "frameDiff": 0.99040532,
-      "event": "wall-teleport"
+      "surprisePre": 0.06145316,
+      "surprisePost": 0.05374064,
+      "frameDiff": 0.71040532,
+      "event": null
     },
     {
       "i": 168,
@@ -2026,10 +2026,10 @@
         "x": 0.1365,
         "y": 0.75164
       },
-      "surprisePre": 0.17019154,
-      "surprisePost": 0.13203228,
-      "frameDiff": 1.0,
-      "event": "wall-teleport"
+      "surprisePre": 0.06150938,
+      "surprisePost": 0.05378112,
+      "frameDiff": 0.73169516,
+      "event": null
     },
     {
       "i": 169,
@@ -2038,10 +2038,10 @@
         "x": 0.13371,
         "y": 0.74847
       },
-      "surprisePre": 0.17022857,
-      "surprisePost": 0.13205893,
-      "frameDiff": 1.0,
-      "event": "wall-teleport"
+      "surprisePre": 0.06154641,
+      "surprisePost": 0.05380778,
+      "frameDiff": 0.74332338,
+      "event": null
     },
     {
       "i": 170,
@@ -2050,10 +2050,10 @@
         "x": 0.13118,
         "y": 0.7448
       },
-      "surprisePre": 0.17024181,
-      "surprisePost": 0.13206847,
-      "frameDiff": 1.0,
-      "event": "wall-teleport"
+      "surprisePre": 0.06155965,
+      "surprisePost": 0.05381731,
+      "frameDiff": 0.74512414,
+      "event": null
     },
     {
       "i": 171,
@@ -2062,10 +2062,10 @@
         "x": 0.1289,
         "y": 0.74064
       },
-      "surprisePre": 0.1702272,
-      "surprisePost": 0.13205795,
-      "frameDiff": 1.0,
-      "event": "wall-teleport"
+      "surprisePre": 0.06154504,
+      "surprisePost": 0.05380679,
+      "frameDiff": 0.73753054,
+      "event": null
     },
     {
       "i": 172,
@@ -2074,10 +2074,10 @@
         "x": 0.12688,
         "y": 0.736
       },
-      "surprisePre": 0.17018131,
-      "surprisePost": 0.13202491,
-      "frameDiff": 1.0,
-      "event": "wall-teleport"
+      "surprisePre": 0.06149915,
+      "surprisePost": 0.05377375,
+      "frameDiff": 0.72153616,
+      "event": null
     },
     {
       "i": 173,
@@ -2086,10 +2086,10 @@
         "x": 0.12512,
         "y": 0.73089
       },
-      "surprisePre": 0.17010142,
-      "surprisePost": 0.13196739,
-      "frameDiff": 0.97861755,
-      "event": "wall-teleport"
+      "surprisePre": 0.06141926,
+      "surprisePost": 0.05371623,
+      "frameDiff": 0.69861755,
+      "event": null
     },
     {
       "i": 174,
@@ -2098,10 +2098,10 @@
         "x": 0.12361,
         "y": 0.72532
       },
-      "surprisePre": 0.1699856,
-      "surprisePost": 0.131884,
-      "frameDiff": 0.95062309,
-      "event": "wall-teleport"
+      "surprisePre": 0.06130344,
+      "surprisePost": 0.05363285,
+      "frameDiff": 0.67062309,
+      "event": null
     },
     {
       "i": 175,
@@ -2110,10 +2110,10 @@
         "x": 0.12237,
         "y": 0.71929
       },
-      "surprisePre": 0.16983279,
-      "surprisePost": 0.13177397,
-      "frameDiff": 0.91963651,
-      "event": "wall-teleport"
+      "surprisePre": 0.06115063,
+      "surprisePost": 0.05352282,
+      "frameDiff": 0.63963651,
+      "event": null
     },
     {
       "i": 176,
@@ -2122,10 +2122,10 @@
         "x": 0.12139,
         "y": 0.71284
       },
-      "surprisePre": 0.16964277,
-      "surprisePost": 0.13163716,
-      "frameDiff": 0.88782501,
-      "event": "wall-teleport"
+      "surprisePre": 0.06096061,
+      "surprisePost": 0.05338601,
+      "frameDiff": 0.60782501,
+      "event": null
     },
     {
       "i": 177,
@@ -2134,10 +2134,10 @@
         "x": 0.12066,
         "y": 0.70595
       },
-      "surprisePre": 0.16941625,
-      "surprisePost": 0.13147407,
-      "frameDiff": 0.85728292,
-      "event": "wall-teleport"
+      "surprisePre": 0.06073409,
+      "surprisePost": 0.05322291,
+      "frameDiff": 0.57728292,
+      "event": null
     },
     {
       "i": 178,
@@ -2146,10 +2146,10 @@
         "x": 0.12021,
         "y": 0.69866
       },
-      "surprisePre": 0.16915482,
-      "surprisePost": 0.13128584,
-      "frameDiff": 0.82988228,
-      "event": "wall-teleport"
+      "surprisePre": 0.06047266,
+      "surprisePost": 0.05303468,
+      "frameDiff": 0.54988228,
+      "event": null
     },
     {
       "i": 179,
@@ -2158,10 +2158,10 @@
         "x": 0.12001,
         "y": 0.69096
       },
-      "surprisePre": 0.16886093,
-      "surprisePost": 0.13107424,
-      "frameDiff": 0.80714121,
-      "event": "wall-teleport"
+      "surprisePre": 0.06017877,
+      "surprisePost": 0.05282308,
+      "frameDiff": 0.52714121,
+      "event": null
     },
     {
       "i": 180,
@@ -2170,10 +2170,10 @@
         "x": 0.12007,
         "y": 0.68289
       },
-      "surprisePre": 0.16853787,
-      "surprisePost": 0.13084164,
-      "frameDiff": 0.7901195,
-      "event": "wall-teleport"
+      "surprisePre": 0.05985571,
+      "surprisePost": 0.05259048,
+      "frameDiff": 0.5101195,
+      "event": null
     },
     {
       "i": 181,
@@ -2182,10 +2182,10 @@
         "x": 0.1204,
         "y": 0.67445
       },
-      "surprisePre": 0.16818968,
-      "surprisePost": 0.13059094,
-      "frameDiff": 0.77934894,
-      "event": "wall-teleport"
+      "surprisePre": 0.05950752,
+      "surprisePost": 0.05233978,
+      "frameDiff": 0.49934894,
+      "event": null
     },
     {
       "i": 182,
@@ -2194,10 +2194,10 @@
         "x": 0.12099,
         "y": 0.66566
       },
-      "surprisePre": 0.16782107,
-      "surprisePost": 0.13032553,
-      "frameDiff": 0.77480342,
-      "event": "wall-teleport"
+      "surprisePre": 0.05913891,
+      "surprisePost": 0.05207438,
+      "frameDiff": 0.49480342,
+      "event": null
     },
     {
       "i": 183,
@@ -2206,10 +2206,10 @@
         "x": 0.12185,
         "y": 0.65654
       },
-      "surprisePre": 0.16743734,
-      "surprisePost": 0.13004925,
-      "frameDiff": 0.77591077,
-      "event": "wall-teleport"
+      "surprisePre": 0.05875518,
+      "surprisePost": 0.05179809,
+      "frameDiff": 0.49591077,
+      "event": null
     },
     {
       "i": 184,
@@ -2218,10 +2218,10 @@
         "x": 0.12296,
         "y": 0.64711
       },
-      "surprisePre": 0.16704426,
-      "surprisePost": 0.12976624,
-      "frameDiff": 0.78160545,
-      "event": "wall-teleport"
+      "surprisePre": 0.0583621,
+      "surprisePost": 0.05151508,
+      "frameDiff": 0.50160545,
+      "event": null
     },
     {
       "i": 185,
@@ -2230,10 +2230,10 @@
         "x": 0.12433,
         "y": 0.63739
       },
-      "surprisePre": 0.14260756,
-      "surprisePost": 0.11217181,
-      "frameDiff": 0.79041802,
-      "event": "wall-teleport"
+      "surprisePre": 0.0579658,
+      "surprisePost": 0.05122974,
+      "frameDiff": 0.51041802,
+      "event": null
     },
     {
       "i": 186,
@@ -2242,10 +2242,10 @@
         "x": 0.12597,
         "y": 0.62739
       },
-      "surprisePre": 0.12349169,
-      "surprisePost": 0.09840838,
-      "frameDiff": 0.80059489,
-      "event": "wall-teleport"
+      "surprisePre": 0.05757263,
+      "surprisePost": 0.05094666,
+      "frameDiff": 0.52059489,
+      "event": null
     },
     {
       "i": 187,
@@ -2254,10 +2254,10 @@
         "x": 0.12786,
         "y": 0.61714
       },
-      "surprisePre": 0.10852682,
-      "surprisePost": 0.08763368,
-      "frameDiff": 0.81023937,
-      "event": "wall-teleport"
+      "surprisePre": 0.057189,
+      "surprisePost": 0.05067045,
+      "frameDiff": 0.53023937,
+      "event": null
     },
     {
       "i": 188,
@@ -2266,10 +2266,10 @@
         "x": 0.13001,
         "y": 0.60665
       },
-      "surprisePre": 0.09680325,
-      "surprisePost": 0.07919271,
-      "frameDiff": 0.81746362,
-      "event": "wall-teleport"
+      "surprisePre": 0.05682132,
+      "surprisePost": 0.05040572,
+      "frameDiff": 0.53746362,
+      "event": null
     },
     {
       "i": 189,
@@ -2278,10 +2278,10 @@
         "x": 0.13242,
         "y": 0.59595
       },
-      "surprisePre": 0.08761373,
-      "surprisePost": 0.07257625,
-      "frameDiff": 0.82054038,
-      "event": "wall-teleport"
+      "surprisePre": 0.05647577,
+      "surprisePost": 0.05015692,
+      "frameDiff": 0.54054038,
+      "event": null
     },
     {
       "i": 190,
@@ -2290,10 +2290,10 @@
         "x": 0.13507,
         "y": 0.58506
       },
-      "surprisePre": 0.0804085,
-      "surprisePost": 0.06738848,
-      "frameDiff": 0.81804321,
-      "event": "wall-teleport"
+      "surprisePre": 0.05615823,
+      "surprisePost": 0.04992829,
+      "frameDiff": 0.53804321,
+      "event": null
     },
     {
       "i": 191,
@@ -2302,10 +2302,10 @@
         "x": 0.13799,
         "y": 0.57399
       },
-      "surprisePre": 0.07476026,
-      "surprisePost": 0.06332175,
-      "frameDiff": 0.8089649,
-      "event": "wall-teleport"
+      "surprisePre": 0.05587413,
+      "surprisePost": 0.04972374,
+      "frameDiff": 0.5289649,
+      "event": null
     },
     {
       "i": 192,
@@ -2314,10 +2314,10 @@
         "x": 0.14115,
         "y": 0.56279
       },
-      "surprisePre": 0.07033689,
-      "surprisePost": 0.06013692,
-      "frameDiff": 0.79280522,
-      "event": "wall-teleport"
+      "surprisePre": 0.05562835,
+      "surprisePost": 0.04954678,
+      "frameDiff": 0.51280522,
+      "event": null
     },
     {
       "i": 193,
@@ -2326,10 +2326,10 @@
         "x": 0.14456,
         "y": 0.55145
       },
-      "surprisePre": 0.06688011,
-      "surprisePost": 0.05764805,
-      "frameDiff": 0.76962156,
-      "event": "wall-teleport"
+      "surprisePre": 0.0554251,
+      "surprisePost": 0.04940044,
+      "frameDiff": 0.48962156,
+      "event": null
     },
     {
       "i": 194,
@@ -2338,10 +2338,10 @@
         "x": 0.14821,
         "y": 0.54001
       },
-      "surprisePre": 0.06418898,
-      "surprisePost": 0.05571043,
-      "frameDiff": 0.74003852,
-      "event": "wall-teleport"
+      "surprisePre": 0.05526781,
+      "surprisePost": 0.04928719,
+      "frameDiff": 0.46003852,
+      "event": null
     },
     {
       "i": 195,
@@ -2350,10 +2350,10 @@
         "x": 0.15211,
         "y": 0.52849
       },
-      "surprisePre": 0.06210692,
-      "surprisePost": 0.05421135,
-      "frameDiff": 0.70521563,
-      "event": "wall-teleport"
+      "surprisePre": 0.0551591,
+      "surprisePost": 0.04920892,
+      "frameDiff": 0.42521563,
+      "event": null
     },
     {
       "i": 196,
@@ -2362,10 +2362,10 @@
         "x": 0.15625,
         "y": 0.51692
       },
-      "surprisePre": 0.06051168,
-      "surprisePost": 0.05306277,
-      "frameDiff": 0.66677533,
-      "event": "wall-teleport"
+      "surprisePre": 0.05510071,
+      "surprisePost": 0.04916688,
+      "frameDiff": 0.38677533,
+      "event": null
     },
     {
       "i": 197,
@@ -2374,10 +2374,10 @@
         "x": 0.16063,
         "y": 0.50531
       },
-      "surprisePre": 0.05930751,
-      "surprisePost": 0.05219577,
-      "frameDiff": 0.62669637,
-      "event": "wall-teleport"
+      "surprisePre": 0.05509344,
+      "surprisePost": 0.04916164,
+      "frameDiff": 0.34669637,
+      "event": null
     },
     {
       "i": 198,
@@ -2386,10 +2386,10 @@
         "x": 0.16524,
         "y": 0.49369
       },
-      "surprisePre": 0.05841908,
-      "surprisePost": 0.0515561,
-      "frameDiff": 0.58718014,
-      "event": "wall-teleport"
+      "surprisePre": 0.05513716,
+      "surprisePost": 0.04919312,
+      "frameDiff": 0.30718014,
+      "event": null
     },
     {
       "i": 199,
@@ -2398,10 +2398,10 @@
         "x": 0.17008,
         "y": 0.48209
       },
-      "surprisePre": 0.05778675,
-      "surprisePost": 0.05110083,
-      "frameDiff": 0.55049962,
-      "event": "wall-teleport"
+      "surprisePre": 0.0552308,
+      "surprisePost": 0.04926054,
+      "frameDiff": 0.27049962,
+      "event": null
     },
     {
       "i": 200,
@@ -2410,10 +2410,10 @@
         "x": 0.17515,
         "y": 0.47052
       },
-      "surprisePre": 0.05736295,
-      "surprisePost": 0.05079569,
-      "frameDiff": 0.51884166,
-      "event": "wall-teleport"
+      "surprisePre": 0.05537237,
+      "surprisePost": 0.04936247,
+      "frameDiff": 0.23884166,
+      "event": null
     },
     {
       "i": 201,
@@ -2422,10 +2422,10 @@
         "x": 0.18045,
         "y": 0.459
       },
-      "surprisePre": 0.0571093,
-      "surprisePost": 0.05061306,
-      "frameDiff": 0.4941541,
-      "event": "wall-teleport"
+      "surprisePre": 0.05555903,
+      "surprisePost": 0.04949687,
+      "frameDiff": 0.2141541,
+      "event": null
     },
     {
       "i": 202,

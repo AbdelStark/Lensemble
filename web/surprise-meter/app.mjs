@@ -15,12 +15,13 @@ const TRACE_INK = "#222f3c", GRAPHITE = "#84786a", OXBLOOD = "#96282b",
 
 // dev / kiosk hooks:
 // ?engine=auto|live|fallback, ?ep=wasm|webgpu, ?steps=96, ?mode=post,
-// ?auto=ood|teleport|wall, ?hold=ood.
+// ?trajectory=live, ?auto=ood|teleport|wall, ?hold=ood.
 const params = new URLSearchParams(location.search);
 
 let certified = { ...FALLBACK_CERTIFIED };
 let nonClaims = [...FALLBACK_NON_CLAIMS];
 let servedTrajectory = null;
+let trajectoryKind = "fallback";
 let servedOffset = null;
 let livePrePost = null;
 let runtimeState = {
@@ -147,28 +148,6 @@ async function tryBuildLiveTrajectory() {
 }
 
 await loadServedBundle();
-try {
-  const timeoutMs = Number.parseInt(params.get("liveTimeoutMs") || "20000", 10);
-  const liveSteps = await withTimeout(
-    tryBuildLiveTrajectory(),
-    Number.isFinite(timeoutMs) ? timeoutMs : 20000,
-    "live surprise-meter startup",
-  );
-  if (Array.isArray(liveSteps) && liveSteps.length) {
-    servedTrajectory = liveSteps;
-  } else if (engineMode() === "live") {
-    throw new Error("live mode did not produce a trajectory");
-  }
-} catch (error) {
-  if (engineMode() === "live") {
-    throw error;
-  }
-  runtimeState = {
-    kind: "fallback",
-    label: "Fallback",
-    summary: `recorded trajectory fallback; live ONNX unavailable (${error.message}).`,
-  };
-}
 
 const engine = new SurpriseEngine({ certified, trajectory: servedTrajectory });
 const surpRec = new Recorder($("surpriseCanvas"), {
@@ -251,6 +230,69 @@ function fillHUD() {
   $("srcLine").textContent = ` Adapter ${MODEL.latentDim}-d latent · ~${MODEL.msPerStep} ms/step.`;
 }
 
+function publishDebugState() {
+  globalThis.__surpriseMeter = {
+    runtimeState,
+    livePrePost,
+    certified,
+    trajectoryKind,
+    trajectorySteps: engine.trajectory?.length ?? 0,
+  };
+}
+
+function replaceTrajectory(trajectory, kind) {
+  const wasRunning = engine.running;
+  const mode = engine.mode;
+  servedTrajectory = trajectory;
+  trajectoryKind = kind;
+  engine.trajectory = trajectory;
+  engine.reset();
+  engine.running = wasRunning;
+  shownSurprise = engine.baselineLevel();
+  setMode(mode);
+}
+
+async function maybeUpgradeLive() {
+  if (engineMode() === "fallback") {
+    publishDebugState();
+    return;
+  }
+  try {
+    const timeoutMs = Number.parseInt(params.get("liveTimeoutMs") || "20000", 10);
+    const liveSteps = await withTimeout(
+      tryBuildLiveTrajectory(),
+      Number.isFinite(timeoutMs) ? timeoutMs : 20000,
+      "live surprise-meter startup",
+    );
+    if (!Array.isArray(liveSteps) || !liveSteps.length) {
+      throw new Error("live mode did not produce a trajectory");
+    }
+    const liveTrajectoryRequested = engineMode() === "live" || params.get("trajectory") === "live";
+    if (liveTrajectoryRequested) {
+      replaceTrajectory(liveSteps, "live");
+    } else {
+      runtimeState = {
+        kind: "live-check",
+        label: "Live check",
+        summary:
+          `recorded stage trajectory; live ONNX held-out check ${pct(livePrePost.surpriseDropRatioLive)} ` +
+          `on ${livePrePost.count} pairs.`,
+      };
+    }
+  } catch (error) {
+    const forcedLive = engineMode() === "live";
+    runtimeState = {
+      kind: "fallback",
+      label: forcedLive ? "Live unavailable" : "Fallback",
+      summary: `recorded trajectory fallback; live ONNX unavailable (${error.message}).`,
+    };
+    console.warn("[surprise-meter] live runtime unavailable; using recorded fallback", error);
+  } finally {
+    fillHUD();
+    publishDebugState();
+  }
+}
+
 // ── controls ──────────────────────────────────────────────────────────────
 const readout = document.querySelector(".readout");
 let shownSurprise = certified.baselineMse, surprised = false;
@@ -321,13 +363,7 @@ const autoType = params.get("auto");
 const holdType = params.get("hold");
 
 fillHUD();
-globalThis.__surpriseMeter = {
-  runtimeState,
-  livePrePost,
-  certified,
-  trajectoryKind: runtimeState.kind,
-  trajectorySteps: servedTrajectory?.length ?? 0,
-};
+publishDebugState();
 // warm the recorders so the paper is already inked, and leave the engine mid-stride
 // (no reset — resetting would zero frameDiff and leave a one-frame dip at the seam).
 for (let i = 0; i < 260; i++) { const s = engine.tick(1 / 60); surpRec.push(s.surprise, false); fdRec.push(s.frameDiff, false); }
@@ -335,3 +371,4 @@ setMode(params.get("mode") === "post" ? "post" : "pre");
 if (reduceMotion && !autoType && !holdType) setRunning(false); // honour the preference; waits for ▶
 if (autoType) setInterval(() => document.querySelector(`[data-perturb="${autoType}"]`)?.click(), 1800);
 requestAnimationFrame(frame);
+void maybeUpgradeLive();

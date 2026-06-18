@@ -91,8 +91,10 @@ def test_surprise_producer_writes_docs_and_served_assets(tmp_path: Path) -> None
     result_card = json.loads(card.read_text(encoding="utf-8"))
     assert payload["schema"] == "lewm-surprise/1"
     assert payload["passes"] is True
+    assert payload["perturbationSpikeRatio"] > 1.5
     assert trajectory["schema"] == "lewm-surprise-traj/1"
     assert 0 < len(trajectory["steps"]) <= 600
+    assert all(row.get("event") is None for row in trajectory["steps"])
     assert result_card["schema"] == "lewm-surprise-result-card/1"
     assert result_card["display"]["thisRun"] == "+12.3%"
     assert result_card["display"]["seedMean"] == "+16.8%"
@@ -110,6 +112,7 @@ def test_surprise_pass_predicate_requires_mandatory_non_claims() -> None:
     trajectory = module.build_fallback_trajectory(
         mean_pre=system["result"]["baselineMse"],
         mean_post=system["result"]["adaptedMse"],
+        include_events=True,
     )
     payload = module.build_surprise_evidence(
         system=system, seedsweep=seedsweep, trajectory=trajectory
@@ -117,3 +120,25 @@ def test_surprise_pass_predicate_requires_mandatory_non_claims() -> None:
     assert module.surprise_passes(payload) is True
     payload["nonClaims"] = payload["nonClaims"][:-1]
     assert module.surprise_passes(payload) is False
+
+
+def test_surprise_served_trajectory_is_calm_by_default() -> None:
+    module = _load_module()
+    system = json.loads(
+        (EVIDENCE / "lewm_tworooms_system_probe.json").read_text(encoding="utf-8")
+    )
+    calm = module.build_fallback_trajectory(
+        mean_pre=system["result"]["baselineMse"],
+        mean_post=system["result"]["adaptedMse"],
+    )
+    assert all(row.get("event") is None for row in calm["steps"])
+
+    eventful = module.build_fallback_trajectory(
+        mean_pre=system["result"]["baselineMse"],
+        mean_post=system["result"]["adaptedMse"],
+        include_events=True,
+    )
+    event_indices = [int(row["i"]) for row in eventful["steps"] if row.get("event")]
+    assert event_indices == (
+        list(range(84, 102)) + list(range(138, 156)) + list(range(184, 202))
+    )

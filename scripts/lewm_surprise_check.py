@@ -83,13 +83,18 @@ def build_fallback_trajectory(
     mean_pre: float,
     mean_post: float,
     steps: int = 240,
+    include_events: bool = False,
 ) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
-    events = {
-        84: ("teleport", 2.4),
-        138: ("ood-action", 2.15),
-        184: ("wall-teleport", 1.8),
-    }
+    events = (
+        {
+            84: ("teleport", 2.4),
+            138: ("ood-action", 2.15),
+            184: ("wall-teleport", 1.8),
+        }
+        if include_events
+        else {}
+    )
     for i in range(steps):
         phase = i / 18.0
         ripple = 0.0035 * math.sin(phase) + 0.0018 * math.sin(phase * 2.7 + 0.4)
@@ -97,7 +102,7 @@ def build_fallback_trajectory(
         event_name = None
         event_energy = 0.0
         for start, (name, scale) in events.items():
-            decay = max(0, i - start)
+            decay = i - start
             if 0 <= decay < 18:
                 event_name = name
                 event_energy += mean_pre * scale * math.exp(-decay / 4.0)
@@ -122,7 +127,12 @@ def build_fallback_trajectory(
         )
     return {
         "schema": "lewm-surprise-traj/1",
-        "source": "deterministic fallback trajectory for rehearsal rung C; illustrative perturbations only",
+        "source": (
+            "deterministic fallback trajectory for rehearsal rung C; calm default replay; "
+            "perturbations are user-triggered controls"
+            if not include_events
+            else "deterministic perturbation scenario for rehearsal rung C evidence predicate"
+        ),
         "warmupSteps": 2,
         "steps": rows,
     }
@@ -200,6 +210,7 @@ def build_surprise_evidence(
             "systemProbe": "docs/evidence/lewm_tworooms_system_probe.json#result",
             "seedSweep": "docs/evidence/lewm_tworooms_probe_seedsweep.json#distribution",
             "trajectory": "web/surprise-meter/data/surprise_trajectory.json",
+            "perturbationScenario": "scripts/lewm_surprise_check.py::build_fallback_trajectory(include_events=True)",
         },
         "crossCheck": {
             "systemProbePasses": bool(system["passes"]),
@@ -239,19 +250,24 @@ def main() -> None:
     args = _args()
     system = json.loads(args.system.read_text(encoding="utf-8"))
     seedsweep = json.loads(args.seedsweep.read_text(encoding="utf-8"))
-    trajectory = build_fallback_trajectory(
+    served_trajectory = build_fallback_trajectory(
         mean_pre=float(system["result"]["baselineMse"]),
         mean_post=float(system["result"]["adaptedMse"]),
     )
+    perturbation_trajectory = build_fallback_trajectory(
+        mean_pre=float(system["result"]["baselineMse"]),
+        mean_post=float(system["result"]["adaptedMse"]),
+        include_events=True,
+    )
     evidence = build_surprise_evidence(
-        system=system, seedsweep=seedsweep, trajectory=trajectory
+        system=system, seedsweep=seedsweep, trajectory=perturbation_trajectory
     )
     if not evidence["passes"]:
         raise SystemExit("lewm-surprise evidence did not pass its predicate")
 
     for path, payload in (
         (args.out, evidence),
-        (args.trajectory_out, trajectory),
+        (args.trajectory_out, served_trajectory),
         (args.result_card_out, build_result_card(evidence)),
     ):
         path.parent.mkdir(parents=True, exist_ok=True)

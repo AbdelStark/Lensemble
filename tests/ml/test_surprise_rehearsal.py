@@ -41,9 +41,18 @@ def test_surprise_meter_page_carries_live_and_fallback_contracts() -> None:
         "browser held-out check",
         "certified held-out error",
         "browser spot-check",
+        "maybeUpgradeLive",
+        "Live unavailable",
+        "trajectory=live",
+        "Live check",
+        "liveTrajectoryRequested",
     ):
         assert needle in app, needle
+    assert app.index("const engine = new SurpriseEngine") < app.index("void maybeUpgradeLive()")
+    assert "await withTimeout(\n    tryBuildLiveTrajectory()" not in app
+    assert "recorded stage trajectory; live ONNX held-out check" in app
     assert "?engine=live&ep=wasm" in readme
+    assert "?trajectory=live" in readme
     assert "providerAttempts" in runtime
     assert "session-create-failed" in runtime
 
