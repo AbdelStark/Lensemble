@@ -4,7 +4,7 @@ This module intentionally implements a narrow educational demo backend, not a
 production coordinator. It owns browser run allocation, participant admission,
 residency-safe lifecycle events, bounded browser update artifacts, a tiny
 coordinator-style aggregation path, inference artifact publication, and evidence
-export for issues #294/#296-#301 plus the hackathon readiness epic #303.
+export for the browser-demo and real-checkpoint LeWM demo tracks.
 
 The hard boundary is that browser participants submit only versioned derived
 updates: a tiny bounded vector, shape, hash, norm, sample count, and runtime
@@ -67,7 +67,7 @@ INFERENCE_SCHEMA = "demo-inference-artifact/1"
 EVIDENCE_SCHEMA = "demo-evidence/1"
 DEMO_PRESETS = frozenset({"swipe-dot-tiny"})
 ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz"
-HACKATHON_MODEL_RUNTIME = "tiny-js-vector-v1"
+TINY_BROWSER_MODEL_RUNTIME = "tiny-js-vector-v1"
 LEWM_MODEL_RUNTIME = "lewm-adapter-mean-v1"
 LEWM_LEARNER_RUNTIME = "lewm-local-continuation-v1"
 INITIAL_REVISION_ID = "initial"
@@ -617,7 +617,7 @@ class FederatedDemoService:
             "learnerRuntime": run.learner_runtime,
             "modelRuntime": LEWM_MODEL_RUNTIME
             if run.mode == REAL_LEWM_MODE
-            else HACKATHON_MODEL_RUNTIME,
+            else TINY_BROWSER_MODEL_RUNTIME,
             "lewmBinding": lewm_binding,
             "currentModelRevisionId": run.current_model_revision_id,
             "deployment": self.deployment_payload(),
@@ -1160,7 +1160,7 @@ class FederatedDemoService:
             "learnerRuntime": run.learner_runtime,
             "modelRuntime": LEWM_MODEL_RUNTIME
             if run.mode == REAL_LEWM_MODE
-            else HACKATHON_MODEL_RUNTIME,
+            else TINY_BROWSER_MODEL_RUNTIME,
             **lewm_section,
             "currentModelRevisionId": run.current_model_revision_id,
             "eventTrace": [e.as_payload() for e in run.events],
@@ -1185,7 +1185,7 @@ class FederatedDemoService:
                 else "tiny-js-vector",
                 "reason": "real-lewm-tworooms adapter runtime selected"
                 if run.mode == REAL_LEWM_MODE
-                else "hackathon tiny model runtime selected",
+                else "tiny browser model runtime selected",
             },
             "liveness": {
                 "participants": [
@@ -1589,13 +1589,13 @@ class FederatedDemoService:
         model_revision = {
             "schema": MODEL_REVISION_SCHEMA,
             "kind": "model-revision",
-            "label": f"round-{run.round} hackathon tiny model revision",
+            "label": f"round-{run.round} tiny browser model revision",
             "round": run.round,
             "roundId": self._round_id(run),
             "sha256": revision_hash,
             "modelRevisionId": model_revision_id,
             "parentModelRevisionId": parent_revision,
-            "runtime": HACKATHON_MODEL_RUNTIME,
+            "runtime": TINY_BROWSER_MODEL_RUNTIME,
             "shape": [len(aggregate_vector)],
             "parameterCount": len(aggregate_vector),
             "vector": aggregate_vector,
@@ -1691,7 +1691,7 @@ class FederatedDemoService:
             {
                 "schema": INFERENCE_SCHEMA,
                 "kind": "inference-model",
-                "label": "browser inference attachment from hackathon tiny model",
+                "label": "browser inference attachment from tiny browser model",
                 "round": run.round,
                 "sha256": inference_hash,
                 "sourceCheckpoint": checkpoint_hash,
@@ -1699,7 +1699,7 @@ class FederatedDemoService:
                 "modelRevisionId": model_revision_id,
                 "modelId": f"lensemble-demo/{run.id}",
                 "revision": inference_hash[:12],
-                "runtime": HACKATHON_MODEL_RUNTIME,
+                "runtime": TINY_BROWSER_MODEL_RUNTIME,
                 "shape": [len(aggregate_vector)],
                 "parameterCount": len(aggregate_vector),
                 "vector": aggregate_vector,

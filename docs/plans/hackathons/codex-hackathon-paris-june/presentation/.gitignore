@@ -1,5 +1,0 @@
-# Regenerable build artifacts, kept out of git.
-# vendor/ : third-party reveal.js + fonts pulled by ./vendor.sh
-# dist/   : standalone export built by scripts/build_presentation_export.py
-vendor/
-dist/

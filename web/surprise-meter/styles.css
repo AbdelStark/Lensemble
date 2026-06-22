@@ -1,9 +1,9 @@
 /* ============================================================================
    Less Surprised — surprise-meter · "The Offprint" instrument
-   Same design language as the Demo-Night deck: warm bone paper, one oxblood
-   pigment, Fraunces + Newsreader + Spline Sans Mono, the surprise signal as a
-   registered ink recorder. A lab-bench readout printed on paper — not a SaaS UI.
-   Fonts load from Fontsource CDN; vendor them for an offline venue (see README).
+   Warm bone paper, one oxblood pigment, Fraunces + Newsreader + Spline Sans
+   Mono, and the surprise signal as a registered ink recorder. A lab-bench
+   readout printed on paper, not a SaaS UI. Fonts load from Fontsource CDN;
+   vendor them for an offline demo machine (see README).
    ========================================================================== */
 
 @font-face { font-family:"Fraunces Variable"; font-style:normal; font-display:swap; font-weight:300 900;

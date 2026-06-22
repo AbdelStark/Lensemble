@@ -1,8 +1,8 @@
 # Browser Federated Demo Roadmap
 
 Trackers: [#294](https://github.com/AbdelStark/Lensemble/issues/294) closed the
-local educational baseline. [#303](https://github.com/AbdelStark/Lensemble/issues/303)
-is the hackathon-readiness layer above it.
+local educational baseline. [#314](https://github.com/AbdelStark/Lensemble/issues/314)
+is the active real-checkpoint browser-federation line.
 
 This document describes the **surrogate** demo path (`surrogate-swipe-dot`):
 the tiny browser learner over synthetic swipe-dot trajectories. The active
@@ -49,7 +49,7 @@ uv run lensemble demo federated \
 Startup output prints the host URL, public base URL, participant join root,
 transport mode, fallback mode, deployment target, and safety settings.
 
-## Hackathon Live Flow
+## Public Demo Flow
 
 1. The host opens the public HTTPS URL and creates a run, optionally adjusting
    participant count, quorum, and round count. New runs default to 1000 rounds
@@ -75,7 +75,7 @@ transport mode, fallback mode, deployment target, and safety settings.
 ## Protocol Map
 
 Architecture decision: browsers talk to a coordinator-owned HTTP/WebSocket
-endpoint. Do not introduce Kafka for the hackathon path. Do not expose NATS
+endpoint. Do not introduce Kafka for the browser demo path. Do not expose NATS
 directly to browsers. NATS may be considered later as an internal backend bus if
 the coordinator splits into services.
 
@@ -192,7 +192,7 @@ submitted tiny update vectors and publishes:
   load without hidden server-local state.
 
 The final inference path is the tiny JS vector runtime. If a separate ONNX export
-from #289 is available, the panel can load it explicitly; the hackathon path does
+from #289 is available, the panel can load it explicitly; the browser demo does
 not depend on #289.
 
 ## Evidence Bundle
@@ -215,15 +215,15 @@ not depend on #289.
 
 It excludes raw participant data, participant tokens, and model weights.
 
-## Rehearsal Gate
-
-Automated deterministic rehearsal:
+## Validation
 
 ```bash
-uv run python scripts/hackathon_demo_rehearsal.py
+uv run pytest tests/ml/test_federated_demo_app.py
+uv run pytest tests/ml/test_lewm_probe.py tests/ml/test_lewm_system_probe.py tests/ml/test_lewm_evidence_audit.py
+node web/federated-demo/lewm_probe_selftest.mjs
 ```
 
-The script exercises:
+These gates exercise:
 
 - host creates a run;
 - four synthetic phone participants join;
@@ -235,7 +235,7 @@ The script exercises:
 - evidence export;
 - participant dropout with quorum preserved.
 
-Manual day-of checklist:
+Manual rehearsal checklist:
 
 1. Start with the public HTTPS/WSS path.
 2. Confirm `/api/health` reports the expected deployment target and safety
@@ -257,9 +257,9 @@ Fallback checklist:
 - Cloudflare Tunnel: run the local coordinator with `--host 0.0.0.0`, start the
   tunnel to port `8765`, pass the tunnel HTTPS URL as `--public-base-url`, and
   keep REST polling fallback visible.
-- LAN/hotspot: connect host and phones to the same network, bind
+- LAN or lab network: connect host and phones to the same network, bind
   `--host 0.0.0.0`, use the host LAN IP in `--public-base-url`, and rehearse QR
-  joins before going on stage.
+  joins before public demonstrations.
 - Reset: create a new run; no persistent account state is required.
 
 Host narration script:
@@ -287,7 +287,6 @@ systems demo, not proof of production browser training or a benchmark win.
 
 ```bash
 uv run pytest tests/ml/test_federated_demo_app.py
-uv run python scripts/hackathon_demo_rehearsal.py
 uv run python scripts/check_docs_links.py docs SPEC.md README.md
 uv run python -m mkdocs build --strict
 git diff --check

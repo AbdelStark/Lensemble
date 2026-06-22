@@ -52,7 +52,10 @@ def test_dashboard_mounts_graph_wall_above_probe_and_collapsed_detail_drawers() 
     )
     assert "dashboard-shell" in dashboard
     assert "dashboard-drawers" in dashboard
-    assert 'detailDisclosure("economy-detail"' in dashboard
+    assert 'detailDisclosure("artifacts-detail"' in dashboard
+    assert 'detailDisclosure("timeline-detail"' in dashboard
+    forbidden_route = "bu" + "yer"
+    assert forbidden_route not in dashboard.lower()
     assert "participantLossSeries" in app
 
 

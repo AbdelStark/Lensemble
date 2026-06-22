@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# Live hackathon launcher.
+# Local browser-demo launcher.
 # Starts the Lensemble demo backend, opens the federated orchestrator dashboard,
 # and opens the surprise-meter page. The federated demo server serves both web
 # surfaces from the same process.
@@ -153,7 +153,7 @@ main() {
 
   open_tabs
 
-  info "Presentation tabs are open."
+  info "Demo tabs are open."
   info "Press Ctrl+C in this terminal to stop the server when you are done."
   if [[ "${WAIT_FOR_CTRL_C}" == "1" ]]; then
     if [[ "${STARTED_SERVER}" == "1" ]]; then

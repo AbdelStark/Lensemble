@@ -230,32 +230,6 @@ export class BackendClient {
   exportEvidence(runId) {
     return requestJson(`${this.basePath}/runs/${encodeURIComponent(runId)}/export`);
   }
-
-  economyConfig() {
-    return requestJson(`${this.basePath}/economy/config`);
-  }
-
-  createEconomySale(payload) {
-    return requestJson(`${this.basePath}/economy/sales`, { method: "POST", body: payload });
-  }
-
-  getEconomySale(saleId) {
-    return requestJson(`${this.basePath}/economy/sales/${encodeURIComponent(saleId)}`);
-  }
-
-  createEconomyPayment(saleId, extra = {}) {
-    return requestJson(`${this.basePath}/economy/sales/${encodeURIComponent(saleId)}/payment`, {
-      method: "POST",
-      body: extra,
-    });
-  }
-
-  refreshEconomyPayment(saleId, extra = {}) {
-    return requestJson(`${this.basePath}/economy/sales/${encodeURIComponent(saleId)}/status`, {
-      method: "POST",
-      body: extra,
-    });
-  }
 }
 
 export const backendClient = new BackendClient();

@@ -17,11 +17,6 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
-from lensemble.demo.economy import (
-    EconomyConfig,
-    EconomyDemoError,
-    EconomyDemoService,
-)
 from lensemble.demo.federated import (
     DemoSafetyConfig,
     FederatedDemoError,
@@ -105,13 +100,8 @@ def _send_ws_close(conn: socket.socket) -> None:
         pass
 
 
-def make_handler(
-    service: FederatedDemoService,
-    *,
-    economy_service: EconomyDemoService | None = None,
-) -> type[BaseHTTPRequestHandler]:
+def make_handler(service: FederatedDemoService) -> type[BaseHTTPRequestHandler]:
     rate_limits: dict[tuple[str, ...], int] = {}
-    economy = economy_service or EconomyDemoService()
 
     class DemoHandler(BaseHTTPRequestHandler):
         server_version = "LensembleFederatedDemo/1"
@@ -125,13 +115,8 @@ def make_handler(
                             "ok": True,
                             "service": "lensemble-federated-demo",
                             "deployment": service.deployment_payload(),
-                            "economy": economy.config_payload(),
                         }
                     )
-                    return
-                if parsed.path.startswith("/api/economy/"):
-                    self._check_rate_limit(parsed.path)
-                    self._handle_economy_get(parsed.path)
                     return
                 if (
                     parsed.path.startswith("/api/runs/")
@@ -145,8 +130,6 @@ def make_handler(
                     return
                 self._static(parsed.path)
             except FederatedDemoError as err:
-                self._error(err.status, err.code, str(err))
-            except EconomyDemoError as err:
                 self._error(err.status, err.code, str(err))
             except Exception as exc:  # pragma: no cover - defensive local server guard
                 self._error(500, "internal_error", str(exc))
@@ -166,12 +149,6 @@ def make_handler(
                 parsed = urlparse(self.path)
                 payload = self._read_json(max_bytes=self._body_budget(parsed.path))
                 self._check_rate_limit(parsed.path, payload)
-                if (
-                    parsed.path.startswith("/api/economy/")
-                    or parsed.path == "/api/economy/sales"
-                ):
-                    self._handle_economy_post(parsed.path, payload)
-                    return
                 if parsed.path == "/api/runs":
                     self._json(service.create_run(payload))
                     return
@@ -180,8 +157,6 @@ def make_handler(
                     return
                 self._error(404, "not_found", "unknown API route")
             except FederatedDemoError as err:
-                self._error(err.status, err.code, str(err))
-            except EconomyDemoError as err:
                 self._error(err.status, err.code, str(err))
             except json.JSONDecodeError:
                 self._error(400, "invalid_json", "request body must be JSON")
@@ -217,16 +192,6 @@ def make_handler(
                 self._json(service.model_revision(parts[2], parts[4]))
                 return
             self._error(404, "not_found", "unknown run API route")
-
-        def _handle_economy_get(self, path: str) -> None:
-            parts = [unquote(p) for p in path.split("/") if p]
-            if parts == ["api", "economy", "config"]:
-                self._json(economy.config_payload())
-                return
-            if len(parts) == 4 and parts[:3] == ["api", "economy", "sales"]:
-                self._json(economy.get_sale(parts[3]))
-                return
-            self._error(404, "not_found", "unknown economy API route")
 
         def _handle_api_post(self, path: str, payload: dict[str, Any]) -> None:
             parts = [unquote(p) for p in path.split("/") if p]
@@ -318,29 +283,6 @@ def make_handler(
                 )
                 return
             self._error(404, "not_found", "unknown run API route")
-
-        def _handle_economy_post(self, path: str, payload: dict[str, Any]) -> None:
-            parts = [unquote(p) for p in path.split("/") if p]
-            if parts == ["api", "economy", "sales"]:
-                run_snapshot = None
-                run_id = payload.get("runId")
-                if run_id:
-                    try:
-                        run_snapshot = service.snapshot(str(run_id))
-                    except FederatedDemoError as err:
-                        if err.code != "not_found":
-                            raise
-                self._json(economy.create_sale(payload, run_snapshot=run_snapshot))
-                return
-            if len(parts) == 5 and parts[:3] == ["api", "economy", "sales"]:
-                sale_id = parts[3]
-                if parts[4] == "payment":
-                    self._json(economy.create_payment(sale_id, payload))
-                    return
-                if parts[4] == "status":
-                    self._json(economy.refresh_status(sale_id, payload))
-                    return
-            self._error(404, "not_found", "unknown economy API route")
 
         def _handle_ws(self, path: str, query: dict[str, list[str]]) -> None:
             parts = [unquote(p) for p in path.split("/") if p]
@@ -710,13 +652,6 @@ def load_lewm_manifest(path: str | None = None) -> dict | None:
     return manifest if isinstance(manifest, dict) else None
 
 
-def _origin_from_public_base_url(public_base_url: str) -> str:
-    parsed = urlparse(public_base_url)
-    if parsed.scheme and parsed.netloc:
-        return f"{parsed.scheme}://{parsed.netloc}"
-    return public_base_url.rstrip("/").removesuffix("/web/federated-demo")
-
-
 def serve(
     *,
     host: str = "127.0.0.1",
@@ -732,11 +667,6 @@ def serve(
     display_host = "127.0.0.1" if host in {"0.0.0.0", "::"} else host
     public_base = public_base_url or f"http://{display_host}:{port}/web/federated-demo"
     lewm_manifest = load_lewm_manifest(lewm_manifest_path)
-    economy = EconomyDemoService(
-        config=EconomyConfig.from_env(
-            public_base_url=_origin_from_public_base_url(public_base)
-        )
-    )
     service = FederatedDemoService(
         public_base_url=public_base,
         public_demo=public_demo,
@@ -748,9 +678,7 @@ def serve(
         ),
         lewm_export_manifest=lewm_manifest,
     )
-    httpd = ThreadingHTTPServer(
-        (host, port), make_handler(service, economy_service=economy)
-    )
+    httpd = ThreadingHTTPServer((host, port), make_handler(service))
     if public_base_url is None:
         service.public_base_url = (
             f"http://{display_host}:{httpd.server_port}/web/federated-demo"
@@ -772,10 +700,6 @@ def serve(
         )
     print(
         f"deployment_target={deployment_target} public_demo={str(public_demo).lower()}"
-    )
-    print(
-        "economy="
-        + json.dumps(economy.config_payload(), sort_keys=True, separators=(",", ":"))
     )
     print(
         "safety="

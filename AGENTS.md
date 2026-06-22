@@ -16,37 +16,20 @@ comments as public claim surfaces, not scratch notes.
 - Do not rewrite generated evidence artifacts by hand. Regenerate them through
   their producer scripts or update the human-facing docs that summarize them.
 
-## Hackathon Today — 2026-06-18
+## Current Operating Mode
 
-The active event is the Codex Hackathon in Paris. Treat today as ship mode:
-optimize every action for a reliable Demo-Night-ready `#359` delivery, not for
-new research scope.
+The event snapshot is preserved by the `v0.1.0-codex-hackathon-final` tag.
+Main is back in normal research-maintainer mode: prioritize reproducible
+evidence, clean public APIs, conservative docs, and issue-backed roadmap work
+over event-specific demo polish.
 
-- Start with [`docs/plans/hackathons/codex-hackathon-paris-june/`](docs/plans/hackathons/codex-hackathon-paris-june/)
-  and the active tracker [#359](https://github.com/AbdelStark/Lensemble/issues/359).
-- Primary deliverable: **sovereign robotics world-model economy**. The queue is
-  `#364` -> `#361` -> `#360` -> `#338` -> `#363` -> `#362`, with
-  `#338` / `#349`-`#354` continuing as the surprise-meter technical track.
-- Open `#364` for narrative/deck work, `#361` for ledger work, and `#349` for
-  the first surprise-meter build task. These can proceed in parallel.
-- Do not work on Cartographer `#339`, Latent Genie `#337`, or other stretch
-  ideas until `#359` has a green integrated rehearsal gate and fallback bundle.
-- If a path is blocked for more than a short build/debug cycle, choose the
-  demo-preserving fallback from the sovereign-economy runsheet instead of
-  widening scope.
-- Stage-ready assets have priority over elegance: one-command clean round,
-  committed adapter offset, recorded trajectory fallback, contribution ledger,
-  Mollie test checkout or mock checkout, evidence JSON, <=20 s capture, and
-  claim-safe result/economics card.
-- Keep the on-stage language exact: "federated adapter continuation on a frozen
-  checkpoint"; scalar surprise is next-latent MSE; show +12.3% this run,
-  +16.8% mean, and +5.4% worst seed together.
-- Use safe placeholders in public copy: "frontier model access restrictions" and
-  "a humanoid robotics buyer." Do not name specific companies or incidents
-  unless separately verified and approved.
-- Mollie API keys are server-side only. `.env` is ignored; commit only
-  `.env.example` placeholders. Browser code must never contain `MOLLIE_API_KEY`
-  or real `test_` / `live_` keys.
+- Start from `README.md`, `SPEC.md`, `docs/roadmap/`, and current GitHub issue
+  state before introducing new scope.
+- Keep public copy and evidence cards claim-bounded. Do not turn the browser
+  demo's narrow adapter-continuation result into a broad product, benchmark, or
+  robotics-deployment claim.
+- The repository should not grow event-specific commerce or pitch scaffolding on
+  `main`; tag or branch temporary demo assets instead.
 
 ## Claim Discipline
 
