@@ -48,7 +48,9 @@ def test_surprise_meter_page_carries_live_and_fallback_contracts() -> None:
         "liveTrajectoryRequested",
     ):
         assert needle in app, needle
-    assert app.index("const engine = new SurpriseEngine") < app.index("void maybeUpgradeLive()")
+    assert app.index("const engine = new SurpriseEngine") < app.index(
+        "void maybeUpgradeLive()"
+    )
     assert "await withTimeout(\n    tryBuildLiveTrajectory()" not in app
     assert "recorded stage trajectory; live ONNX held-out check" in app
     assert "?engine=live&ep=wasm" in readme
