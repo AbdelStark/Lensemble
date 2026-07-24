@@ -3,7 +3,7 @@
 # dependencies (V-JEPA 2 weights, LeJEPA/LeWM, stable-worldmodel/stable-pretraining) are vendored/recorded
 # per run in the RunManifest (RFC-0016), not PyPI runtime deps. See docs/spec/09-release-and-versioning.md.
 [build-system]
-requires = ["setuptools==81.0.0"]
+requires = ["setuptools==83.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]

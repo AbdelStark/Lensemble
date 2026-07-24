@@ -103,7 +103,7 @@ def test_pyproject_bundles_all_three_license_files() -> None:
 
 def test_clean_checkout_has_locked_build_inputs_and_type_marker() -> None:
     metadata = _toml()
-    assert metadata["build-system"]["requires"] == ["setuptools==81.0.0"]
+    assert metadata["build-system"]["requires"] == ["setuptools==83.0.0"]
     assert (_ROOT / ".python-version").read_text(encoding="utf-8").strip() == "3.11"
     assert (_ROOT / "uv.lock").is_file()
     assert (_ROOT / "lensemble" / "py.typed").is_file()
