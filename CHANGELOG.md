@@ -85,9 +85,9 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 - `area:ci`/`area:security`: pin every third-party GitHub Action to a verified
   full commit SHA and refresh the workflows to Node 24-compatible official
   releases.
-- `area:dependencies`/`area:security`: refresh the resolved GitPython, Pillow,
-  setuptools, and PyTorch versions to their patched releases while preserving
-  Lensemble's declared PyTorch compatibility range.
+- `area:dependencies`/`area:security`: refresh the resolved GitPython, Hydra,
+  Pillow, setuptools, and PyTorch versions to their patched releases while
+  preserving Lensemble's declared compatibility ranges.
 - `area:protocol`: carry participant `clipped` and `quantized` claims through
   control-message schema v2, preserve them across network transport, and
   classify deterministic replay noise and post-commit sum comparisons
