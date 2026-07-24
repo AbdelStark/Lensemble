@@ -1,293 +1,140 @@
-# Browser Federated Demo Roadmap
+# Browser Federation Reference
 
-Trackers: [#294](https://github.com/AbdelStark/Lensemble/issues/294) closed the
-local educational baseline. [#314](https://github.com/AbdelStark/Lensemble/issues/314)
-is the active real-checkpoint browser-federation line.
+Trackers [#294](https://github.com/AbdelStark/Lensemble/issues/294) and
+[#314](https://github.com/AbdelStark/Lensemble/issues/314) are closed. All
+delivery issues for the real-checkpoint path
+([#315](https://github.com/AbdelStark/Lensemble/issues/315) through
+[#324](https://github.com/AbdelStark/Lensemble/issues/324)) are also closed.
+This page is the maintained reference for the implemented browser boundary.
 
-This document describes the **surrogate** demo path (`surrogate-swipe-dot`):
-the tiny browser learner over synthetic swipe-dot trajectories. The active
-implementation queue is the Tapestry-like real-checkpoint pivot
-([#314](https://github.com/AbdelStark/Lensemble/issues/314)) specified in
-[TAPESTRY_LEWM.md](TAPESTRY_LEWM.md), which reuses this orchestration substrate
-and adds a separate `real-lewm-tworooms` mode. Nothing below claims real
-LeWorldModel training; the surrogate path stays clearly labeled as such.
+## Scope
 
-The browser federated demo is an educational systems showcase for Lensemble's
-Tapestry-like JEPA federation story: sovereign participants join a run, do
-resident browser-local work, submit bounded derived update artifacts, and the
-host can inspect lifecycle, liveness, aggregation, inference, and evidence
-export.
+The browser application exposes two separate research-demo modes:
 
-It is not a benchmark win over local-only, not production browser training, not
-a cryptographic honest-computation proof, and not a closed-loop physical SO-100
-success claim.
+| Mode | Implemented behavior |
+|---|---|
+| `surrogate-swipe-dot` | A tiny learner trains on synthetic swipe-dot trajectories and submits a clipped `browser-update/1` vector. This is an orchestration fixture, not a world-model result. |
+| `real-lewm-tworooms` | Hash-checked ONNX graphs run a pinned LeWorldModel TwoRooms checkpoint. The checkpoint stays frozen while a 12,512-parameter (0.069%) residual adapter on the predictor output trains with real browser-side gradients and submits a clipped `lewm-adapter-delta/1`. |
 
-## Current Shape
+The second mode is **federated adapter continuation on a frozen checkpoint**.
+It is not federated training of the world model. There is no browser training
+of the encoder, action encoder, predictor, or projection heads, and the result
+must not be shortened to "browser world-model training" or "full-model
+training."
+
+Both modes run through one trusted local coordinator. The real-LeWM path takes
+the deterministic mean of clipped adapter deltas. It does **not** wire secure
+aggregation or differential privacy, and it is not a multi-operator
+decentralized run. Cross-operator execution remains deferred in
+[#331](https://github.com/AbdelStark/Lensemble/issues/331).
+
+## Local entry point
 
 ```bash
 uv run lensemble demo federated --port 8765
 ```
 
-Open the printed host URL, usually:
+Open the host URL printed at startup, normally:
 
 ```text
 http://127.0.0.1:8765/web/federated-demo/
 ```
 
-For public or tunnel rehearsal, bind the coordinator and set the external base
-URL used by QR joins and WebSocket URLs:
+Run mode is a host-selected, run-level property carried by snapshots, events,
+model revisions, and exported evidence. A real-LeWM run fails closed if its
+pinned checkpoint export is unavailable; it never falls back silently to the
+surrogate learner.
 
-```bash
-uv run lensemble demo federated \
-  --host 0.0.0.0 \
-  --port 8765 \
-  --public-base-url https://YOUR-TUNNEL.trycloudflare.com/web/federated-demo \
-  --public-demo \
-  --deployment-target cloudflare-tunnel
-```
+## Runtime contract
 
-Startup output prints the host URL, public base URL, participant join root,
-transport mode, fallback mode, deployment target, and safety settings.
+Browser clients use coordinator-owned HTTP and WebSocket endpoints. Participant
+WebSocket authentication uses a protocol header rather than a URL parameter.
+REST and WebSocket commands share the same token, round, revision, shape,
+size, norm, duplicate, and stale-update validation.
 
-## Public Demo Flow
+The runtime retains:
 
-1. The host opens the public HTTPS URL and creates a run, optionally adjusting
-   participant count, quorum, and round count. New runs default to 1000 rounds
-   with a 1000-round public-demo cap.
-2. The dashboard shows a QR code and join URL for that run.
-3. Four participants scan the QR code from mobile browsers and join with short
-   display names.
-4. The host sees participants arrive, starts the run after quorum, and watches
-   live progress.
-5. Each phone runs a tiny browser-local learner over resident synthetic
-   swipe-dot trajectories in a Web Worker.
-6. Each phone submits a clipped `browser-update/1` artifact containing a tiny
-   derived vector and metadata; raw samples do not leave the browser.
-7. The coordinator validates artifacts, aggregates submitted vectors, publishes
-   a deterministic tiny model revision, and advances rounds.
-8. The host dashboard shows liveness, training progress, update submission,
-   aggregate metrics, model revision metadata, errors, and fallback status.
-9. The browser inference panel loads the final tiny JS revision and runs the
-   swipe-dot environment live. ONNX loading remains an explicit optional path.
-10. The host exports a residency-safe evidence bundle and can replay the run
-    story.
+- run creation, admission, quorum, heartbeat, reconnect, timeout, and explicit
+  dropout handling;
+- monotonic event replay over WebSocket with REST/NDJSON fallback;
+- mode-specific update validation and deterministic revision publication;
+- model-revision retrieval and residency-safe evidence export.
 
-## Protocol Map
+The coordinator does not expose NATS or Kafka directly to browsers. The shipped
+demo is an in-process research service, not a production multi-tenant control
+plane.
 
-Architecture decision: browsers talk to a coordinator-owned HTTP/WebSocket
-endpoint. Do not introduce Kafka for the browser demo path. Do not expose NATS
-directly to browsers. NATS may be considered later as an internal backend bus if
-the coordinator splits into services.
+## Update contracts
 
-```text
-host dashboard + phone participants
-  -> HTTPS/WSS public endpoint
-  -> coordinator backend
-      -> run state machine
-      -> participant tokens and admission
-      -> WebSocket event fanout
-      -> REST/NDJSON polling fallback
-      -> heartbeat, reconnect, timeout, and drop handling
-      -> tiny browser learner task assignment
-      -> update validation and residency guard
-      -> aggregation and global revision publication
-      -> evidence export
-  -> browser inference panel
-```
+`browser-update/1` is the surrogate-only vector contract. It carries a bounded
+one-dimensional derived vector, sample/work metadata, metrics, and a content
+hash.
 
-REST endpoints retained from #294:
+`lewm-adapter-delta/1` is the real-LeWM contract. It binds the delta to:
 
-- `POST /api/runs`
-- `GET /api/runs/{run_id}`
-- `GET /api/runs/{run_id}/events?after={seq}` as NDJSON fallback
-- `GET /api/runs/{run_id}/export`
-- `GET /api/runs/{run_id}/model-revisions/{revision_id}`
-- `POST /api/runs/{run_id}/join`
-- `POST /api/runs/{run_id}/control`
-- `POST /api/runs/{run_id}/participants/{participant_id}/heartbeat`
-- `POST /api/runs/{run_id}/participants/{participant_id}/progress`
-- `POST /api/runs/{run_id}/participants/{participant_id}/updates`
+- run, round, participant, and parent model revision;
+- pinned checkpoint and browser-export hashes;
+- an exact adapter parameter inventory and shape;
+- byte, parameter-count, and L2 clip bounds;
+- derived training and anti-collapse metrics.
 
-WebSocket endpoint:
+Raw observations, frames, actions, labels, latent batches, participant tokens,
+and base checkpoint weights are not accepted as update fields. This validation
+limits the artifact contract; it is not a cryptographic proof of honest local
+computation or of data residency.
 
-- `GET /api/runs/{run_id}/ws?role=host&after={seq}`
-- `GET /api/runs/{run_id}/ws?role=participant&participantId={participant_id}&after={seq}`
+## Binding browser evidence
 
-Participant WebSocket authentication uses the same participant token validation
-as REST. Browser clients pass the participant token in a WebSocket protocol
-header, not in the URL. Tokens are not emitted in events or exported evidence.
+The claim gate is the system-composed path:
 
-Event behavior:
+1. real adapter deltas are trained by the Node/browser implementation;
+2. `FederatedDemoService.submit_update` performs the shipped validation;
+3. `_close_round_lewm` creates the shipped deterministic-mean, hash-chained
+   global revision;
+4. the held-out probe scores that **server-produced** revision.
 
-- Events carry monotonic `seq`, `kind`, `severity`, `actor`, `participantId`,
-  `round`, `runState`, and residency-safe `payload`.
-- WebSocket subscribers receive a snapshot plus replay after `after`.
-- REST polling keeps the same monotonic replay semantics as fallback.
-- Important event kinds include `connection.opened`, `connection.closed`,
-  `participant.joined`, `participant.resumed`, `participant.stale`,
-  `participant.dropped`, `participant.training`, `update.submitted`,
-  `round.aggregating`, `round.closed`, `inference.ready`, and
-  `run.completed`.
+The committed
+[system-composed probe](../evidence/lewm_tworooms_system_probe.json) records
+held-out MSE `0.06037897796856822 -> 0.05296723026100999`
+(`+12.275%`) for the seed-`20260612` run, with no collapse flag. The committed
+[five-seed sweep](../evidence/lewm_tworooms_probe_seedsweep.json) is the
+robustness gate: all five draws improve, the mean relative improvement is
+`16.8%`, and the worst draw is `+5.4%` (seed 2), with no collapse-risk draw.
 
-Host commands:
+These two artifacts are the binding browser evidence. The
+[offline probe](../evidence/lewm_tworooms_probe_check.json), produced by
+`scripts/lewm_probe_check.py`, reimplements the mean in JavaScript and is only a
+math cross-check. It does not exercise the shipped Python validation and
+aggregation path and must not be used as the headline result.
 
-- `start`
-- `abort`
-- `fail`
-- `timeout-missing`
-- `drop`
-
-Participant commands:
-
-- `heartbeat`
-- `progress`
-- `submitUpdate`
-
-The WebSocket command path routes through the same service-level validation as
-REST. No browser command bypasses token checks, raw-data rejection, norm bounds,
-or duplicate/stale update guards.
-
-## Tiny Update Artifact
-
-`browser-update/1` is the allowed participant update. It is intentionally tiny
-and explicit:
-
-| Field | Meaning |
-|---|---|
-| `schema` | Must be `browser-update/1`. |
-| `runId`, `round`, `roundId` | Must match the active run and round. |
-| `participantId` | Must match the authenticated participant. |
-| `modelRevisionId` | Must match the active model revision. |
-| `source`, `runtime` | Browser-local tiny learner or simulator fixture label. |
-| `shape`, `parameterCount`, `vector` | One-dimensional clipped derived update vector. |
-| `sampleCount`, `localSteps`, `seed` | Tiny learner work metadata. |
-| `hash` | 64-character lowercase hex update hash. |
-| `l2Norm`, `clipNorm` | Server-validated norm and bound. |
-| `loss`, `probe`, `runtimeMs` | Derived progress/quality telemetry. |
-| `simulated` | Marks simulator fixtures separately from browser-local work. |
-
-Current public-demo limits are exposed in run snapshots and evidence export:
-max artifact bytes, max message bytes, max vector length, max participants, max
-rounds, token TTL, heartbeat stale timeout, participant timeout, shared client
-rate limit, participant-scoped protocol rate limit, and clip norm.
-Rate limits default to `0` (disabled) and are only active when the server is
-started with explicit rate-limit flags.
-
-Forbidden fields include raw observations, actions, labels, latents, tensors,
-participant tokens, and model weights. Payloads with raw-data-like keys are
-rejected before aggregation.
-
-## Aggregation and Inference
-
-The coordinator starts after quorum is available. A round closes only after the
-quorum threshold is met and every still-active participant assigned to that
-round has submitted; timeout/dropout paths are explicit run events rather than
-silent skips. On round close, the coordinator computes a deterministic mean over
-submitted tiny update vectors and publishes:
-
-- a checkpoint-style integrity artifact;
-- a `demo-model-revision/1` artifact with revision id, parent revision, vector,
-  source update hashes, contributing participants, aggregate norm, and hash;
-- a `demo-inference-artifact/1` attachment that the browser inference panel can
-  load without hidden server-local state.
-
-The final inference path is the tiny JS vector runtime. If a separate ONNX export
-from #289 is available, the panel can load it explicitly; the browser demo does
-not depend on #289.
-
-## Evidence Bundle
-
-`demo-evidence/1` includes:
-
-- run config;
-- public-vs-local mode;
-- transport mode;
-- deployment target and public base URL;
-- participant summaries and liveness state;
-- full event trace;
-- round metrics;
-- model revision refs;
-- source update hashes;
-- artifact refs;
-- fallback mode;
-- redaction flags;
-- non-claim text.
-
-It excludes raw participant data, participant tokens, and model weights.
+The [demo card](../evidence/lewm_tworooms_demo_card.md) carries the full
+artifact inventory and non-claims. The evidence supports only a narrow,
+demo-scale result for federated adapter continuation on fixed TwoRooms
+validation pairs. It does not establish paper-scale performance, robotics
+utility, or an advantage for federated full-model training.
 
 ## Validation
 
 ```bash
 uv run pytest tests/ml/test_federated_demo_app.py
-uv run pytest tests/ml/test_lewm_probe.py tests/ml/test_lewm_system_probe.py tests/ml/test_lewm_evidence_audit.py
+uv run pytest \
+  tests/ml/test_lewm_probe.py \
+  tests/ml/test_lewm_system_probe.py \
+  tests/ml/test_lewm_evidence_audit.py
 node web/federated-demo/lewm_probe_selftest.mjs
-```
-
-These gates exercise:
-
-- host creates a run;
-- four synthetic phone participants join;
-- quorum start;
-- tiny update submission;
-- aggregation;
-- final model revision publication;
-- inference artifact availability;
-- evidence export;
-- participant dropout with quorum preserved.
-
-Manual rehearsal checklist:
-
-1. Start with the public HTTPS/WSS path.
-2. Confirm `/api/health` reports the expected deployment target and safety
-   settings.
-3. Create a fresh run from the host dashboard.
-4. Scan the QR code from four phones using mobile Safari/Chrome.
-5. Confirm stable participant slots and WebSocket transport on the host.
-6. Start after quorum, keep phone screens awake, and watch local learner
-   progress.
-7. Confirm update submission, aggregation, model revision id, and inference
-   readiness.
-8. Run one inference step from the host panel.
-9. Export evidence JSON.
-10. Reset and rehearse one failure path: refresh/reconnect, dropout with quorum
-    preserved, or quorum-loss abort.
-
-Fallback checklist:
-
-- Cloudflare Tunnel: run the local coordinator with `--host 0.0.0.0`, start the
-  tunnel to port `8765`, pass the tunnel HTTPS URL as `--public-base-url`, and
-  keep REST polling fallback visible.
-- LAN or lab network: connect host and phones to the same network, bind
-  `--host 0.0.0.0`, use the host LAN IP in `--public-base-url`, and rehearse QR
-  joins before public demonstrations.
-- Reset: create a new run; no persistent account state is required.
-
-Host narration script:
-
-```text
-Each phone keeps its synthetic trajectory samples local, runs a tiny browser
-learner, and submits only a clipped derived update vector. The coordinator
-validates and averages those bounded updates, publishes a tiny model revision,
-and the browser inference panel loads that revision. This is an educational
-systems demo, not proof of production browser training or a benchmark win.
-```
-
-## Known Unsupported Paths
-
-- No production multi-tenant auth.
-- No raw data upload or browser data egress.
-- No cryptographic honest-computation proof.
-- No production browser-training claim.
-- No paper-scale LeWorldModel performance claim.
-- No dynamic-env claim that federation materially beats local-only.
-- No physical SO-100 closed-loop success claim.
-- No Kafka cluster and no participant-facing NATS broker.
-
-## Validation
-
-```bash
-uv run pytest tests/ml/test_federated_demo_app.py
 uv run python scripts/check_docs_links.py docs SPEC.md README.md
 uv run python -m mkdocs build --strict
 git diff --check
 ```
+
+## Known unsupported paths
+
+- No secure aggregation or differential privacy in the real-LeWM demo path.
+- No multi-process or cross-operator federation; one local coordinator is
+  trusted.
+- No full-model or from-scratch LeWorldModel training in a browser.
+- No production browser-training or multi-tenant deployment claim.
+- No cryptographic proof of honest participant computation.
+- No paper-scale TwoRooms or PushT performance claim.
+- No dynamic-env claim that federation materially beats local-only.
+- No closed-loop physical SO-100 success claim.

@@ -14,17 +14,17 @@
 | **Requires** | RFC-0002 (the frame-drift diagnostic), RFC-0005 (evaluation metrics), RFC-0004 (residency), RFC-0009 (run manifest, correlation seed), RFC-0010 (committed-weights hash) |
 
 > This RFC specifies the instrumentation contract of Lensemble: the structured log record, the metric
-> taxonomy, the redaction guard that enforces `INV-RESIDENCY` on every emission path, and — the headline
-> empirical artifact — the per-round, per-participant-pair frame-drift diagnostic record from which the
-> central figure of the paper is reproducible from logs alone. It owns the `lensemble.observability`
+> taxonomy, the redaction guard used on supported emission paths, and the
+> per-round, per-participant-pair frame-drift diagnostic record. It owns the `lensemble.observability`
 > subsystem (`logging.py`, `metrics.py`, `redaction.py`).
 
 ## Summary
 
-Lensemble's empirical claims (RFC-0005 §1 claims 1–3) and its sovereignty guarantee (`INV-RESIDENCY`)
-both live or die on observability. The headline result — that naive end-to-end `FedAvg` of a JEPA
-diverges in latent frame while the anchored design holds it pinned — is a *measurement*, not a side
-effect, and must be reproducible from committed weights and the public probe alone. At the same time,
+Lensemble's empirical hypotheses (RFC-0005 §1) and residency contract
+(`INV-RESIDENCY`) both depend on observability. The expected contrast between
+naive end-to-end `FedAvg` and an anchored configuration is a measurement, not an
+assumption, and must be reproducible from committed weights and the public probe
+alone. At the same time,
 every byte that leaves a participant through a log line or a metric sample is a potential residency
 breach: a logged raw observation, action, or private embedding would defeat the entire trust model.
 
@@ -37,13 +37,15 @@ $\mathcal{P}$, plus drift-from-global, in a versioned schema, deterministic give
 the pinned probe (RFC-0002 §9, RFC-0005 §2). (4) The **redaction guard** in `observability.redaction`
 that fails closed (`ResidencyViolation`) before any raw tensor or private datum reaches a sink.
 
-It enforces `INV-RESIDENCY` on the emission path and consumes `INV-PROBE-PIN`, `INV-CHECKPOINT-HASH`,
-and `INV-AGG-DETERMINISM` so that the diagnostic record is verifiable and reproducible.
+The guarded sinks enforce `INV-RESIDENCY` for values that pass through them and
+consume `INV-PROBE-PIN`, `INV-CHECKPOINT-HASH`, and `INV-AGG-DETERMINISM` so the
+diagnostic record is integrity-checked and reproducible. Code that bypasses the
+guard is outside that contract.
 
 ## Motivation
 
-The central scientific contribution is a quantity that must be plotted: latent frame drift over rounds
-(RFC-0002 §9). If that quantity is recomputed differently by the coordinator, a reviewer, and the
+The primary diagnostic is latent frame drift over rounds (RFC-0002 §9). If that
+quantity is recomputed differently by the coordinator, a reviewer, and the
 Phase-2 public-recomputation path (RFC-0006 §4), the figure is an artifact of the plotting code, not a
 result. The diagnostic therefore needs a *pinned emission schema* and a determinism guarantee — it is
 the input `recompute_alignment` reproduces, so its schema and hash dependencies (committed weights, probe
@@ -52,9 +54,10 @@ hash) are load-bearing for verifiability.
 Observability is also the enforcement surface for sovereignty. `INV-RESIDENCY` ([conventions §7](../spec/conventions.md#7-named-invariants)) forbids any raw
 observation/action/private-embedding tensor from crossing a trust boundary, and logs and metrics *are* a
 boundary crossing — written to disk, shipped to dashboards, read by humans. A naive
-`logger.debug("batch=%s", batch)` is a residency breach. The redaction guard makes that breach
-structurally impossible: a tensor or private datum is rejected, and only derived statistics (hashes, L2
-norms, shapes, counts, scalar metrics) pass.
+`logger.debug("batch=%s", batch)` is a residency breach. The redaction guard
+rejects tensors and private-data values on the supported sink path; derived
+statistics such as hashes, L2 norms, shapes, counts, and scalar metrics are
+allow-listed.
 
 Federation multiplies the diagnostic surface: a round is a distributed event across $C$ participant
 processes and one coordinator, so reconstructing "what happened in round $t$" from interleaved logs
@@ -66,7 +69,7 @@ requires correlation identifiers. This RFC defines that correlation scheme.
   reference implementation (`logging` + JSON formatter), so every subsystem logs the same shape.
 - Define the **metric taxonomy**: canonical metric names, unit, and cadence for `loss/*`, `gauge/*`,
   `fed/*`, `dp/*`, `eval/*`, with the emission point for each (the producing subsystem).
-- Define the **frame-drift diagnostic emission contract** precisely enough that the headline figure
+- Define the **frame-drift diagnostic emission contract** precisely enough that the primary figure
   (RFC-0002 §9, RFC-0005 §2) is reproducible from the metrics stream and committed weights alone;
   guarantee it is deterministic given committed weights + the pinned probe.
 - Define **tracing**: round/participant correlation IDs and the procedure to reconstruct a round.
@@ -235,7 +238,7 @@ the same names.
 | `fed/participants` | count | per round | `federation.coordinator` |
 | `fed/comm_bytes` | bytes | per round (and cumulative) | `federation` comms accountant ([RFC-0003 §6](RFC-0003-federated-protocol.md)) |
 | `fed/quant_ratio` | dimensionless (full-precision bytes / quantized bytes) | per round | `federation` (int8 pseudo-gradient quantization) |
-| `dp/epsilon_cumulative` | $\varepsilon$ (privacy loss) | per round | `privacy.accountant` ([RFC-0012](RFC-0012-differential-privacy.md)) |
+| `dp/epsilon_cumulative` | $\varepsilon$ (privacy loss) | per round | Target persistent-accountant metric from `privacy.accountant` ([RFC-0012](RFC-0012-differential-privacy.md)); current one-round report snapshots are not cumulative |
 | `dp/clip_fraction` | fraction in [0,1] | per round per participant | `privacy.dp` (`INV-DP-BOUND`) |
 | `eval/success_rate` | fraction in [0,1] | per eval run | `eval.harness` ([RFC-0005 §3](RFC-0005-evaluation.md)) |
 | `eval/planning_samples` | count | per eval run | `eval.mpc` (CEM/iCEM/MPPI) |
@@ -249,10 +252,12 @@ round per participant.
 
 ### 3. The frame-drift diagnostic emission contract (the headline artifact)
 
-This is the central empirical artifact (RFC-0002 §9, RFC-0005 §2). The *computation* is `frame_drift`
+This is the primary gauge diagnostic record (RFC-0002 §9, RFC-0005 §2). The *computation* is `frame_drift`
 (owned by [RFC-0002 §9](RFC-0002-gauge-and-aggregation.md)), which returns a `FrameDriftReport`
 (`lensemble.gauge`, schema authored in [03 — Data Model](../spec/03-data-model.md)). This RFC owns its
-*emission*: the on-disk record so the headline figure is reproducible from logs alone.
+*emission*: the on-disk record used to render the diagnostic without silently
+changing its values. Scientific recomputation still requires the named probe
+and checkpoint artifacts.
 
 ```python
 # pydantic v2 model in observability.metrics; written to metrics.jsonl alongside scalar samples,
@@ -280,10 +285,13 @@ class PairResidual:
 
 Reproducibility contract (this is the verifiability tie-in):
 
-1. **Determinism.** A `FrameDriftRecord` is a pure function of (the committed checkpoint hashes it names,
-   the pinned probe identified by `probe_hash`). Given the same committed weights and the same probe,
-   `frame_drift` produces an identical report (RFC-0002 §9 determinism note), so the record is
-   byte-reproducible up to the float formatting fixed below. This rides on `INV-AGG-DETERMINISM`
+1. **Determinism.** The numeric payload of a `FrameDriftRecord` is a pure
+   function of the committed checkpoints it names and the pinned probe
+   identified by `probe_hash`. Given the same committed weights and probe,
+   `frame_drift` produces an identical numeric report (RFC-0002 §9 determinism
+   note). The run timestamp is intentionally not part of that deterministic
+   payload, so complete JSONL files from separate executions need not be
+   byte-identical. This rides on `INV-AGG-DETERMINISM`
    ([RFC-0003 §7](RFC-0003-federated-protocol.md)): the Procrustes SVDs upcast to fp32/fp64 with a fixed
    reduction order, no atomics.
 2. **Float formatting.** All floats in the diagnostic record are serialized with `repr(float)` (shortest
@@ -292,15 +300,19 @@ Reproducibility contract (this is the verifiability tie-in):
 3. **Pin binding.** The record names the `probe_hash` and every checkpoint hash it depends on, so a
    reviewer or the Phase-2 public recomputation (`recompute_alignment`,
    [RFC-0006 §4](RFC-0006-verifiable-contribution.md)) can recompute the diagnostic from public probe +
-   committed weights and check it against the emitted record. The diagnostic needs no ZK proof — it is
-   publicly recomputable by construction (RFC-0002 §5).
+   committed weights and check it against the emitted record when those
+   artifacts are available. The diagnostic itself needs no ZK proof; its
+   arithmetic is public (RFC-0002 §5).
 4. **Canonical pair ordering.** Pairs are stored once with `c < c'` lexicographically; this both halves
    the volume and removes order ambiguity, so two runs of the diagnostic emit the same record.
 
-The headline figure (naive `FedAvg` diverges, anchored holds flat) is produced by reading the
+The hypothesis plot is produced by reading the
 `pairwise_angle_deg` (or `pairwise_residual`) series across `round_index` from `metrics.jsonl` and
-plotting the mean over pairs per round, one curve per configuration — no state beyond the metrics stream,
-the "reproducible from logs alone" guarantee of RFC-0005 §2. Emission cadence: one `FrameDriftRecord` per
+plotting the mean over pairs per round, one curve per configuration. The
+expected naive-divergent/anchored-lower contrast is not assumed; the plot must
+show the measured outcome. Rendering needs no state beyond the metrics stream,
+while independent recomputation uses the named probe and checkpoints. Emission
+cadence: one `FrameDriftRecord` per
 outer round, written after `agg.aligned` and before `commit.checkpoint` (so the committed hashes it
 references already exist). The scalar `gauge/drift_angle_deg` / `gauge/procrustes_residual` samples
 (table §2) are the per-pair flattening of the same numbers for ad-hoc dashboards; the `FrameDriftRecord`

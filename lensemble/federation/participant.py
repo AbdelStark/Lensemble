@@ -20,8 +20,10 @@ Preconditions checked before any compute (``local_round``):
 Postconditions on the released ``PseudoGradient`` (RFC-0013 §1):
 ``l2_norm == ‖released delta‖`` (the honest released norm; the DP bound ``INV-DP-BOUND`` is enforced on the
 *post-clip* norm inside ``lensemble.privacy.dp.privatize``, so ``l2_norm`` MAY exceed ``C_clip`` after
-noising), ``clipped is True``, the flat delta covers ONLY the ``(θ, φ)`` groups, and exactly one 32-byte
-``dataset_root`` binds it. No raw observation/action/embedding crosses — only ``delta`` does, gated by the
+noising), ``clipped`` records whether the clip mechanism was enabled/applied (not whether the norm
+saturated at ``C_clip``), the flat delta covers ONLY the ``(θ, φ)`` groups, and exactly one 32-byte
+``dataset_root`` binds it. With privacy disabled, ``clipped`` is false because the mechanism is bypassed.
+No raw observation/action/embedding crosses — only ``delta`` does, gated by the
 ``EgressRole.PSEUDO_GRADIENT`` carrier (``INV-RESIDENCY``).
 
 #22 DATA-LAYER BOUNDARY. RFC-0013's ``Participant`` signature carries no data parameter. The participant's
@@ -45,7 +47,6 @@ from lensemble.data.probe import PublicProbe, load_probe
 from lensemble.errors import (
     GaugeError,
     LensembleErrorCode,
-    ProbeError,
     RoundError,
 )
 from lensemble.federation.pseudogradient import PseudoGradient, build_pseudogradient
@@ -56,9 +57,7 @@ from lensemble.model.encoder import (
     Encoder,
     build_encoder,
     encoder_content_hash,
-    snapshot_reference,
 )
-from lensemble.model.numerics import module_input_tensor
 from lensemble.model.objective import AnchorTerm, Objective
 from lensemble.model.predictor import Predictor, build_predictor
 from lensemble.model.sigreg import build_sketch
@@ -101,7 +100,7 @@ class RunResult:
 
 
 class Participant:
-    """Holds sovereign data; runs the inner loop; emits a privatized, bound ``PseudoGradient`` (RFC-0013 §1).
+    """Holds sovereign data; runs the inner loop; emits a released, bound ``PseudoGradient`` (RFC-0013 §1).
 
     Trusts neither coordinator nor peers with raw data (``INV-RESIDENCY``). One ``Participant`` per
     federation member; constructed with the signature fixed by conventions §5 / RFC-0013 §1.
@@ -300,7 +299,7 @@ class Participant:
 
         # build_pseudogradient flattens in the canonical (θ then φ, sorted) order AND fail-closes on any
         # non-federated / action-head group (ResidencyViolation, INV-ACTIONHEAD-LOCAL). We take its flat
-        # delta as the DP input, then re-wrap the privatized delta.
+        # delta as the DP input, then re-wrap the released delta.
         canonical = build_pseudogradient(
             param_deltas,
             dataset_root=dataset_root,
@@ -340,31 +339,32 @@ class Participant:
 
             private = wire_roundtrip(private)
 
-        # The released delta is clipped-AND-noised; l2_norm is its HONEST norm (may exceed C_clip after
-        # noising — correct; the DP bound is on `post_clip`, not on the released norm).
+        # l2_norm is the HONEST released norm (and may exceed C_clip after noise). `clipped` means the
+        # clip mechanism was enabled/applied, not that this particular delta saturated at C_clip; the
+        # privacy-disabled path bypasses the mechanism and therefore records False.
         return PseudoGradient(
             delta=private,
             l2_norm=float(private.norm()),
             dataset_root=dataset_root,
             round_index=global_state.round_index,
-            clipped=True,
+            clipped=dp_cfg.enabled,
             quantized=quantize,
         )
 
     # --- precondition checks ---
 
     def _check_probe_pin(self, global_state: GlobalState, probe: PublicProbe) -> None:
-        """INV-PROBE-PIN: refuse a round whose ``probe_hash`` differs from the pinned probe's hash."""
-        if global_state.probe_hash != probe.content_hash:
-            err = ProbeError(
-                "GlobalState.probe_hash does not match the pinned probe content hash; refusing the round "
-                "(a probe change is a re-anchoring event, RFC-0004 §3.1)",
-                code=LensembleErrorCode.PROBE_INVALID,
-                remediation="re-pin to the federation's probe or refuse the round (INV-PROBE-PIN)",
-            )
-            err.expected_hash = probe.content_hash  # type: ignore[attr-defined]
-            err.got_hash = global_state.probe_hash  # type: ignore[attr-defined]
-            raise err
+        """INV-PROBE-PIN: verify the full probe and its round-broadcast commitment."""
+        from lensemble.data.probe import verify_probe_content
+
+        # The legacy all-zero no-probe sentinel is confined to the unanchored simulation rung: no probe
+        # content is consumed there. Any anchored or actually pinned round takes the strict full-probe path.
+        if (
+            global_state.probe_hash == b"\x00" * 32
+            and float(self.config.objective.lambda_anc) == 0.0
+        ):
+            return
+        verify_probe_content(probe, expected_hash=global_state.probe_hash)
 
     def _check_warmstart(self, global_state: GlobalState, encoder: Encoder) -> None:
         """INV-WARMSTART-T0: at ``round_index == 0`` the loaded encoder must equal the pinned warm-start.
@@ -429,9 +429,8 @@ class Participant:
         """Build the per-round :class:`~lensemble.model.objective.Objective` from ``cfg.objective``.
 
         The SIGReg sketch ``A`` is derived from ``round_seed`` (``INV-SKETCH-CONSISTENCY``). When
-        ``lambda_anc > 0`` the frame anchor is constructed from the pinned probe and the round-0 reference
-        snapshot ``f_ref`` (``snapshot_reference(encoder)`` — at ``t=0`` the loaded encoder IS the
-        warm-start, so its snapshot is the canonical ``f_ref``; ``INV-PROBE-PIN``/``INV-WARMSTART-T0``).
+        ``lambda_anc > 0`` the frame anchor is constructed from the pinned probe's target-binding
+        round-0 reference embeddings (``INV-PROBE-PIN``/``INV-WARMSTART-T0``).
         With ``lambda_anc == 0`` the bare LeJEPA objective runs with ``anchor=None``.
         """
         o = cfg.objective
@@ -611,12 +610,9 @@ def train_local(
     anchor: AnchorTerm | None = None
     if float(o.lambda_anc) > 0.0:
         probe = site._pinned_probe()
-        f_ref = snapshot_reference(encoder)
-        landmarks = module_input_tensor(f_ref, probe.points[probe.landmark_idx])
-        ref_embeddings = f_ref(landmarks).tokens.detach()
         anchor = FrameAnchor(
             probe,
-            ref_embeddings,
+            probe.landmark_targets,
             variant=o.anchor_variant,
             probe_hash=probe.content_hash.hex(),
         ).loss

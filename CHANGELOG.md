@@ -19,6 +19,78 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Added
 
+- `area:data`/`area:security`: define `public-probe-v2`, a canonical digest
+  over points, integer landmark indices, and targets; retain the narrower
+  source fingerprint only as `probe-source-v1` and reject legacy/unscoped
+  probe contracts at training admission (`INV-PROBE-PIN`).
+- `area:release`: track the `uv` lockfile, Python version, typed-package
+  marker, citation metadata, security policy, and code of conduct; make the
+  tag-publish workflow rerun the exact-commit quality, test, docs,
+  determinism, build, and install gates before trusted publication.
+- `area:eval`: add held-out `latent_std_mean` and `latent_rms` diagnostics so
+  full-model runs expose magnitude collapse that normalized effective rank
+  cannot detect.
+- `area:docs`: publish the MkDocs research site from `main` and smoke-test the
+  deployed identity so the retired event site cannot silently remain live.
+
+### Changed
+
+- `area:evidence`: regenerate the Phase 3 long-run, eval, observability,
+  bundle, and model-card surfaces as schema-v2 historical evidence. Bind one
+  smoke run/probe/checkpoint identity, source the anchored gauge row from its
+  immutable control report, record zero optimizer-consumed secure-sum and
+  effective-DP rounds, and block promotion pending the corrected rerun (#335).
+- `area:evidence`: reclassify the Phase 2 bundle and Phase 3 SO-100 MVP,
+  downstream, and inference surfaces as producer-owned historical records;
+  remove public dependencies on local `thoughts/` scripts and bind every
+  pre-fix metric surface to the corrected-rerun tracker (#335).
+- `area:docs`: center the README, specification entry point, documentation
+  landing page, package metadata, and public API reference on reproducible
+  federated JEPA training and evaluation; demote the browser adapter demo and
+  remove event-era economics and incentive framing.
+- `area:docs`/`area:privacy`: distinguish tested secure-aggregation and
+  differential-privacy primitives from the incomplete live integration; do not
+  treat post-commit secure-sum cross-checks or isolated one-round accounting as
+  end-to-end privacy evidence.
+- `area:eval`: require scale and frame-drift diagnostics alongside the
+  calibrated dynamic-environment state-probe gate while leaving their numeric
+  thresholds explicitly uncalibrated.
+
+### Fixed
+
+- `area:federation`: reject pseudo-gradients whose flattened length or tensor
+  shape differs from the canonical global manifest, preventing scalar
+  broadcasting across an entire model during aggregation.
+- `area:federation`: preview persistent Nesterov updates without mutation and
+  advance momentum only after checkpoint and ledger commit succeed, preserving
+  optimizer state across failed commits.
+- `area:federation`: snapshot mutable tensors at both transport boundaries,
+  require envelope and update round bindings to agree, cache network collects
+  idempotently, and abort malformed ingress so the same round can be retried.
+- `area:federation`: add local-minus-global pseudo-gradients in the outer
+  optimizer, matching the repository's displacement convention and the
+  equivalent subtractive DiLoCo outer-gradient convention.
+- `area:federation`: verify the exact persistent-Nesterov computation before
+  each commit without advancing optimizer state during the determinism check.
+- `area:gauge`: align full participant-local gauge-bearing weights in the
+  Procrustes backstop, then re-difference from the current global model using
+  the correct row-space transform.
+- `area:evidence`: reject Phase 3 bundles that combine different consortium,
+  run, or public-probe identities; distinguish the synthetic lifecycle smoke
+  from separately hash-bound SO-100 controls and the unbound associated
+  dataset revision.
+
+### Security
+
+- `area:protocol`: carry participant `clipped` and `quantized` claims through
+  control-message schema v2, preserve them across network transport, and
+  classify deterministic replay noise and post-commit sum comparisons
+  conservatively instead of reporting end-to-end DP or secure aggregation.
+
+## [0.1.0] - 2026-06-18
+
+### Added
+
 - `area:eval`/`area:docs`: add the `lewm-surprise/1` stage evidence contract for
   the Codex-Paris surprise-meter. `scripts/lewm_surprise_check.py` now writes
   `docs/evidence/lewm_tworooms_surprise.json` plus served fallback assets under

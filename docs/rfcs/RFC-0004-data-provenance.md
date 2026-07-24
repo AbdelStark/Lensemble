@@ -21,8 +21,10 @@ stored and loaded for local training, how raw data is prevented from ever crossi
 how the shared public probe $\mathcal{P}$ is constituted and governed, and how each contribution is
 committed to the data it was computed from. Three facts are load-bearing for the rest of the corpus and
 are fixed here: (1) raw observations, actions, and private embeddings never leave a participant
-boundary (`INV-RESIDENCY`); only the privatized pseudo-gradient $\Delta_c$ and the dataset commitment
-$R_c$ cross ([RFC-0003 §3](RFC-0003-federated-protocol.md#3-the-pseudogradient-contract)). (2) The public probe $\mathcal{P}$ is the
+boundary (`INV-RESIDENCY`); only the released pseudo-gradient $\Delta_c$ and the dataset commitment
+$R_c$ cross. The current coordinator sees that released delta individually; masking and effective DP
+remain target protections ([RFC-0003 §3](RFC-0003-federated-protocol.md#3-the-pseudogradient-contract)).
+(2) The public probe $\mathcal{P}$ is the
 one shared, hash-pinned artifact in an otherwise data-sovereign system; it is the substrate of the
 frame anchor ([RFC-0002 §4](RFC-0002-gauge-and-aggregation.md#4-layer-2--frame-anchoring-on-a-public-probe-the-gauge-fix)) and of publicly-recomputable
 alignment ([RFC-0006 §4](RFC-0006-verifiable-contribution.md#4-public-recomputation-phase-1-free-in-scope-now)), so changing it is a versioned
@@ -171,8 +173,11 @@ trust boundary.
 
 Every local `EpisodeDataset` carries a non-exportable flag (`exportable = False` for sovereign data). The
 training process MUST refuse to serialize any raw observation, raw action, or **private embedding**
-$f_\theta(x)$ into any outbound message or artifact that crosses a trust boundary. Only the privatized
-pseudo-gradient $\Delta_c$ and the dataset commitment $R_c$ leave
+$f_\theta(x)$ into any outbound message or artifact that crosses a trust boundary. Only the released
+pseudo-gradient $\Delta_c$ and the dataset commitment $R_c$ leave; in the target protocol the delta is
+privatized. The current
+carrier has configured clipping/replay noise but is not effectively private and is visible to the
+coordinator
 ([RFC-0003 §8 message table](RFC-0003-federated-protocol.md#8-message-summary);
 [RFC-0001 §4 federation map](RFC-0001-architecture.md#4-federation-map)).
 
@@ -255,26 +260,37 @@ class PublicProbe:
     points: Tensor             # (P, *obs_shape) — the probe inputs p_i (public)
     landmark_idx: Tensor       # (k,) indices into points marking the k >= d landmarks
     landmark_targets: Tensor   # (k, N, d) — t_i = f_ref(p_i), derived ONLY from f_ref (INV-PROBE-PIN)
-    content_hash: bytes        # SHA-256 over canonical bytes of points+landmark_idx ([conventions §11](../spec/conventions.md#11-external-dependencies))
+    content_hash: bytes        # public-probe-v2 SHA-256 over points+landmark_idx+landmark_targets
     probe_version: int         # bumped on any content change; a re-anchoring event (§3.1)
 
+def probe_content_hash(
+    points: Tensor, landmark_idx: Tensor, landmark_targets: Tensor
+) -> bytes:
+    """The versioned full PublicProbe commitment required by INV-PROBE-PIN."""
+
+def probe_source_hash(points: Tensor, landmark_idx: Tensor) -> bytes:
+    """A separately domain-labelled pre-target source fingerprint; NOT an INV-PROBE-PIN hash."""
+
 def verify_probe_pin(probe: PublicProbe, broadcast_hash: bytes) -> None:
-    """Check the RoundOpen-broadcast probe hash equals the pinned content hash (INV-PROBE-PIN).
+    """Recompute the full hash, check the stored pin, then check the RoundOpen hash (INV-PROBE-PIN).
     Raises:
-        ProbeError: hash mismatch (re-anchoring required) or landmark under-coverage (k < d).
+        ProbeError: stored/content/broadcast mismatch (re-anchoring required) or under-coverage (k < d).
     """
 ```
 
 CLI surface ([conventions §5](../spec/conventions.md#5-public-api-surface)): `lensemble probe build` (compute landmark targets from a pinned $f_{\text{ref}}$
-and write a `PublicProbe`), `lensemble probe pin` (compute and freeze the content hash), `lensemble probe
-verify` (check a held probe against a pinned hash). Each emits a `RunManifest` recording the probe
-content-hash ([RFC-0009](RFC-0009-configuration-reproducibility.md)).
+and write a `PublicProbe`), `lensemble probe pin` (verify and report the full content hash), `lensemble
+probe verify` (check a held probe against a full pinned hash). Each emits a `RunManifest` recording the
+probe content hash ([RFC-0009](RFC-0009-configuration-reproducibility.md)). The on-disk metadata names
+the hash algorithm and version. Missing/unversioned metadata is rejected: the historical points-only
+digest cannot be upgraded safely because it did not authenticate `landmark_targets`.
 
 #### 3.1 Probe versioning (re-anchoring)
 
-The probe redefines the reference frame, so changing its content is not a free edit. The procedure:
-bump `probe_version`, recompute `content_hash`, and recompute landmark targets $t_i$ against the
-*current* $f_{\text{ref}}$ — which means a probe change is a **re-anchoring event** and is coupled to the
+The probe redefines the reference frame, so changing its source or targets is not a free edit. The
+procedure: bump `probe_version`, recompute landmark targets $t_i$ against the *current*
+$f_{\text{ref}}$, then recompute `content_hash` over points, landmark indices, and those targets. A
+warm-start-only change therefore also changes the full hash. Any such change is a **re-anchoring event** coupled to the
 warm-start choice ([RFC-0002 §4](RFC-0002-gauge-and-aggregation.md#4-layer-2--frame-anchoring-on-a-public-probe-the-gauge-fix)). A federation in flight does not
 silently swap probes mid-run: a `RoundOpen` carrying a probe hash that differs from a participant's
 pinned hash raises `ProbeError` and the round is rejected (`INV-PROBE-PIN`,
@@ -501,7 +517,11 @@ CPU-runnable tests on tiny synthetic fixtures (no large downloads; cf. [07-testi
 - **Probe-pin verification (`INV-PROBE-PIN`).** Assert `verify_probe_pin` accepts the pinned hash and
   raises `ProbeError` on a mismatched broadcast hash; assert a probe with $k < d$ landmarks raises
   `ProbeError`; assert landmark targets are derived only from $f_{\text{ref}}$ (changing a later-round
-  encoder does not change `landmark_targets`).
+  encoder does not change `landmark_targets`). Modify only `landmark_targets` while retaining the stored
+  digest and assert load/save/anchor/drift/recompute reject it; likewise reject modified hash metadata
+  and legacy unversioned points-only metadata. Assert the full digest is invariant to runtime tensor
+  device and layout. The separately named `probe_source_hash` is tested only as a pre-target registry
+  fingerprint and is never accepted as `INV-PROBE-PIN`.
 - **Schema round-trip and version gating.** Round-trip `DatasetCommitment` and `ContributionRecord`
   through pydantic JSON; assert an unknown/too-new `schema_version` raises `SchemaVersionMismatch`
   ([conventions §10](../spec/conventions.md#10-versioning-and-schema-policy)).
@@ -532,8 +552,10 @@ OPEN QUESTION: Migrating the Phase-1 commitment hash from **SHA-256 to a STARK-f
 Poseidon2) to keep the Phase-2 proof circuit cheap. Owner @AbdelStark; resolution path: shared with
 [RFC-0014 §Open Questions](RFC-0014-provenance-commitments.md#open-questions) and
 [RFC-0006 §Open Questions](RFC-0006-verifiable-contribution.md#open-questions); decided in Stage D (Phase 2). Episode
-hashing and the probe content-hash use SHA-256 in Phase 1 ([conventions §11](../spec/conventions.md#11-external-dependencies)), and the hash function is a versioned
-choice ([RFC-0014](RFC-0014-provenance-commitments.md)) so the migration does not invalidate the schema.
+hashing and the versioned full-probe content hash use SHA-256 in Phase 1
+([conventions §11](../spec/conventions.md#11-external-dependencies)). The full-probe and pre-target
+source-fingerprint domains are distinct; the algorithm/version is explicit metadata so a later migration
+does not silently reinterpret an old digest ([RFC-0014](RFC-0014-provenance-commitments.md)).
 
 RISK: **Residency enforcement completeness.** The egress guard (§2) is only as strong as the set of
 egress paths routed through it. A serialization path that bypasses `guard_egress` is a silent sovereignty

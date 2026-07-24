@@ -340,6 +340,8 @@ def test_encoder_frozen_real_run_completes_with_metrics(tmp_path: Path) -> None:
         assert row["val_pred"] is not None
         assert row["val_sigreg"] is not None
         assert row["effective_rank"] is not None
+        assert row["latent_std_mean"] is not None
+        assert row["latent_rms"] is not None
         assert row["frame_drift_deg"] is not None
 
 
@@ -364,6 +366,8 @@ def test_local_only_run_reports_per_participant_without_aggregation(
         assert row["val_pred"] is not None
         assert row["val_sigreg"] is not None
         assert row["effective_rank"] is not None
+        assert row["latent_std_mean"] is not None
+        assert row["latent_rms"] is not None
     assert payload["frame_drift_deg"] is not None
     assert float(payload["frame_drift_deg"]) >= 0.0
     assert payload["pushed"] is False

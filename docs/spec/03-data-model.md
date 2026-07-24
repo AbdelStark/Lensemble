@@ -213,48 +213,60 @@ outbound.
 
 ## 6. `PseudoGradient` — the one private object that *does* cross the boundary
 
-The DiLoCo outer-loop delta $\Delta_c = (\theta_c^{\text{local}}, \phi_c^{\text{local}}) -
-(\theta_t, \phi_t)$, after DP clip+noise, bound to the dataset root under which it was computed. It is the
-only participant-derived object permitted across a trust boundary, and it crosses only under secure
-aggregation ([RFC-0011](../rfcs/RFC-0011-secure-aggregation.md)) and DP
-([RFC-0003 §4](../rfcs/RFC-0003-federated-protocol.md)).
+The target DiLoCo outer-loop release is the aligned displacement
+$\Delta'_c = W_c' - W_t$ (equal to raw
+$\Delta_c = (\theta_c^{\text{local}}, \phi_c^{\text{local}}) - (\theta_t, \phi_t)$ when the Layer-3
+backstop does not fire), after the configured clip/noise transform and bound to the dataset root under
+which it was computed. Participant-specific alignment/re-difference precedes clipping, noise,
+quantization, and masking (`INV-ALIGN-BEFORE-RELEASE`). It is the only participant-derived tensor
+permitted across a trust boundary. In the
+target protocol it is masked and protected by effective DP
+([RFC-0011](../rfcs/RFC-0011-secure-aggregation.md),
+[RFC-0003 §4](../rfcs/RFC-0003-federated-protocol.md)); the current coordinator receives its released
+values in plaintext, and deterministic replay noise is not claim-grade DP.
 
 ```python
 @dataclass(frozen=True)
 class PseudoGradient:
     delta: Tensor          # flat fp32 vector; concat of (theta, phi) param-group deltas, fixed order
-    l2_norm: float         # ||delta|| computed in fp32 BEFORE noising (post-clip)
+    l2_norm: float         # honest fp32 ||delta|| after noise and optional quantization
     dataset_root: bytes    # the R_c (32-byte SHA-256) this delta is bound to (INV-COMMIT-BINDING)
     round_index: int       # the round t this delta targets
-    clipped: bool          # whether the clip projection was applied (||.|| > C_clip)
+    clipped: bool          # whether the clip mechanism was enabled/applied before release
     quantized: bool        # whether int8 pseudo-gradient quantization was applied on the wire
 ```
 
 | Field | Type | Unit / domain | Meaning |
 |---|---|---|---|
 | `delta` | `Tensor` (flat fp32) | param-update units | the $H$-step local update treated as one gradient |
-| `l2_norm` | `float`, `>= 0` | L2 | clip-time norm, recorded for the DP-bound check and logging |
+| `l2_norm` | `float`, `>= 0` | L2 | norm of the released `delta`; may exceed `C_clip` after noise |
 | `dataset_root` | `bytes` (32) | hash | the $R_c$ this contribution binds to |
 | `round_index` | `int`, `>= 0` | count | target round $t$ |
-| `clipped` | `bool` | — | clip projection applied |
+| `clipped` | `bool` | — | clip mechanism enabled/applied; not a saturation indicator |
 | `quantized` | `bool` | — | int8 wire quantization applied (orthogonal to the gauge) |
 
 **Invariants.**
-- `INV-DP-BOUND` — after clipping and *before* noising, $\lVert\Delta_c\rVert \le C_{\text{clip}}$.
+- `INV-ALIGN-BEFORE-RELEASE` — any participant-specific gauge transform is applied to raw local full
+  weights and re-differenced from the round global before the release pipeline. A coordinator receiving
+  only a secure sum cannot apply a distinct transform per participant.
+- `INV-DP-BOUND` — after clipping and *before* noising, $\lVert\Delta'_c\rVert \le C_{\text{clip}}$.
   Enforced in `lensemble.privacy.dp`: the clip projection
   $\Delta_c \leftarrow \Delta_c \cdot \min(1, C_{\text{clip}}/\lVert\Delta_c\rVert)$ guarantees the bound;
-  a post-clip check that finds `l2_norm > C_clip * (1 + tol)` raises `PrivacyBudgetExceeded`'s sibling
-  path — concretely a `ConfigError`/assertion in DP if the clip is mis-wired (see
+  an internal post-clip check above `C_clip * (1 + tol)` is a correctness failure. It is not evaluated
+  from `PseudoGradient.l2_norm`, because that public field describes the later released vector (see
   [RFC-0012](../rfcs/RFC-0012-differential-privacy.md)).
 - `INV-COMMIT-BINDING` — every released `PseudoGradient` carries exactly one `dataset_root` $R_c$.
   Enforced at emission and re-checked at aggregation ingress; a delta whose `dataset_root` does not match
   the participant's committed root raises `CommitmentMismatch`, which is **security-critical and never
   swallowed**.
-- The `delta` is the only field built from private data; it leaves only post-DP and only masked. The raw
-  per-step gradients and the local weights are never serialized (`INV-RESIDENCY`).
+- The `delta` is the only field built from private data. Raw per-step gradients and local weights are
+  never serialized (`INV-RESIDENCY`). The current released `delta` is individually visible to the
+  coordinator and is not yet aligned participant-side; “participant-aligned,” “post-DP,” and “masked”
+  describe the target egress contract, not the live path. The coordinator-side alignment harness accepts
+  only raw, untransformed deltas in an explicit plaintext simulation.
 
 **Validation rules.** `delta.dtype == torch.float32`; `delta` is finite; `len(dataset_root) == 32`;
-`round_index >= 0`; `l2_norm == ||delta||` recomputed within tolerance at clip time. Non-finite delta or
+`round_index >= 0`; `l2_norm == ||delta||` recomputed within tolerance at carrier construction. Non-finite delta or
 a wrong-length root raises `AggregationError` / `CommitmentMismatch` at ingress respectively.
 
 ---
@@ -272,7 +284,7 @@ class GlobalState:
     phi_ref: ParamRef          # reference/hash of predictor params phi_t
     round_index: int           # t
     sketch_seed: int           # s_t; derives the shared SIGReg projection matrix A
-    probe_hash: bytes          # 32-byte SHA-256 of the pinned public probe P content
+    probe_hash: bytes          # 32-byte public-probe-v2 SHA-256 of points + indices + targets
     wmcp_version: str          # the contract all participants must conform to this round
     # ParamRef = a content hash + a fetch locator for the safetensors artifact (RFC-0010)
 ```
@@ -282,7 +294,7 @@ class GlobalState:
 | `theta_ref`, `phi_ref` | `ParamRef` | hash+locator | the round-$t$ global encoder/predictor artifact references |
 | `round_index` | `int`, `>= 0` | count | round $t$ |
 | `sketch_seed` | `int` | seed | $s_t$; all participants derive the identical $A$ from it |
-| `probe_hash` | `bytes` (32) | hash | content hash of the pinned probe $\mathcal{P}$ |
+| `probe_hash` | `bytes` (32) | hash | versioned full hash of $\mathcal{P}$, including landmark targets |
 | `wmcp_version` | `str` | tag | the contract pinned for this round |
 
 **Invariants.**
@@ -290,9 +302,12 @@ class GlobalState:
   from the broadcast `sketch_seed` $s_t$. Enforced by deriving $A$ deterministically from $s_t$ in
   `lensemble.model.sigreg`; a participant whose derived $A$ disagrees produces statistics that fail the
   determinism self-check and raise `NonDeterministicAggregation` at the outer step.
-- `INV-PROBE-PIN` — `probe_hash` equals the hash committed in `RoundOpen`; landmark targets $t_i$ derive
-  only from $f_{\text{ref}}$ (the round-0 encoder). A probe whose recomputed content hash differs raises
-  `ProbeError` ([RFC-0004 §3](../rfcs/RFC-0004-data-provenance.md)).
+- `INV-PROBE-PIN` — `probe_hash` equals the versioned full hash committed in `RoundOpen`; that hash binds
+  canonical `points`, `landmark_idx`, and `landmark_targets`, and the targets derive only from
+  $f_{\text{ref}}$ (the round-0 encoder). Stored-vs-recomputed mismatch, unknown/legacy hash metadata,
+  or a broadcast mismatch raises `ProbeError`. A points/index-only `probe-source-v1` fingerprint may
+  identify a pre-target registry source but cannot satisfy this invariant
+  ([RFC-0004 §3](../rfcs/RFC-0004-data-provenance.md)).
 - `INV-WARMSTART-T0` — at `round_index == 0` the `theta_ref` resolves to weights hash-identical to the
   pinned warm-start ($f_{\text{ref}}$). A round-0 encoder hash that differs raises
   `CheckpointIntegrityError`; the gauge is, by construction, closed at $t=0$.
@@ -325,7 +340,7 @@ class RoundState:
     phase: RoundPhase
     global_state: GlobalState
     expected_participants: frozenset[str]
-    received: dict[str, PseudoGradient]     # participant_id -> their committed, privatized delta
+    received: dict[str, PseudoGradient]     # participant_id -> committed released delta (plaintext today)
     commitments: dict[str, bytes]            # participant_id -> R_c
     aggregate: Tensor | None                 # set after AGGREGATING; the deterministic Sum_c Delta_c
     result_hash: bytes | None                # set after COMMITTING; the (theta_{t+1},phi_{t+1}) hash
@@ -489,8 +504,8 @@ class RunManifest(BaseModel):
 `INV-RESIDENCY` governs the entire data model: no raw observation, action, or private-embedding tensor —
 i.e. no field of `Transition`, `Episode`, `Window`, no `LatentState` of private data, and no action-head
 parameter $\psi$ — is serialized into any outbound message or artifact crossing a trust boundary. The
-only participant-derived object that crosses is a post-DP, masked `PseudoGradient.delta` bound to its
-$R_c$.
+only participant-derived tensor that crosses is a released `PseudoGradient.delta` bound to its $R_c$.
+The current coordinator sees that value individually; post-DP and masked egress are target contracts.
 
 - **Enforcement.** `lensemble.data.residency` guards every serialization/egress path. An attempt to emit
   a residency-bound tensor raises `ResidencyViolation`. This error is **fail-closed and never caught-and-
@@ -501,8 +516,9 @@ $R_c$.
   [RFC-0015](../rfcs/RFC-0015-observability-diagnostics.md); it also fails closed.
 - **Public exception.** Probe embeddings $E_{\text{ref}} = f_{\text{ref}}(\mathcal{P})$ are computed on
   the *public* probe $\mathcal{P}$ and are not residency-bound; they support the publicly-recomputable
-  alignment and the frame-drift diagnostic. The probe is content-hash-pinned (`INV-PROBE-PIN`); a hash
-  mismatch raises `ProbeError`.
+  alignment and the frame-drift diagnostic. The probe's points, landmark indices, and reference targets
+  are jointly content-hash-pinned (`INV-PROBE-PIN`); a stored, recomputed, or expected hash mismatch
+  raises `ProbeError`.
 
 ---
 

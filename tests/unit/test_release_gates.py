@@ -8,6 +8,7 @@ gate commands (ruff/pytest/coverage/...) run in CI; this checks the orchestratio
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -15,6 +16,7 @@ import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = _REPO_ROOT / "scripts" / "release_gates.py"
+_WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "release.yml"
 
 
 def _load():
@@ -68,6 +70,40 @@ def test_release_gate_plan_is_ordered_and_complete() -> None:
         "manifest-roundtrip",
     ]
     assert "aggregation-determinism" in rg.SECURITY_CRITICAL_GATES
+
+
+def test_tag_workflow_materializes_all_gates_before_build() -> None:
+    text = _WORKFLOW.read_text(encoding="utf-8")
+    for number in range(1, 9):
+        assert f"Gate {number} —" in text
+    build_job = re.search(
+        r"(?ms)^  build-and-smoke:\n(?P<body>.*?)(?=^  publish:)", text
+    )
+    assert build_job is not None
+    assert "needs: release-gates" in build_job.group("body")
+    assert "uv lock --check" in text
+
+
+def test_manual_dispatch_cannot_publish_and_secret_is_upload_scoped() -> None:
+    text = _WORKFLOW.read_text(encoding="utf-8")
+    tag_and_auth = (
+        "if: startsWith(github.ref, 'refs/tags/v') && "
+        "steps.pypi_auth.outputs.available == 'true'"
+    )
+    assert text.count(tag_and_auth) == 3
+    assert "TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}" in text
+    assert '-p "$PYPI_API_TOKEN"' not in text
+
+
+def test_release_write_permission_is_scoped_to_publish_job() -> None:
+    text = _WORKFLOW.read_text(encoding="utf-8")
+    assert re.search(r"(?m)^permissions:\n  contents: read$", text)
+    publish_job = re.search(r"(?ms)^  publish:\n(?P<body>.*)$", text)
+    assert publish_job is not None
+    assert re.search(
+        r"(?m)^    permissions:\n(?:      #.*\n)*      contents: write$",
+        publish_job.group("body"),
+    )
 
 
 def test_security_critical_failure_is_fail_closed_no_waiver() -> None:

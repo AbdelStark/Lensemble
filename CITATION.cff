@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use Lensemble in research, please cite this software."
+title: "Lensemble: Federated JEPA World-Model Research Stack"
+type: software
+authors:
+  - family-names: Bakhta
+    given-names: Abdelhamid
+    alias: AbdelStark
+version: 0.1.0
+date-released: 2026-06-18
+license: Apache-2.0
+repository-code: "https://github.com/AbdelStark/Lensemble"
+url: "https://abdelstark.github.io/Lensemble/"
+keywords:
+  - federated learning
+  - world models
+  - JEPA
+  - representation learning
+  - robotics research

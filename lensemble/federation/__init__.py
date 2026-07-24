@@ -96,6 +96,7 @@ from .phase3_observability import (
     write_phase3_observability_report,
 )
 from .phase3_orchestration import (
+    PHASE3_HISTORICAL_CLAIM_BOUNDARY,
     PHASE3_LONG_RUN_REPORT_SCHEMA_VERSION,
     Phase3ArtifactTargets,
     Phase3ConsortiumInputs,
@@ -202,6 +203,7 @@ __all__ = [
     "Phase3DPAccountingReport",
     "build_phase3_aggregation_privacy_report",
     "PHASE3_LONG_RUN_REPORT_SCHEMA_VERSION",
+    "PHASE3_HISTORICAL_CLAIM_BOUNDARY",
     "Phase3ArtifactTargets",
     "Phase3RunShape",
     "Phase3ConsortiumInputs",

@@ -19,9 +19,10 @@
 This RFC specifies the *operational* federated training protocol: how one outer round runs end to
 end, what crosses a trust boundary and what never does, and the privacy and fault-tolerance machinery
 that wraps each released update. The protocol is a DiLoCo outer loop — each participant runs `H` inner
-optimization steps on its sovereign data, then emits a single pseudo-gradient `Δ_c` that is privatized,
-securely aggregated, frame-aligned (backstop), and folded into the canonical global model by an outer
-Nesterov step.
+optimization steps on its sovereign data, then emits a single pseudo-gradient `Δ_c`. The target path
+aligns each raw local model into the shared frame, re-differences it, then privatizes, quantizes, masks,
+and securely aggregates that aligned delta before the outer Nesterov step. The
+current path instead commits from plaintext released deltas with replayable noise, as bounded below.
 
 The aggregation *semantics* — frame alignment, anchoring, why naive weight-averaging is meaningless —
 live in [RFC-0002](RFC-0002-gauge-and-aggregation.md); this RFC owns the *mechanics*. Three subsystems
@@ -54,8 +55,9 @@ wrapper, leaving the gauge correction itself to RFC-0002.
 
 ## Goals
 
-- Specify the per-round lifecycle (broadcast → local optimization → pseudo-gradient → privatize →
-  secure-aggregate → backstop align → outer step → commit) with the exact data that crosses each step.
+- Specify the per-round lifecycle (broadcast → local optimization → participant-specific backstop
+  alignment/re-difference → privatize → optional quantize → secure-aggregate → outer step → commit)
+  with the exact data that crosses each step.
 - Pin the inner/outer optimizer split: inner AdamW for `H` steps; outer Nesterov momentum over averaged
   pseudo-gradients.
 - Define the `PseudoGradient` contract (`Δ_c`, its L2 norm, and its binding `dataset_root`) and state
@@ -110,6 +112,10 @@ are fixed.
 
 Per outer round `t`, the protocol executes these steps. This is the operational expansion of the
 algorithm sketch in [RFC-0002 §8](RFC-0002-gauge-and-aggregation.md); the two MUST stay consistent.
+Steps 4–5 state the normative Stage-C privacy path. In the current implementation, the coordinator
+commits from individually visible released deltas; simulated/TEE secure sums are post-commit fixed-point
+equivalence checks (`secure_sum_consumed=false`), masking is an explicit fallback, and deterministic
+replay noise with a fresh one-round accountant is neither effective nor cumulative DP.
 
 1. **Broadcast.** The coordinator sends `RoundOpen`: a reference/hash of the global parameters
    `(θ_t, φ_t)`, the round sketch seed `s_t`, the public-probe content hash, the landmark hashes, and
@@ -120,17 +126,23 @@ algorithm sketch in [RFC-0002 §8](RFC-0002-gauge-and-aggregation.md); the two M
 2. **Local optimization.** Each participant runs `H` inner steps with **AdamW** on the objective of
    [RFC-0002 §1](RFC-0002-gauge-and-aggregation.md) (prediction + `λ_sig·SIGReg_A` + `λ_anc·L_anchor`),
    over local data only. Raw data never leaves the boundary (`INV-RESIDENCY`).
-3. **Pseudo-gradient.** Form `Δ_c = (θ_c^local, φ_c^local) − (θ_t, φ_t)`. DiLoCo treats the `H`-step
-   local update as a single "gradient" for the outer optimizer.
-4. **Privatize.** Clip and noise `Δ_c` per-participant (§3 below; `INV-DP-BOUND`).
-5. **Secure-aggregate.** Compute `Σ_c Δ_c` without revealing any individual `Δ_c`
-   ([RFC-0011](RFC-0011-secure-aggregation.md)).
-6. **Backstop align.** Recompute the hard Procrustes alignment `Q_c^*` on the public probe and fold it
-   in *only if* drift exceeds the configured threshold
-   ([RFC-0002 §5](RFC-0002-gauge-and-aggregation.md)). With Layer-2 anchoring active this should
-   rarely bind.
+3. **Pseudo-gradient.** Form the displacement
+   `Δ_c = (θ_c^local, φ_c^local) − (θ_t, φ_t)`. This is the negative of DiLoCo's common outer-gradient
+   convention, `G_c = (θ_t, φ_t) − (θ_c^local, φ_c^local) = −Δ_c`; adding `Δ_c` is therefore
+   equivalent to subtracting `G_c`.
+4. **Backstop align (target).** Before any release transform, participant `c` computes the hard
+   Procrustes alignment `Q_c^*` on the public probe and, *only if* drift exceeds the configured
+   threshold, transforms its raw full local weights and re-differences
+   `Δ'_c = W'_c − W_t` ([RFC-0002 §5](RFC-0002-gauge-and-aggregation.md)). Otherwise `Δ'_c = Δ_c`.
+   This participant-local order is `INV-ALIGN-BEFORE-RELEASE`.
+5. **Privatize (target).** Clip and noise `Δ'_c` per participant with participant-secret entropy and
+   persistent pre-release accounting (§4 below; `INV-DP-BOUND`), then optionally quantize it.
+6. **Secure-aggregate.** Encode and mask the final released `Δ'_c`, then compute
+   `Σ_c released(Δ'_c)` without revealing any individual update
+   ([RFC-0011](RFC-0011-secure-aggregation.md)). A sum-only coordinator cannot apply a distinct
+   `Q_c^*` after this boundary.
 7. **Outer step.** Apply Nesterov momentum to the averaged pseudo-gradient:
-   `(θ_{t+1}, φ_{t+1}) = (θ_t, φ_t) − η_out · Nesterov((1/C) Σ_c Δ_c)`. This path is bitwise
+   `(θ_{t+1}, φ_{t+1}) = (θ_t, φ_t) + η_out · Nesterov((1/C) Σ_c released(Δ'_c))`. This path is bitwise
    deterministic (§7, `INV-AGG-DETERMINISM`).
 8. **Commit.** Hash-commit `(θ_{t+1}, φ_{t+1})` ([RFC-0010](RFC-0010-artifact-checkpoint-format.md)
    format, `INV-CHECKPOINT-HASH`) and emit `RoundClose`.
@@ -148,24 +160,27 @@ round t
                                                               │
   participant c:  H inner AdamW steps on local data  ◄────────┘  (raw data never leaves)
                   Δ_c = (θ_c,φ_c) − (θ_t,φ_t)
-                  clip ‖Δ_c‖ ≤ C_clip ; add Gaussian noise        (RFC-0012)
-                  ── Update(masked Δ_c) ──► secure aggregator       (RFC-0011)
-  aggregator:     Σ_c Δ_c  (individual Δ_c hidden)
-  coord:          backstop Procrustes-align on probe if drift > τ   (RFC-0002 §5)
-                  (θ_{t+1},φ_{t+1}) = (θ_t,φ_t) − η_out·Nesterov(mean_c Δ_c)   [deterministic]
+                  if drift > τ: align raw W_c; Δ'_c = W'_c − W_t   (RFC-0002 §5)
+                  clip ‖Δ'_c‖ ≤ C_clip ; add Gaussian noise        (RFC-0012)
+                  optional quantize; encode + mask
+                  ── Update(masked released Δ'_c) ──► aggregator    (RFC-0011)
+  aggregator:     Σ_c released(Δ'_c)  (individual updates hidden)
+  coord:          common Nesterov(mean revealed sum) only
+                  (θ_{t+1},φ_{t+1}) = (θ_t,φ_t) + η_out·Nesterov(mean) [deterministic]
                   hash-commit (θ_{t+1},φ_{t+1})
                   ── RoundClose((θ_{t+1},φ_{t+1}) hash) ──► all
 ```
 
-The diagram restates step-for-step the eight-step lifecycle above: the coordinator broadcasts the
-global state and round coordination data; each participant trains locally and returns a privatized,
-masked pseudo-gradient; the aggregator reveals only the sum; the coordinator applies the deterministic
-outer step and commits.
+The diagram restates step-for-step the target eight-step lifecycle above: the coordinator broadcasts the
+global state and round coordination data; each participant trains, aligns its raw local full weights
+when required, and returns a privatized, masked aligned pseudo-gradient; the aggregator reveals only
+the sum; the coordinator applies the deterministic outer step and commits.
 
 ### 3. The `PseudoGradient` contract
 
-The unit that crosses the boundary is the `PseudoGradient`. It carries the flat delta, its L2 norm
-(post-clip), and the dataset Merkle root it is bound to (`INV-COMMIT-BINDING`). Full schema lives in
+The unit that crosses the boundary is the `PseudoGradient`. It carries the flat released delta, the
+honest L2 norm of that released vector, and the dataset Merkle root it is bound to
+(`INV-COMMIT-BINDING`). Full schema lives in
 [03 §PseudoGradient](../spec/03-data-model.md); the protocol-relevant shape:
 
 ```python
@@ -174,10 +189,10 @@ from torch import Tensor
 
 @dataclass(frozen=True)
 class PseudoGradient:
-    """Participant c's H-step local update, post-DP, bound to one dataset commitment."""
+    """Participant c's released H-step local update, bound to one dataset commitment."""
     delta: Tensor            # flat fp32 vector over (θ, φ) params; encoder + predictor only,
                              #   never action heads (INV-ACTIONHEAD-LOCAL)
-    l2_norm: float           # ‖delta‖ AFTER clipping; satisfies l2_norm <= C_clip (INV-DP-BOUND)
+    l2_norm: float           # honest ‖delta‖ after noise/optional quantization; may exceed C_clip
     dataset_root: bytes      # the Merkle root R_c this update is bound to (INV-COMMIT-BINDING)
     round_index: int         # the round t this Δ_c was produced for
     participant_id: str      # for logging/correlation only; redacted from any cross-boundary payload
@@ -187,8 +202,11 @@ class PseudoGradient:
 # Coordinator.run(num_rounds: int) -> None
 ```
 
-Construction (`Participant.local_round`) is in `lensemble.federation.participant`; the clip-then-noise
-transform is applied before the `PseudoGradient` leaves the participant. The action-head exclusion is
+Construction (`Participant.local_round`) is in `lensemble.federation.participant`; on the target path,
+the participant-specific full-weight alignment and re-difference happen before the clip-then-noise
+transform and before the `PseudoGradient` leaves the participant (`INV-ALIGN-BEFORE-RELEASE`). The
+current implementation does not yet perform that alignment in `Participant.local_round`; its
+coordinator-side backstop is restricted to a raw plaintext research harness. The action-head exclusion is
 enforced at construction: the flat `delta` is materialized only over the federated parameter groups
 (encoder `θ`, predictor `φ`). Attempting to include an action-head parameter group in a released delta
 is a contract violation raised at the residency boundary as `ResidencyViolation`
@@ -196,20 +214,22 @@ is a contract violation raised at the residency boundary as `ResidencyViolation`
 
 ### 4. Differential privacy (protocol level)
 
-Per-participant, before release, the protocol applies the Gaussian mechanism to the pseudo-gradient.
+Per-participant, after any required raw full-weight alignment/re-difference and before release, the
+protocol applies the Gaussian mechanism to the aligned pseudo-gradient $\Delta'_c$.
 The mechanism, its `(ε,δ)` accounting, and the swappable accountant are specified in
 [RFC-0012 §Mechanism](RFC-0012-differential-privacy.md); the protocol pins only the two operations and
 their ordering:
 
-- **Clip.** `Δ_c ← Δ_c · min(1, C_clip / ‖Δ_c‖)`. After this step,
-  `‖Δ_c‖ ≤ C_clip` holds exactly (`INV-DP-BOUND`, enforced in `lensemble.privacy.dp`). This invariant
+- **Clip.** `Δ'_c ← Δ'_c · min(1, C_clip / ‖Δ'_c‖)`. After this step,
+  `‖Δ'_c‖ ≤ C_clip` holds exactly (`INV-DP-BOUND`, enforced in `lensemble.privacy.dp`). This invariant
   is the precondition that makes the noise calibration sound and is asserted on the post-clip norm; a
   violation (a numerical drift past `C_clip`) raises `PrivacyBudgetExceeded` only if the accountant's
   budget is breached, but a clip-bound assertion failure is a defect, not a privacy event.
 - **Noise.** Add `N(0, σ² C_clip² I)`, calibrated to a target `(ε,δ)` over the planned number of
-  rounds. When the accountant reports the cumulative budget spent, the round refuses to release and
-  raises `PrivacyBudgetExceeded`; training stops (the response is fail-closed, not degrade —
-  [04 §Privacy](../spec/04-error-model.md)).
+  rounds. The current deterministic shared-seed draw is reproducibility plumbing, not claim-grade DP:
+  an observer with the recorded seed can reconstruct it. Cumulative, pre-release budget enforcement and
+  participant-secret CSPRNG entropy remain required before the fail-closed
+  `PrivacyBudgetExceeded` lifecycle described in [04 §Privacy](../spec/04-error-model.md) is operational.
 
 The privacy unit is the *participant's contribution to a round* (per-participant update DP), not
 per-example DP-SGD in the inner loop ([RFC-0012](RFC-0012-differential-privacy.md) states this scope and
@@ -225,9 +245,16 @@ The coordinator MUST learn only `Σ_c Δ_c`, never an individual `Δ_c` — an i
 about a silo's data than the sum. The protocol requires a dropout-robust secure-aggregation scheme
 (pairwise masking, Bonawitz-style, or a TEE-based aggregator); the construction, dropout-threshold
 secret sharing, and the masked wire format are specified in [RFC-0011](RFC-0011-secure-aggregation.md).
+This is a conformance requirement, not a description of the current runtime: the live optimizer
+receives individual plaintext deltas, and its later simulated/TEE sum is only an equivalence report.
 
 Two protocol-level constraints this RFC imposes on that scheme:
 
+- **Alignment before masking.** Every participant-specific Procrustes transform and re-difference MUST
+  finish before clipping, noising, quantization, encoding, and masking
+  (`INV-ALIGN-BEFORE-RELEASE`). The revealed sum contains no individual $\Delta'_c$ or $Q_c^\star$;
+  pairwise masking cannot implement a distinct post-sum alignment. A trusted/MPC/TEE alternative must
+  perform the same order inside its boundary before emitting only the sum.
 - **Dropout robustness.** Participants may vanish mid-round (§6). The scheme MUST allow a round to
   complete when at least a configured threshold of participants remain; below threshold raises
   `SecureAggregationError` ([RFC-0011](RFC-0011-secure-aggregation.md)), and the round either retries or
@@ -254,10 +281,10 @@ DP noise is added per-participant *before* masking ([RFC-0012](RFC-0012-differen
   secure-aggregation threshold or a configured minimum, the round raises `FaultToleranceExceeded`; the
   state-machine handling is in [RFC-0013](RFC-0013-coordinator-runtime.md).
 - **Communication compression** — optional int8 quantization of the pseudo-gradient (per INTELLECT-1's
-  int8 all-reduce) cuts outer-step bandwidth. It is orthogonal to the gauge machinery: quantization
-  operates on the flat `Δ_c` after clipping and noising and before masking, and its round-trip error is
-  bounded and tested (Testing Strategy). The quantization scheme MUST preserve `INV-AGG-DETERMINISM` on
-  the dequantized sum.
+  int8 all-reduce) cuts outer-step bandwidth. It operates on the flat, already-aligned $\Delta'_c$
+  after clipping and noising and before masking. Quantization is downstream of gauge correction but does
+  not commute with it; its round-trip error is bounded and tested (Testing Strategy). The quantization
+  scheme MUST preserve `INV-AGG-DETERMINISM` on the dequantized sum.
 
 ### 7. Determinism, concurrency, error propagation
 
@@ -288,7 +315,7 @@ runtime control plane ([RFC-0013 §Control-Plane Messages](RFC-0013-coordinator-
 | Message | Direction | Contents | Protection |
 |---|---|---|---|
 | `RoundOpen` | coord → participant | `(θ_t, φ_t)` ref/hash, sketch seed `s_t`, probe hash, landmark hashes, `H` | integrity (hash) |
-| `Update` | participant → aggregator | `Δ_c` (the `PseudoGradient.delta`) | DP (clip+noise) + secure-agg mask |
+| `Update` | participant → aggregator | aligned, transformed `Δ'_c` (the `PseudoGradient.delta`) | Target: participant-aligned before effective DP/quantization + secure-agg mask. Current: configured clip/replay-noise delta visible in plaintext to coordinator |
 | `Commitment` | participant → coord | dataset Merkle root `R_c` ([RFC-0014](RFC-0014-provenance-commitments.md)) | binding (`INV-COMMIT-BINDING`) |
 | `RoundClose` | coord → all | `(θ_{t+1}, φ_{t+1})` content hash | integrity (hash, `INV-CHECKPOINT-HASH`) |
 
@@ -301,14 +328,15 @@ enforced by `lensemble.data.residency`; a violation is fail-closed `ResidencyVio
 |---|---|---|---|
 | Released delta would include raw data or a private embedding | residency guard at participant egress | `ResidencyViolation` | fail-closed; never caught-and-ignored (`INV-RESIDENCY`) |
 | Released delta includes an action-head param group | param-group check at `PseudoGradient` construction | `ResidencyViolation` | reject; action heads are local (`INV-ACTIONHEAD-LOCAL`) |
-| Participants present below secure-agg threshold | aggregator threshold check | `SecureAggregationError` | round retries or aborts ([RFC-0013](RFC-0013-coordinator-runtime.md)) |
+| Participants present below secure-agg threshold (target masking path) | aggregator threshold check | `SecureAggregationError` | round retries or aborts ([RFC-0013](RFC-0013-coordinator-runtime.md)); current masking selection reports fallback |
 | Too few participants to run a round | coordinator quorum check | `FaultToleranceExceeded` | round aborted; reconcile next round |
 | Revealed sum non-reproducible under self-check | per-outer-step determinism self-check | `NonDeterministicAggregation` | abort outer step and recompute; never swallowed (`INV-AGG-DETERMINISM`) |
 | Post-clip norm exceeds `C_clip` | assertion on clipped norm | defect (assertion); privacy event only if budget breached | abort; clip path is a correctness bug (`INV-DP-BOUND`) |
-| `(ε,δ)` budget spent | accountant query before release | `PrivacyBudgetExceeded` | stop training (fail-closed) |
+| `(ε,δ)` budget spent (target persistent accountant) | accountant query before release | `PrivacyBudgetExceeded` | stop training (fail-closed); current one-round post-commit report cannot enforce this |
 | `Δ_c` not bound to a valid `R_c` | commitment binding check at ingress | `CommitmentMismatch` | reject the update (`INV-COMMIT-BINDING`); never swallowed |
 | Broadcast probe hash ≠ pinned probe hash | participant probe-pin check | `ProbeError` | reject `RoundOpen`; re-anchor required (`INV-PROBE-PIN`) |
 | Participant uses a different `A` from `s_t` | sketch-consistency check | `GaugeError` | reject contribution (`INV-SKETCH-CONSISTENCY`) |
+| Coordinator-side backstop is combined with DP, quantization, or a sum-only backend | config / release-metadata preflight (`INV-ALIGN-BEFORE-RELEASE`) | `ConfigError` | fail closed; disable the plaintext harness or move alignment participant-side / into a trusted MPC boundary |
 
 ## Alternatives Considered
 
@@ -362,18 +390,21 @@ The protocol rolls out along the staged plan ([01 §Staged Plan](../spec/01-arch
 
 - **v0.2 / Stage B — simulated federation on one cluster.** The full round lifecycle runs in-process
   (the simulation harness of [RFC-0013](RFC-0013-coordinator-runtime.md)): `C` simulated participants on
-  a non-IID partition, DiLoCo + frame anchor (Layers 1–4), Procrustes backstop, simulated secure
-  aggregation + DP. The `H` schedule starts small (`H ∈ [50, 500]`, smaller end first) while the
+  a non-IID partition, DiLoCo + frame anchor (Layers 1–4), Procrustes backstop, and aggregation/DP
+  mechanism plumbing with explicit effectiveness status. The `H` schedule starts small
+  (`H ∈ [50, 500]`, smaller end first) while the
   frame-drift diagnostic is characterized, then is raised toward the communication-efficient regime once
   drift is shown controlled.
 - **v0.3 / Stage C — two real sovereign nodes over a network boundary.** Real secure aggregation + DP,
-  residency enforcement over the wire, fault tolerance/elasticity, and the contribution ledger. The
+  participant-side alignment before the release pipeline, residency enforcement over the wire, fault
+  tolerance/elasticity, and the contribution ledger. The
   message table (§8) becomes the on-the-wire control plane ([RFC-0013](RFC-0013-coordinator-runtime.md));
   int8 quantization may be enabled once its error bound is validated.
 
-No data migration is required between stages: the contracts (`PseudoGradient`, the message table,
-`GlobalState`) are stable from v0.2; Stage C swaps the transport and the secure-aggregation backend, not
-the protocol semantics.
+No data migration is required between stages, but runtime integration is required: Stage C must move
+the participant-specific backstop ahead of clipping/noise/quantization/masking and make the
+secure-aggregator sum the only optimizer input. Swapping only the transport or the configured backend is
+insufficient.
 
 ## Testing Strategy
 

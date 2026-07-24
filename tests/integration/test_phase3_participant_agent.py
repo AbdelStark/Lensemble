@@ -164,7 +164,7 @@ def _build_probe(seed: int = 0) -> PublicProbe:
         points=points,
         landmark_idx=landmark_idx,
         landmark_targets=targets,
-        content_hash=probe_content_hash(points, landmark_idx),
+        content_hash=probe_content_hash(points, landmark_idx, targets),
         probe_version=1,
     )
 
@@ -195,6 +195,7 @@ def _manifest(
     public_probe = Phase3PublicProbe(
         probe_id="toy-agent-probe",
         version=probe.probe_version,
+        hash_contract="public-probe-v2",
         content_hash=probe_hash or probe.content_hash.hex(),
     )
     participants = tuple(
@@ -393,6 +394,30 @@ def test_preflight_refuses_probe_mismatch_before_registering(tmp_path: Path) -> 
         agent.preflight()
 
     assert exc.value.code == "config_invalid"
+    assert getattr(transport, "_registered") == {}
+
+
+def test_preflight_refuses_legacy_unscoped_probe_digest(tmp_path: Path) -> None:
+    probe = _build_probe()
+    manifest = _manifest(probe)
+    manifest = manifest.model_copy(
+        update={
+            "public_probe": manifest.public_probe.model_copy(
+                update={"hash_contract": "legacy-unscoped"}
+            )
+        }
+    )
+    transport, _ = _seed_transport(_cfg("agent-a"), probe)
+    agent = _agent(
+        participant_id="agent-a",
+        transport=transport,
+        manifest=manifest,
+        probe=probe,
+        state_dir=tmp_path / "state",
+    )
+
+    with pytest.raises(ConfigError, match="hash_contract"):
+        agent.preflight()
     assert getattr(transport, "_registered") == {}
 
 

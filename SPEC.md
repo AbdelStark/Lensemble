@@ -1,10 +1,10 @@
 # Lensemble — Specification
 
-Federated, end-to-end JEPA world models — trained across sovereign data, verifiable by construction.
+Research stack for reproducible federated training and evaluation of action-conditioned JEPA world models.
 
 - Version: v0.1 (specification corpus)
 - Author: Abdelhamid Bakhta ([@AbdelStark](https://github.com/AbdelStark))
-- Date: 2026-06-02
+- Last updated: 2026-07-24
 - License: code Apache-2.0, docs CC-BY-4.0, data CDLA-Permissive-2.0 (proposed; see [09-release-and-versioning.md](docs/spec/09-release-and-versioning.md))
 
 This is the entry point to the Lensemble specification. It is an index and executive summary; the
@@ -14,29 +14,36 @@ claim-gated evidence and roadmap status tracked alongside the spec corpus.
 
 ## Executive summary
 
-Lensemble trains a single action-conditioned Joint-Embedding Predictive Architecture (JEPA) world model
-**end-to-end across many mutually-distrusting participants**, where each participant's raw interaction
-data never leaves its boundary. Encoder and predictor are co-trained (the hard regime, "Fork B"); only
-model deltas cross the network, aggregated under differential privacy and secure aggregation, with a
-Phase-2 roadmap to cryptographic proof of each participant's contribution.
+Lensemble is a research stack for executing and evaluating federated,
+action-conditioned Joint-Embedding Predictive Architecture (JEPA) world-model
+training while participant trajectories remain local. The implementation can
+co-train and aggregate the encoder and predictor (the "Fork B" path), and it
+includes differential-privacy, secure-aggregation, artifact, provenance, and
+evaluation contracts.
 
-The scientific core is the **latent gauge** problem. The SIGReg-JEPA objective is invariant under
+That implemented execution path is not an achieved useful and gauge-stable
+scientific result. The checked-in full-model evidence predates correction of an
+outer-step sign defect and must be rerun before it supports new claims. The
+corrected full-model research program remains open in
+[#335](https://github.com/AbdelStark/Lensemble/issues/335). The browser
+`real-lewm-tworooms` mode is a separate, narrower result: federated adapter
+continuation on a frozen checkpoint, not full-model federated training.
+
+The main research question is the **latent gauge** problem. The SIGReg-JEPA objective is invariant under
 orthogonal rotations $Q \in O(d)$ of the latent space, so independently-updated participants converge to
-mutually-rotated coordinate frames and naive weight-averaging is meaningless — a failure mode that
-anchored models (supervised nets, LLMs with a fixed vocabulary) never see. Lensemble closes the gauge
-with a shared encoder warm-start and a light public-probe **frame anchor**, which makes weight-averaging
-valid again and, structurally, keeps the eventual proof-of-contribution circuit cheap (the anchored frame
-keeps aggregation a near-linear operation). The federated end-to-end JEPA result and the first measurement
-of latent frame-drift under federation are the lead contributions; verifiable contribution is the Phase-2
-differentiator. To our knowledge no prior work federates an end-to-end JEPA world model, nor
-measures/controls the latent gauge under federation.
+mutually-rotated coordinate frames and make naive weight averaging unreliable.
+Lensemble provides shared warm starts, public-probe frame anchors, alignment
+diagnostics, and explicit controls for studying that failure mode. Whether those
+mechanisms yield a useful, magnitude-stable, and gauge-stable full-model result
+after the corrected outer step is an empirical question, not a settled claim.
+Cryptographic contribution proofs remain deferred future work.
 
 Full statement of thesis, goals, non-goals, and success criteria: [00-overview.md](docs/spec/00-overview.md).
 
 ## How to read this corpus
 
-- For the science (the paper): [RFC-0002](docs/rfcs/RFC-0002-gauge-and-aggregation.md) (the gauge and
-  its fix) → [RFC-0005](docs/rfcs/RFC-0005-evaluation.md) (how the claims are proved) →
+- For the research rationale: [RFC-0002](docs/rfcs/RFC-0002-gauge-and-aggregation.md) (the gauge and
+  proposed controls) → [RFC-0005](docs/rfcs/RFC-0005-evaluation.md) (how results are evaluated) →
   [RFC-0001](docs/rfcs/RFC-0001-architecture.md) (the system).
 - To build: [RFC-0001](docs/rfcs/RFC-0001-architecture.md) →
   [RFC-0003](docs/rfcs/RFC-0003-federated-protocol.md) →
@@ -88,8 +95,10 @@ Full statement of thesis, goals, non-goals, and success criteria: [00-overview.m
 
 ## Scope and status
 
-- **Phase 1** (this corpus, milestones `v0.1`–`v1.0`): the federated end-to-end JEPA science and a
-  reference implementation. Ships **proof-ready** so Phase 2 needs no rework.
+- **Phase 1** (this corpus, milestones `v0.1`–`v1.0`): the reference implementation,
+  reproducible experiments, and artifact/provenance disciplines used to study
+  full-model federation. Current full-model results require a corrected rerun
+  before supporting new scientific claims ([#335](https://github.com/AbdelStark/Lensemble/issues/335)).
 - **Phase 2** ([RFC-0006](docs/rfcs/RFC-0006-verifiable-contribution.md), Stage D, post-`v1.0`):
   the cryptographic verifiable-contribution layer.
 - **Fork B** (encoder + predictor co-trained) is the target; **Fork A** (frozen shared encoder, federate
@@ -103,8 +112,8 @@ Full statement of thesis, goals, non-goals, and success criteria: [00-overview.m
   publication, inference artifact attachment, and residency-safe evidence export. It is not a
   production browser-training claim and not evidence that the current dynamic-env federation materially
   beats local-only.
-- **Tapestry-like LeWM pivot** ([#314](https://github.com/AbdelStark/Lensemble/issues/314),
-  [TAPESTRY_LEWM.md](docs/roadmap/TAPESTRY_LEWM.md)) is the active demo queue above that substrate: a
+- **Tapestry-like LeWM demo** ([#314](https://github.com/AbdelStark/Lensemble/issues/314),
+  [TAPESTRY_LEWM.md](docs/roadmap/TAPESTRY_LEWM.md)) is an optional demonstration above that substrate: a
   `real-lewm-tworooms` mode with checkpoint-backed LeWorldModel browser inference, browser-local bounded
   adapter continuation, federated adapter-delta aggregation, and claim-bounded evidence. It is a
   Tapestry-like adaptation demo around a real TwoRooms checkpoint, not full from-scratch browser LeWM

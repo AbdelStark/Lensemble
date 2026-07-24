@@ -43,6 +43,7 @@ def test_optional_groups_present() -> None:
     assert "opacus" in extras["dp"]
     assert set(extras["observability"]) >= {"tensorboard", "wandb"}
     assert {"pytest", "hypothesis", "ruff", "pyright"} <= set(extras["dev"])
+    assert {"build>=1.3,<2", "twine>=6,<7"} <= set(extras["release"])
     assert "verify" in extras  # Phase-2 extra declared
 
 
@@ -88,20 +89,24 @@ def test_license_file_contents_are_the_right_licenses() -> None:
 
 def test_pyproject_declares_apache_code_license() -> None:
     project = _project()
-    license_field = project["license"]
-    # Accept either the table form {text = "Apache-2.0"} or the PEP 639 SPDX string.
-    spdx = (
-        license_field["text"] if isinstance(license_field, dict) else str(license_field)
-    )
-    assert spdx == "Apache-2.0"
+    assert project["license"] == "Apache-2.0"  # PEP 639 SPDX expression
     assert (
-        "License :: OSI Approved :: Apache Software License" in project["classifiers"]
+        "License :: OSI Approved :: Apache Software License"
+        not in project["classifiers"]
     )
 
 
 def test_pyproject_bundles_all_three_license_files() -> None:
-    license_files = _toml()["tool"]["setuptools"]["license-files"]
+    license_files = _project()["license-files"]
     assert set(license_files) == {"LICENSE", "LICENSE-docs", "LICENSE-data"}
+
+
+def test_clean_checkout_has_locked_build_inputs_and_type_marker() -> None:
+    metadata = _toml()
+    assert metadata["build-system"]["requires"] == ["setuptools==81.0.0"]
+    assert (_ROOT / ".python-version").read_text(encoding="utf-8").strip() == "3.11"
+    assert (_ROOT / "uv.lock").is_file()
+    assert (_ROOT / "lensemble" / "py.typed").is_file()
 
 
 def test_readme_links_each_license_file() -> None:

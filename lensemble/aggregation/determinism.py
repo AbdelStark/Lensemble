@@ -1,9 +1,9 @@
 """lensemble.aggregation.determinism — the per-outer-step aggregation determinism self-check.
 
-Enforces ``INV-AGG-DETERMINISM`` — the outer step is a pure, bitwise-reproducible function of (committed
-deltas, round seed, prior global params). This is the first of the five Phase-1 proof-ready disciplines
-(RFC-0006 §3): honoring it now lets the Phase-2 aggregation STARK attach with no rework. It is a
-security-critical, fail-closed check, **not** a performance optimization.
+Enforces ``INV-AGG-DETERMINISM`` — the outer step is a pure, bitwise-reproducible function of committed
+deltas, round seed, prior global params, and prior optimizer state. This is the first of the five Phase-1
+proof-ready disciplines (RFC-0006 §3): honoring it now lets the Phase-2 aggregation STARK attach with no
+rework. It is a security-critical, fail-closed check, **not** a performance optimization.
 
 :func:`assert_outer_step_deterministic` recomputes the outer step a second time on the identical inputs
 and compares the two flat results byte-for-byte (``torch.equal`` plus an identical canonical content
@@ -45,8 +45,9 @@ def assert_outer_step_deterministic(
     """Recompute the outer step on identical inputs and assert byte-for-byte reproducibility.
 
     ``compute`` MUST be a pure, side-effect-free recomputation of the outer-step result for a single round
-    (it is invoked twice); a stateful optimizer must be reconstructed per call so its velocity is not
-    advanced twice. The two flat results are compared with ``torch.equal`` **and** an identical
+    (it is invoked twice). A stateful optimizer must either expose a state-preserving preview from its
+    current state or be reconstructed from the same state snapshot for each call; verification must not
+    advance its velocity. The two flat results are compared with ``torch.equal`` **and** an identical
     :func:`flat_content_hash`.
 
     On any mismatch raises :class:`~lensemble.errors.NonDeterministicAggregation`

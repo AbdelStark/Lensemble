@@ -35,19 +35,38 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
+          version: "0.9.18"
           enable-cache: true
-          cache-dependency-glob: pyproject.toml
+          cache-dependency-glob: uv.lock
 
       - name: Create the project venv
         run: |
           uv venv .venv --python 3.11
           echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
+      - name: Verify and export locked dependencies
+        run: |
+          uv lock --check
+          uv export --locked --extra dev --no-emit-project --no-hashes \
+            --output-file "$RUNNER_TEMP/lensemble-constraints.txt"
+          # Select the official CPU local build corresponding to the locked public torch version.
+          sed -i -E 's/^torch==([^ ;]+)/torch==\1+cpu/' \
+            "$RUNNER_TEMP/lensemble-constraints.txt"
+          grep -Eq '^torch==[^ ;]+\+cpu($|[ ;])' \
+            "$RUNNER_TEMP/lensemble-constraints.txt"
+
       - name: Install torch (CPU wheel — no CUDA on a blocking gate)
-        run: uv pip install "torch>=2.4,<3" --index-url https://download.pytorch.org/whl/cpu
+        run: |
+          uv pip install "torch>=2.4,<3" \
+            --constraint "$RUNNER_TEMP/lensemble-constraints.txt" \
+            --find-links https://download.pytorch.org/whl/cpu/torch/
 
       - name: Install lensemble + dev tools
-        run: uv pip install -e ".[dev]"
+        run: |
+          uv pip install -e ".[dev]" \
+            --constraint "$RUNNER_TEMP/lensemble-constraints.txt" \
+            --build-constraint "$RUNNER_TEMP/lensemble-constraints.txt" \
+            --find-links https://download.pytorch.org/whl/cpu/torch/
 
       # Gate 5: the bitwise-determinism suite. Exact equality, no tolerance (07 §6). A red run here
       # blocks merge — a non-reproducible aggregation step is a proof-readiness failure, not a flake.

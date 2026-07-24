@@ -9,8 +9,11 @@ Transition triggers (RFC-0013 2; the orchestration that supplies them is the Coo
 
 - ``OPEN -> COLLECTING``: a quorum of ``K`` participants joined and ``Commitment``-bound.
 - ``COLLECTING -> AGGREGATING``: all ``Update``s received, or a collect timeout with quorum held.
-- ``AGGREGATING -> ALIGNING``: the revealed secure sum reproduces (``INV-AGG-DETERMINISM``).
-- ``ALIGNING -> COMMITTING``: frame drift measured, the Procrustes backstop applied if drift > tau.
+- ``AGGREGATING -> ALIGNING``: the aggregation input reproduces (``INV-AGG-DETERMINISM``).
+- ``ALIGNING -> COMMITTING``: aggregate/committed-frame diagnostics complete. On the target secure path,
+  participant-specific Procrustes alignment already happened before clip/noise/quantization/masking
+  (``INV-ALIGN-BEFORE-RELEASE``); a sum-only coordinator cannot apply it here. The current coordinator
+  transform is a guarded raw-plaintext research harness.
 - ``COMMITTING -> CLOSED``: outer step applied, the global hash committed, the ledger appended.
 - ``CLOSED -> OPEN``: the next round opens.
 

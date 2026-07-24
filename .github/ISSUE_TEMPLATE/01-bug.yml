@@ -1,0 +1,97 @@
+name: Bug report
+description: Report a reproducible defect in Lensemble code, tooling, or documentation.
+title: "[Bug]: "
+labels:
+  - "type:bug"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Lensemble. Please reduce the report to the
+        smallest public reproducer you can. Do not attach raw participant data,
+        credentials, private model artifacts, or other sensitive material.
+
+        Suspected security vulnerabilities must follow the
+        [security reporting policy](https://github.com/AbdelStark/Lensemble/security/policy),
+        not a public issue.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched the open and closed issues for an existing report.
+          required: true
+        - label: This is not a suspected security vulnerability.
+          required: true
+
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: What happened? Include the complete public-safe error message or traceback.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen, and which documented contract supports that expectation?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproducer
+    attributes:
+      label: Minimal reproducer
+      description: Provide the smallest commands, test, or code sample that reproduces the problem.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: revision
+    attributes:
+      label: Lensemble version or commit
+      description: Provide a release tag, package version, or full Git commit SHA.
+      placeholder: "v0.1.0 or 0123456789abcdef..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Not sure
+        - Core, contracts, configuration, or CLI
+        - Model or gauge alignment
+        - Federation, aggregation, or privacy
+        - Data, provenance, or artifacts
+        - Evaluation, verification, or observability
+        - Documentation, packaging, CI, or deployment
+        - Browser demos
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include OS, architecture, Python, uv, PyTorch, and accelerator details that affect the reproducer.
+      placeholder: |
+        OS/architecture:
+        Python:
+        uv:
+        PyTorch:
+        CPU/GPU and driver:
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Add public-safe logs, screenshots, bisect results, or links that help isolate the defect.

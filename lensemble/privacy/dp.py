@@ -97,9 +97,10 @@ def privatize(
 ) -> tuple[Tensor, float]:
     """Clip then noise (RFC-0012 1): returns ``(private_delta, post_clip_norm)``.
 
-    ``post_clip_norm`` is the post-clip, pre-noise norm (``<= C_clip``) recorded as
-    ``PseudoGradient.l2_norm``. With ``cfg.enabled is False`` returns ``(delta, ||delta||)`` unchanged —
-    the non-private honesty path (recorded honestly, never silently treated as private).
+    ``post_clip_norm`` is the internal post-clip, pre-noise sensitivity check (``<= C_clip``). It is
+    deliberately distinct from ``PseudoGradient.l2_norm``, which records the norm of the released
+    post-noise (and possibly quantized) vector. With ``cfg.enabled is False`` this returns
+    ``(delta, ||delta||)`` unchanged — the non-private honesty path.
     """
     if not cfg.enabled:
         d = delta.to(torch.float32)

@@ -455,7 +455,8 @@ the sidecar remains authoritative either way, so this does not affect the contra
 - [RFC-0001 — Architecture & System Overview](RFC-0001-architecture.md): §4 federation map and
   `INV-ACTIONHEAD-LOCAL`; §6 trust boundaries and `INV-AGG-DETERMINISM`; §7 data-flow lifecycles (dataset commit).
 - [RFC-0002 — The Latent Gauge & Frame-Anchored Aggregation](RFC-0002-gauge-and-aggregation.md): §5 the
-  recomputable Procrustes alignment that a verifier checks against committed artifacts.
+  participant-side Procrustes backstop and the distinct committed-model alignment diagnostic that a
+  verifier can recompute from public artifacts.
 - [RFC-0003 — Federated Training Protocol](RFC-0003-federated-protocol.md): §8 the message table —
   `RoundClose` carries the artifact `content_hash`, `Commitment` carries the dataset root.
 - [RFC-0006 — Verifiable Contribution](RFC-0006-verifiable-contribution.md): §2 the provable surface; §3

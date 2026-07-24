@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Run the Phase-3 latent-space inference audit on a committed checkpoint (#265).
+"""Run or normalize the historical Phase-3 latent-space inference audit (#265).
 
 Downloads one or more committed checkpoints (a converged-federated / naive-FedAvg / local-only model repo
 + round) and the held-out SO-100 split, rebuilds the frozen encoder/predictor, and runs the two
@@ -8,14 +8,19 @@ simulator-free latent proxy signals from :mod:`lensemble.eval.inference_demo`:
 - multi-step open-loop latent prediction quality vs predict-current / predict-random, and
 - latent-MPC goal-reaching (the planner reduces the goal-energy below the zero-action baseline).
 
-Writes a JSON inference report. Honest boundary: this is a corrected SO-100 proxy audit, not a usefulness
-claim. ``skill_vs_identity`` is gameable, ``effective_rank`` is scale-invariant, and closed-loop physical
-task-success stays gated on the unvendored ``stable-worldmodel`` simulator (#96).
+Writes a JSON inference report. Honest boundary: the checked SO-100 values
+predate the outer-update direction and public-probe-v2 target-binding fixes, so
+they are historical failure-analysis evidence rather than a usefulness claim.
+``skill_vs_identity`` is gameable, ``effective_rank`` is scale-invariant, and
+closed-loop physical task-success stays gated on the unvendored
+``stable-worldmodel`` simulator (#96) and a useful non-collapsed checkpoint
+(#244). Issue #335 tracks the corrected rerun.
 """
 
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -43,6 +48,195 @@ from lensemble.eval.inference_demo import (
 )
 from lensemble.eval.jepa_metrics import load_round_models
 from lensemble.model.action_head import build_action_head
+
+_SO100_INFERENCE_REPORT_SCHEMA_VERSION = 2
+_SO100_EVIDENCE_STATUS = "historical_pre_correctness_fix"
+_SO100_SUPERSEDED_REASON = (
+    "These SO-100 inference values predate the correction of the outer-update "
+    "direction and the public-probe-v2 target-binding contract. They are retained "
+    "for audit history only and do not validate the corrected runtime; GitHub "
+    "issue #335 tracks the replacement run."
+)
+_SO100_BLOCKER_REFS = ("#96", "#244")
+_SO100_HONEST_BOUNDARY = (
+    "Historical SO-100 proxy audit on real held-out data: these values predate "
+    "the outer-update direction correction and public-probe-v2 target-binding "
+    "contract, so they do not validate the corrected runtime; GitHub issue #335 "
+    "tracks the replacement run. skill_vs_identity is gameable, effective_rank "
+    "is scale-invariant, and latent-MPC success_rate=0.0 is a negative result, "
+    "not a near-static-video success story. A historical diagnostic measured "
+    "magnitude collapse at ~7.5e-6 latent variance, and an associated central "
+    "ceiling diagnostic did not establish downstream usefulness. Closed-loop "
+    "physical task-success is NOT claimed: the unvendored stable-worldmodel "
+    "simulator (#96) and a genuinely useful non-collapsed checkpoint (#244) "
+    "remain blockers. Not a cryptographic honest-computation proof."
+)
+_SO100_METRIC_BOUNDARY = (
+    "Historical SO-100 proxy audit: these metrics predate the outer-update "
+    "direction and public-probe-v2 target-binding fixes and do not validate the "
+    "corrected runtime (#335). skill_vs_identity is gameable; effective_rank is "
+    "scale-invariant; latent-MPC success_rate=0.0 is a negative result, not a "
+    "near-static-video success story. A historical diagnostic measured magnitude "
+    "collapse at ~7.5e-6 latent variance, and an associated central ceiling "
+    "diagnostic did not establish downstream usefulness (#244)."
+)
+
+
+def _load_json_object(path: Path) -> dict[str, Any]:
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError(f"SO-100 inference report must be a JSON object: {path}")
+    return raw
+
+
+def _validate_so100_inference_report(
+    report: dict[str, Any], *, allow_legacy: bool
+) -> None:
+    """Validate the narrow checked SO-100 report contract without recomputation."""
+
+    version = report.get("schema_version")
+    accepted_versions = (
+        {1, _SO100_INFERENCE_REPORT_SCHEMA_VERSION}
+        if allow_legacy
+        else {_SO100_INFERENCE_REPORT_SCHEMA_VERSION}
+    )
+    if isinstance(version, bool) or version not in accepted_versions:
+        raise ValueError(
+            f"unsupported SO-100 inference schema_version {version!r}; "
+            f"expected {sorted(accepted_versions)}"
+        )
+    if report.get("task_env_id") != "held-out-so100://phase3-so100-silo4":
+        raise ValueError("normalization only supports the checked held-out SO-100 task")
+    held_out_ref = report.get("held_out_data_ref")
+    if not isinstance(held_out_ref, str) or not held_out_ref.endswith(
+        "/phase3-so100-silo4.h5"
+    ):
+        raise ValueError("SO-100 inference report must bind phase3-so100-silo4.h5")
+    if not isinstance(report.get("horizon"), int) or isinstance(
+        report.get("horizon"), bool
+    ):
+        raise ValueError("SO-100 inference report horizon must be an integer")
+    if not isinstance(report.get("windows_available"), int) or isinstance(
+        report.get("windows_available"), bool
+    ):
+        raise ValueError("SO-100 inference report windows_available must be an integer")
+
+    controls = report.get("controls")
+    if not isinstance(controls, list) or not controls:
+        raise ValueError("SO-100 inference report must contain controls")
+    for index, control in enumerate(controls):
+        if not isinstance(control, dict):
+            raise ValueError(f"SO-100 inference control {index} must be an object")
+        for field in ("label", "model_repo", "revision"):
+            if not isinstance(control.get(field), str) or not control[field]:
+                raise ValueError(
+                    f"SO-100 inference control {index} field {field!r} is invalid"
+                )
+        for metrics_field in ("multistep_prediction", "latent_mpc"):
+            if not isinstance(control.get(metrics_field), dict):
+                raise ValueError(
+                    f"SO-100 inference control {index} is missing {metrics_field}"
+                )
+        success_rate = control["latent_mpc"].get("success_rate")
+        if (
+            isinstance(success_rate, bool)
+            or not isinstance(success_rate, (int, float))
+            or float(success_rate) != 0.0
+        ):
+            raise ValueError(
+                "checked SO-100 inference normalization requires the preserved "
+                "latent-MPC success_rate=0.0 negative result"
+            )
+
+    if version == _SO100_INFERENCE_REPORT_SCHEMA_VERSION:
+        if report.get("evidence_status") != _SO100_EVIDENCE_STATUS:
+            raise ValueError("SO-100 inference evidence_status is not historical")
+        superseded_reason = report.get("superseded_reason")
+        if not isinstance(superseded_reason, str) or "#335" not in superseded_reason:
+            raise ValueError("SO-100 inference superseded_reason must cite #335")
+        blocker_refs = report.get("blocker_refs")
+        if not isinstance(blocker_refs, list) or set(blocker_refs) != set(
+            _SO100_BLOCKER_REFS
+        ):
+            raise ValueError("SO-100 inference report must preserve blockers #96/#244")
+        honest_boundary = report.get("honest_boundary")
+        if not isinstance(honest_boundary, str):
+            raise ValueError("SO-100 inference report needs an honest_boundary")
+        public_text = [superseded_reason, honest_boundary]
+        for control in controls:
+            metric_boundary = control.get("metric_boundary")
+            if not isinstance(metric_boundary, str):
+                raise ValueError("every SO-100 control needs a metric_boundary")
+            public_text.append(metric_boundary)
+        joined = "\n".join(public_text)
+        required_phrases = (
+            "outer-update direction",
+            "public-probe-v2 target-binding",
+            "do not validate the corrected runtime",
+            "magnitude collapse",
+            "~7.5e-6",
+            "central ceiling",
+            "skill_vs_identity is gameable",
+            "effective_rank is scale-invariant",
+            "success_rate=0.0 is a negative result",
+            "#96",
+            "#244",
+            "#335",
+        )
+        missing = [phrase for phrase in required_phrases if phrase not in joined]
+        if missing:
+            raise ValueError(
+                "SO-100 inference claim boundary is incomplete: " + ", ".join(missing)
+            )
+
+
+def _metric_snapshot(report: dict[str, Any]) -> dict[str, Any]:
+    """Return every measured value and immutable input ref for equality checks."""
+
+    controls = report["controls"]
+    return {
+        "task_env_id": report["task_env_id"],
+        "held_out_data_ref": report["held_out_data_ref"],
+        "horizon": report["horizon"],
+        "windows_available": report["windows_available"],
+        "controls": [
+            {
+                key: copy.deepcopy(value)
+                for key, value in control.items()
+                if key != "metric_boundary"
+            }
+            for control in controls
+        ],
+    }
+
+
+def _normalize_historical_so100_report(
+    report: dict[str, Any],
+) -> dict[str, Any]:
+    """Add schema-v2 history metadata while preserving every measured value."""
+
+    _validate_so100_inference_report(report, allow_legacy=True)
+    before = _metric_snapshot(report)
+    normalized = copy.deepcopy(report)
+    normalized["schema_version"] = _SO100_INFERENCE_REPORT_SCHEMA_VERSION
+    normalized["evidence_status"] = _SO100_EVIDENCE_STATUS
+    normalized["superseded_reason"] = _SO100_SUPERSEDED_REASON
+    normalized["blocker_refs"] = list(_SO100_BLOCKER_REFS)
+    normalized["honest_boundary"] = _SO100_HONEST_BOUNDARY
+    for control in normalized["controls"]:
+        control["metric_boundary"] = _SO100_METRIC_BOUNDARY
+    if _metric_snapshot(normalized) != before:
+        raise RuntimeError("historical normalization changed measured inference values")
+    _validate_so100_inference_report(normalized, allow_legacy=False)
+    return normalized
+
+
+def _write_so100_inference_report(report: dict[str, Any], path: Path) -> None:
+    _validate_so100_inference_report(report, allow_legacy=False)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def _cfg(args: argparse.Namespace) -> SimpleNamespace:
@@ -217,13 +411,7 @@ def _evaluate_checkpoint(
         "revision": sha,
         "multistep_prediction": prediction,
         "latent_mpc": planning,
-        "metric_boundary": (
-            "Corrected SO-100 proxy audit: skill_vs_identity is gameable; effective_rank is "
-            "scale-invariant; latent-MPC success_rate=0.0 is a negative result, not a near-static-video "
-            "success story; held-out magnitude collapse (~7.5e-6 latent variance; "
-            "thoughts/collapse_fix_probe.py) and the central ceiling probe "
-            "(thoughts/central_ceiling_probe.py) show this is not downstream usefulness."
-        ),
+        "metric_boundary": _SO100_METRIC_BOUNDARY,
     }
 
 
@@ -234,7 +422,6 @@ def _args(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument(
         "--checkpoint",
         action="append",
-        required=True,
         metavar="LABEL=REPO",
         help=(
             "A control to evaluate, e.g. converged-federated=abdelstark/lensemble-phase3-converged-checkpoint. "
@@ -261,6 +448,22 @@ def _args(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument(
         "--output", default="docs/evidence/phase3_inference_demo_report.json"
     )
+    history_mode = p.add_mutually_exclusive_group()
+    history_mode.add_argument(
+        "--normalize-historical",
+        type=Path,
+        metavar="REPORT",
+        help=(
+            "Upgrade a checked schema-v1/v2 SO-100 report to the self-contained "
+            "historical schema without rerunning model inference."
+        ),
+    )
+    history_mode.add_argument(
+        "--validate-historical",
+        type=Path,
+        metavar="REPORT",
+        help="Validate a checked historical schema-v2 SO-100 report without inference.",
+    )
     p.add_argument(
         "--dynamic-env",
         action="store_true",
@@ -270,11 +473,38 @@ def _args(argv: list[str] | None) -> argparse.Namespace:
         "--dynamic-data-ref",
         default="synthetic-dynamic://swipe-dot?seed=0&n_episodes=8&steps=64&image_size=48",
     )
-    return p.parse_args(argv)
+    args = p.parse_args(argv)
+    if args.normalize_historical is None and args.validate_historical is None:
+        if not args.checkpoint:
+            p.error("--checkpoint is required unless a historical report mode is used")
+    elif args.checkpoint or args.dynamic_env:
+        p.error("historical report modes cannot be combined with checkpoint evaluation")
+    return args
 
 
 def main(argv: list[str] | None = None) -> dict[str, Any]:
     args = _args(argv)
+    out = Path(args.output)
+    if args.normalize_historical is not None:
+        source = _load_json_object(args.normalize_historical)
+        report = _normalize_historical_so100_report(source)
+        _write_so100_inference_report(report, out)
+        print(
+            f"normalized {args.normalize_historical} -> {out}: "
+            f"evidence_status={report['evidence_status']}",
+            flush=True,
+        )
+        return report
+    if args.validate_historical is not None:
+        report = _load_json_object(args.validate_historical)
+        _validate_so100_inference_report(report, allow_legacy=False)
+        print(
+            f"validated {args.validate_historical}: "
+            f"evidence_status={report['evidence_status']}",
+            flush=True,
+        )
+        return report
+
     windows = None
     action_spec = None
     if not args.dynamic_env:
@@ -303,7 +533,6 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
             )
         )
 
-    out = Path(args.output)
     if args.dynamic_env:
         dynamic_controls = []
         for control in controls:
@@ -346,26 +575,18 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
 
     assert windows is not None
     report = {
-        "schema_version": 1,
+        "schema_version": _SO100_INFERENCE_REPORT_SCHEMA_VERSION,
+        "evidence_status": _SO100_EVIDENCE_STATUS,
+        "superseded_reason": _SO100_SUPERSEDED_REASON,
+        "blocker_refs": list(_SO100_BLOCKER_REFS),
         "task_env_id": "held-out-so100://phase3-so100-silo4",
         "held_out_data_ref": f"{args.heldout_repo}/{args.heldout_file}",
         "horizon": args.horizon,
         "windows_available": len(windows),
-        "honest_boundary": (
-            "Corrected SO-100 proxy audit on real held-out data: skill_vs_identity is gameable, "
-            "effective_rank is scale-invariant, and latent-MPC success_rate=0.0 is a negative result, "
-            "not a near-static-video success story. Held-out magnitude collapse (~7.5e-6 latent variance; "
-            "thoughts/collapse_fix_probe.py) plus the central ceiling probe "
-            "(thoughts/central_ceiling_probe.py) show this checkpoint is not downstream-useful. "
-            "Closed-loop physical task-success is NOT claimed here; it stays gated on the unvendored "
-            "stable-worldmodel simulator (#96). Not a cryptographic honest-computation proof."
-        ),
+        "honest_boundary": _SO100_HONEST_BOUNDARY,
         "controls": controls,
     }
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(
-        json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    _write_so100_inference_report(report, out)
     print(json.dumps(report, indent=2, sort_keys=True), flush=True)
     return report
 

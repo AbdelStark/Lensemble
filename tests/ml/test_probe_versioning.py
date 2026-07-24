@@ -47,9 +47,9 @@ def test_reanchor_recomputes_targets_against_current_f_ref() -> None:
     points = _points(seed=0)
     f_ref_a, f_ref_b = _f_ref(1), _f_ref(2)  # distinct warm-starts
     v1 = build_probe(points, torch.arange(4), f_ref_a, probe_version=1)
-    v2 = reanchor_probe(v1, f_ref_b)  # same content, new f_ref
+    v2 = reanchor_probe(v1, f_ref_b)  # same source points, new target binding
     assert v2.probe_version == 2
-    assert v2.content_hash == v1.content_hash  # points/landmark_idx unchanged
+    assert v2.content_hash != v1.content_hash  # the full hash binds changed targets
     # the targets are recomputed against the new f_ref: they differ from v1 and match f_ref_b
     assert not torch.equal(v2.landmark_targets, v1.landmark_targets)
     expected = f_ref_b(points[torch.arange(4)]).tokens.detach()

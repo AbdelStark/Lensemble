@@ -2,8 +2,9 @@
 
 These exercise the shared ``run_phase3_consortium`` driver that the HF Jobs entry point calls: the same
 deterministic four-participant runtime as the long-run smoke, but with ``compute_metrics=True`` so each
-closed round carries real ``val_pred``/``val_sigreg``/``effective_rank``/``frame_drift_deg`` measured
-off the committed global checkpoints and the public probe. No raw trajectory may appear in the report.
+closed round carries prediction, representation-geometry, absolute-scale, and frame-drift diagnostics
+measured off the committed global checkpoints and the public probe. No raw trajectory may appear in the
+report.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from pathlib import Path
 
 import torch
 
-from lensemble.eval.jepa_metrics import effective_rank
+from lensemble.eval.jepa_metrics import effective_rank, latent_rms, latent_std_mean
 from lensemble.federation import (
     Phase3ArtifactTargets,
     run_phase3_consortium,
@@ -38,9 +39,13 @@ def test_consortium_smoke_emits_real_per_round_metrics(tmp_path: Path) -> None:
         assert round_summary.val_pred is not None
         assert round_summary.val_sigreg is not None
         assert round_summary.effective_rank is not None
+        assert round_summary.latent_std_mean is not None
+        assert round_summary.latent_rms is not None
         assert round_summary.frame_drift_deg is not None
         # effective_rank lives in [1, d] for d = latent_dim = 8; drift is a rotation angle in [0, 180].
         assert 0.0 <= round_summary.effective_rank <= 8.0 + 1e-6
+        assert round_summary.latent_std_mean >= 0.0
+        assert round_summary.latent_rms >= 0.0
         assert 0.0 <= round_summary.frame_drift_deg <= 180.0 + 1e-6
         assert round_summary.dp_epsilon_spent is not None
 
@@ -54,7 +59,14 @@ def test_consortium_metrics_are_deterministic(tmp_path: Path) -> None:
     )
 
     metrics = lambda report: [  # noqa: E731 — terse local extractor for the comparison
-        (r.val_pred, r.val_sigreg, r.effective_rank, r.frame_drift_deg)
+        (
+            r.val_pred,
+            r.val_sigreg,
+            r.effective_rank,
+            r.latent_std_mean,
+            r.latent_rms,
+            r.frame_drift_deg,
+        )
         for r in report.rounds
     ]
     assert metrics(first) == metrics(second)
@@ -64,7 +76,7 @@ def test_consortium_release_targets_and_residency(tmp_path: Path) -> None:
     inputs = phase3_long_run_smoke_inputs(run_dir=tmp_path / "run", rounds=2)
     targets = Phase3ArtifactTargets(
         model_repo="hf://models/abdelstark/lensemble-phase3-consortium-checkpoint",
-        dataset_repo="hf://datasets/abdelstark/lensemble-phase3-consortium-data",
+        dataset_repo="hf://datasets/abdelstark/lensemble-phase3-so100-silos",
         reports_prefix="reports/phase3/",
         publication_mode="hf_jobs_release",
     )
@@ -97,3 +109,13 @@ def test_effective_rank_isotropic_vs_collapsed() -> None:
 
     assert effective_rank(isotropic) > 4.0
     assert effective_rank(collapsed) < 1.5
+
+
+def test_absolute_scale_metrics_detect_scale_collapse_with_healthy_rank() -> None:
+    gen = torch.Generator().manual_seed(0)
+    healthy = torch.randn(512, 8, generator=gen)
+    scale_collapsed = healthy * 1e-6
+
+    assert effective_rank(scale_collapsed) > 6.0
+    assert latent_std_mean(scale_collapsed) < latent_std_mean(healthy) * 2e-6
+    assert latent_rms(scale_collapsed) < latent_rms(healthy) * 2e-6

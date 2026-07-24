@@ -101,6 +101,10 @@ recovered map drives the probe Procrustes rotation back to identity (rotation an
 A companion negative case uses $k < d$ landmarks and asserts the frame is NOT pinned (the constraint is
 under-determined), guarding the documented $k \ge d$ requirement ([RFC-0004 §3](../rfcs/RFC-0004-data-provenance.md#3-the-public-probe-set-mathcalp)).
 Enforces the precondition behind `INV-PROBE-PIN`: landmark targets derive only from $f_{\text{ref}}$.
+Companion probe-integrity tests alter targets and hash metadata independently and require load, save,
+anchor, drift, and public recomputation to fail closed. They also assert the versioned full digest binds
+targets and is device/layout invariant; the separately domain-labelled points-only source fingerprint is
+never accepted as the full probe commitment.
 
 ### 2.3 Procrustes closed-form correctness
 
@@ -152,7 +156,8 @@ Property: `INV-DP-BOUND`. After clipping ($\Delta_c \leftarrow \Delta_c\cdot\min
 for every input, including the boundary case $\lVert\Delta_c\rVert = C_{\text{clip}}$ and a zero vector
 (no division by zero). `hypothesis` draws delta vectors across magnitudes. A companion test asserts the
 Gaussian noise is calibrated to $\sigma C_{\text{clip}}$ (empirical std over many draws within `RTOL_DP`)
-and that clipping itself is deterministic given the input. Budget exhaustion is tested in
+and that clipping itself is deterministic given the input. These are primitive/mechanism tests; they do
+not make the current shared-seed replay path effective DP. Target budget exhaustion is tested in
 `tests/integration/test_dp_accountant.py`: the accountant raises `PrivacyBudgetExceeded` ([conventions §6](conventions.md#6-error-taxonomy)) when the
 planned $(\varepsilon,\delta)$ is spent, stopping training rather than continuing —
 [RFC-0012 §Testing Strategy](../rfcs/RFC-0012-differential-privacy.md#testing-strategy).
@@ -274,7 +279,7 @@ controlled, reproducible heterogeneity across silos (same seed ⇒ same partitio
 
 `tests/e2e/test_full_round.py` wires one complete simulated federation round through the public surface
 ([conventions §5](conventions.md#5-public-api-surface)): `Coordinator.run(num_rounds=1)` over two in-process `Participant`s on a synthetic fixture, with
-DP, simulated secure aggregation, the frame anchor, and a hash-committed result. It asserts the round state
+clip/noise and aggregation mechanism plumbing, the frame anchor, and a hash-committed result. It asserts the round state
 machine traverses `OPEN → COLLECTING → AGGREGATING → ALIGNING → COMMITTING → CLOSED`
 ([RFC-0013](../rfcs/RFC-0013-coordinator-runtime.md)), that `INV-RESIDENCY` holds across the round (no raw
 tensor in any message — reuses the §2.7 guard), and that the committed global hash matches the
@@ -285,6 +290,10 @@ mask cancellation correctness (the revealed sum equals the plaintext sum within 
 bound), dropout recovery above the threshold succeeds and below it raises `SecureAggregationError` ([conventions §6](conventions.md#6-error-taxonomy)),
 and a no-individual-leak property check. Masking must not perturb the determinism of the revealed sum
 (`INV-AGG-DETERMINISM`), asserted by composing with §2.5.
+
+Those tests establish primitive behavior. They do not establish that the live optimizer consumes a
+secure sum: the current coordinator commits from plaintext updates and reports the backend result only
+afterward.
 
 `tests/integration/test_recompute_alignment.py` is the Phase-1 proof-readiness test
 ([RFC-0006 §4](../rfcs/RFC-0006-verifiable-contribution.md#4-public-recomputation-phase-1-free-in-scope-now)): `recompute_alignment` ([conventions §5](conventions.md#5-public-api-surface)) reproduces the

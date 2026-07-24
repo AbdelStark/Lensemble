@@ -1,9 +1,10 @@
 """Outer-step aggregation determinism — INV-AGG-DETERMINISM (RFC-0003 7 / 07 §2.5). Issue #39.
 
-The Nesterov outer step is a bitwise-reproducible function of (deltas, prior global params): two
-in-process runs and a fresh subprocess agree byte-for-byte; the fixed participant-id-sorted reduction is
-input-order-independent; a non-bitwise recomputation raises NonDeterministicAggregation; Nesterov is
-stable across a varying participant count C.
+The Nesterov outer step is a bitwise-reproducible function of deltas, prior global params, and prior
+optimizer state: two in-process runs and a fresh subprocess agree byte-for-byte; the fixed
+participant-id-sorted reduction is input-order-independent; a non-bitwise recomputation raises
+NonDeterministicAggregation; a state-preserving preview verifies persistent momentum; Nesterov is stable
+across a varying participant count C.
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ import sys
 import pytest
 import torch
 
-from lensemble.errors import LensembleErrorCode, NonDeterministicAggregation
+from lensemble.errors import LensembleErrorCode, NonDeterministicAggregation, RoundError
 from lensemble.federation import (
     OuterOptimizer,
     PseudoGradient,
@@ -73,6 +74,48 @@ def test_outer_step_is_bitwise_reproducible() -> None:
     assert out.stdout.strip() == _content_hash(first)
 
 
+def test_local_minus_global_delta_moves_global_to_local_model() -> None:
+    global_params = torch.tensor([10.0, -2.0, 0.5])
+    local_params = torch.tensor([9.0, 1.0, -3.5])
+    update = build_pseudogradient(
+        {"encoder.w": local_params - global_params},
+        dataset_root=b"\x01" * 32,
+        round_index=0,
+    )
+
+    result = OuterOptimizer(lr=1.0, momentum=0.0, nesterov=False).step(
+        global_params, {"participant-0": update}
+    )
+
+    assert torch.equal(result, local_params)
+
+
+def test_fractional_outer_step_moves_toward_mean_local_model() -> None:
+    global_params = torch.tensor([4.0, -2.0])
+    local_params = {
+        "participant-0": torch.tensor([2.0, 2.0]),
+        "participant-1": torch.tensor([6.0, 4.0]),
+    }
+    updates = {
+        participant_id: build_pseudogradient(
+            {"encoder.w": params - global_params},
+            dataset_root=bytes([index + 1]) * 32,
+            round_index=0,
+        )
+        for index, (participant_id, params) in enumerate(local_params.items())
+    }
+    mean_local = torch.stack(list(local_params.values())).mean(dim=0)
+
+    result = OuterOptimizer(lr=0.25, momentum=0.0, nesterov=False).step(
+        global_params, updates
+    )
+
+    assert torch.equal(result, global_params + 0.25 * (mean_local - global_params))
+    assert torch.linalg.vector_norm(result - mean_local) < torch.linalg.vector_norm(
+        global_params - mean_local
+    )
+
+
 def test_fixed_reduction_order_is_input_order_independent() -> None:
     g0 = torch.zeros(10)
     deltas = _deltas()
@@ -106,9 +149,49 @@ def test_nesterov_stable_across_varying_participant_count() -> None:
         )  # an outer step proceeds with whatever C is present
 
 
+def test_preview_preserves_nonzero_momentum_state_and_matches_next_step() -> None:
+    optimizer = OuterOptimizer(lr=0.25, momentum=0.5)
+    first_delta = torch.tensor([2.0, -1.0])
+    first_update = build_pseudogradient(
+        {"encoder.w": first_delta},
+        dataset_root=b"\x01" * 32,
+        round_index=0,
+    )
+    global_after_first = optimizer.step(torch.zeros(2), {"participant-0": first_update})
+    second_delta = torch.tensor([-3.0, 4.0])
+    second_update = build_pseudogradient(
+        {"encoder.w": second_delta},
+        dataset_root=b"\x02" * 32,
+        round_index=1,
+    )
+    updates = {"participant-0": second_update}
+
+    first_preview = optimizer.preview_step(global_after_first, updates)
+    second_preview = optimizer.preview_step(global_after_first, updates)
+    committed = optimizer.step(global_after_first, updates)
+
+    expected_velocity = 0.5 * first_delta + second_delta
+    expected = global_after_first + 0.25 * (second_delta + 0.5 * expected_velocity)
+    assert torch.equal(first_preview, second_preview)
+    assert torch.equal(committed, first_preview)
+    assert torch.equal(first_preview, expected)
+
+
 def test_empty_deltas_rejected() -> None:
     with pytest.raises(NonDeterministicAggregation):
         OuterOptimizer(lr=0.7).step(torch.zeros(10), {})
+
+
+def test_outer_step_rejects_broadcastable_wrong_length_delta() -> None:
+    # A one-element update is broadcast-compatible with a flat global vector in PyTorch. It is not a
+    # one-parameter model update: accepting it would shift every parameter by the same scalar.
+    scalar = build_pseudogradient(
+        {"encoder.w": torch.tensor([0.25])},
+        dataset_root=b"\x01" * 32,
+        round_index=0,
+    )
+    with pytest.raises(RoundError, match="does not match global parameter shape"):
+        OuterOptimizer(lr=0.7).step(torch.zeros(10), {"participant-0": scalar})
 
 
 def test_secure_agg_nondeterministic_field_sum_raises() -> None:
@@ -185,10 +268,10 @@ def test_aggregation_determinism_self_check_never_swallows() -> None:
 
 # --- Layer-3 Procrustes backstop fed into the SAME outer step stays bitwise-reproducible (#18) ---
 #
-# The backstop (lensemble.gauge.backstop.procrustes_backstop) realigns each over-threshold participant's
-# predictor delta as a PURE LINEAR operation, then re-flattens the (possibly) aligned grouped delta into a
-# PseudoGradient and feeds it to the SAME OuterOptimizer.step. RFC-0002 §5: this stays bitwise-deterministic
-# (INV-AGG-DETERMINISM) and a degenerate Procrustes (clamp-and-skip) keeps the round alive.
+# The backstop reconstructs each over-threshold participant's full local gauge weights, transforms them
+# into the reference row-space frame, re-differences from global, then feeds the grouped delta to the SAME
+# OuterOptimizer.step. RFC-0002 §5: this stays bitwise-deterministic (INV-AGG-DETERMINISM), and a
+# degenerate Procrustes (clamp-and-skip) keeps the round alive.
 
 import math  # noqa: E402
 
@@ -236,18 +319,23 @@ def _backstop_then_outer_step() -> torch.Tensor:
     from lensemble.gauge import procrustes_backstop
 
     e_ref = _b_e_ref()
+    global_weights = _b_grouped_delta(30)
     deltas = {"c0": _b_grouped_delta(31), "c1": _b_grouped_delta(32)}
     embeddings = {
         "c0": e_ref @ _b_rot(40.0),
         "c1": e_ref @ _b_rot(3.0),
     }  # c0 fires, c1 does not
     aligned = procrustes_backstop(
-        deltas, embeddings, e_ref, threshold_deg=_BTHRESH, singular_floor=1e-6
+        deltas,
+        embeddings,
+        e_ref,
+        global_weights=global_weights,
+        threshold_deg=_BTHRESH,
+        singular_floor=1e-6,
     )
     updates = {pid: _b_flatten(aligned[pid]) for pid in aligned}
-    # The flat θ⊕φ global params length is the sum of the grouped delta numels (canonical order).
-    n = sum(t.numel() for t in deltas["c0"].values())
-    return OuterOptimizer(lr=0.7, momentum=0.9).step(torch.zeros(n), updates)
+    global_params = _b_flatten(global_weights).delta
+    return OuterOptimizer(lr=0.7, momentum=0.9).step(global_params, updates)
 
 
 def test_backstop_then_outer_step_is_bitwise_reproducible() -> None:

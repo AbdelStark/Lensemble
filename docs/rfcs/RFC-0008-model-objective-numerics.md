@@ -174,8 +174,9 @@ def snapshot_reference(encoder: Encoder) -> "ReferenceEncoder":
 ```
 
 The encoder is the V-JEPA 2 video ViT shape ([RFC-0001 §1](RFC-0001-architecture.md#1-model)). It is
-**co-trained** under SIGReg — this is Fork B, the lead contribution ([conventions §0](../spec/conventions.md#0-project-identity)); the frozen-encoder
-variant (Fork A) is the documented degrade
+**co-trained** under SIGReg in Fork B, the target full-model research path
+([conventions §0](../spec/conventions.md#0-project-identity)); the frozen-encoder
+variant (Fork A) is the documented fallback
 ([RFC-0002 §7 Fork A fallback](RFC-0002-gauge-and-aggregation.md#fork-a-fallback)). Warm-start loading
 is the only path that establishes `INV-WARMSTART-T0`: every participant calls `load_warmstart` with the
 same `expected_hash`, so round-0 encoder weights are hash-identical across participants and the gauge is
@@ -394,7 +395,9 @@ per-sample and then reduced (summed/averaged) across the batch. This batch reduc
 the same trust domain ([RFC-0001 §5](RFC-0001-architecture.md#5-training-topology-two-level)). The
 reduction MUST NOT cross a participant boundary: neither raw projected values $Az$, the embeddings
 $f_\theta(x)$, nor any private-batch statistic is serialized into an outbound message. Only the inner
-gradient (folded into $\Delta_c$, then DP-clipped and masked) leaves the boundary. An attempt to emit a
+gradient (folded into released $\Delta_c$) leaves the boundary. The target egress applies effective DP
+and masking; the current coordinator sees the configured clip/replay-noise delta in plaintext. An
+attempt to emit a
 projection statistic or embedding across a boundary raises `ResidencyViolation` ([conventions §6](../spec/conventions.md#6-error-taxonomy)), which is
 fail-closed and never caught-and-ignored ([RFC-0015 redaction](RFC-0015-observability-diagnostics.md),
 [RFC-0001 §6](RFC-0001-architecture.md#6-trust-boundaries)). Scalar SIGReg *loss values* may be logged
@@ -455,7 +458,7 @@ $\psi$ are excluded (`INV-ACTIONHEAD-LOCAL`).
 | Action head from unvalidated spec | `build_action_head` called before `ActionSpec` validation | precondition check | `ContractViolation` | Fail-closed; remediation "validate the ActionSpec against the WMCP contract (RFC-0007) before constructing a head" |
 | Sketch seed mismatch | Participant builds $A$ from the wrong seed | seed compare at ingress | `GaugeError` | Reject the round contribution (`INV-SKETCH-CONSISTENCY`); remediation "reconstruct A from the RoundOpen seed (RFC-0002 §3)" |
 | Under-determined landmark anchor | $k < d$ generic landmarks (Variant A) | shape check in injected anchor | `FrameDriftExceeded` (`GaugeError`) | Fail-closed at construction; remediation "increase probe landmark count to k >= d (RFC-0004 §3, RFC-0002 §4)" |
-| Embedding/projection about to cross a boundary | Reduce or serialize a private statistic across a boundary | residency guard at the egress path | `ResidencyViolation` | Fail-closed; never caught-and-ignored (`INV-RESIDENCY`); only $\Delta_c$ (DP-clipped, masked) leaves |
+| Embedding/projection about to cross a boundary | Reduce or serialize a private statistic across a boundary | residency guard at the egress path | `ResidencyViolation` | Fail-closed; never caught-and-ignored (`INV-RESIDENCY`); only released $\Delta_c$ leaves, currently plaintext-visible to the coordinator |
 | Invalid model config | $d$/sketch-dim/patching inconsistent | `build_*` validation | `ConfigError` | Fail-closed at construction; remediation names the offending field |
 
 Error-handling rules ([conventions §6](../spec/conventions.md#6-error-taxonomy)): never a bare `except`; `ResidencyViolation` is never swallowed; every
@@ -495,8 +498,9 @@ mode disables that detach, and neither mode introduces a separate momentum encod
 **Frozen encoder = Fork A.** *What:* freeze the warm-started encoder, co-train only the predictor; the
 frozen shared encoder is a shared frame, so the gauge dissolves and the anchor term is unnecessary
 ([RFC-0002 §7 Fork A fallback](RFC-0002-gauge-and-aggregation.md#fork-a-fallback)). *Why considered:* it
-is the clean safe-degrade and removes the hardest part of the problem. *Why not the lead:* it sacrifices
-the end-to-end (Fork B) novelty that is the project's core claim ([conventions §0](../spec/conventions.md#0-project-identity)). Fork A is supported and tested
+is the clean safe-degrade and removes the hardest part of the problem. *Why not
+the target full-model path:* it does not train the encoder under federation.
+Fork A is supported and tested
 by v1.0 ([conventions §12](../spec/conventions.md#12-milestones-and-stages)); under Fork A the `Objective` runs with `lambda_anc = 0.0` and the encoder in eval
 mode (no encoder gradient), which is why the `Objective` signature admits `lambda_anc = 0.0` and a
 `None` anchor.
@@ -515,10 +519,10 @@ re-opening a state-reconciliation problem is an Open Question (Stage A/B).
   central risk; Stage A (v0.1) de-risks the objective and the latent-MPC eval centrally before any
   federation ([RFC-0005](RFC-0005-evaluation.md), Migration / Rollout). RISK: if SIGReg fails to
   converge at ViT-L scale, the project falls back to Fork A
-  ([RFC-0002 §7](RFC-0002-gauge-and-aggregation.md#fork-a-fallback)) and continues the sovereignty story
-  without the end-to-end claim; resolution path: the Stage-A convergence gate.
+  ([RFC-0002 §7](RFC-0002-gauge-and-aggregation.md#fork-a-fallback)) and narrows
+  the study to predictor federation; resolution path: the Stage-A convergence gate.
 - **Co-training the encoder is the hard regime that opens the gauge.** This is by design (it is the
-  contribution), but it means this module cannot be validated in isolation from
+  target research regime), but it means this module cannot be validated in isolation from
   [RFC-0002](RFC-0002-gauge-and-aggregation.md); the gauge-invariance test (Testing Strategy) is the
   link.
 - **Reference defaults are image-scale.** Sketch dimension 64 and ~17 Epps–Pulley knots come from

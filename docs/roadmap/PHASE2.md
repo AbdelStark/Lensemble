@@ -8,9 +8,16 @@ roadmap closes.
 
 Tracker: [#200](https://github.com/AbdelStark/Lensemble/issues/200)
 
+> **Historical execution record.** The Phase 2 training, downstream, and
+> control metrics below predate the correction of the outer-update direction.
+> They preserve artifact provenance and an engineering execution trail, but
+> they do **not** validate the corrected runtime or support a current scientific
+> result. [Issue #335](https://github.com/AbdelStark/Lensemble/issues/335)
+> tracks the clean replacement run.
+
 ## Baseline
 
-The claim-MVP established the narrow end-to-end path:
+The archived claim-MVP run recorded the narrow end-to-end path:
 
 - two LeRobot-H5 participant silos;
 - claim-grade live-target LeWorldModel objective
@@ -22,7 +29,8 @@ The claim-MVP established the narrow end-to-end path:
 - final global hash
   `cf1c99a7e94ca610daa3bfc00c99d9ee68e9e34a302a96d848508e88edf4c0d5`.
 
-Phase 2 starts from that working substrate and raises the evidence bar.
+Phase 2 used that historical substrate to raise the artifact and execution
+evidence bar. Its numerical results remain pre-fix audit data.
 
 ## Workstreams
 
@@ -147,9 +155,11 @@ update norms:
 | 1 | `541b3c453116c3016d86ff20a7aa09af6860c77c7c6e892976c447818eeb4cd0` | 0.8853848577 | 0.8813801408 |
 | 2 | `8f1494fd9e57b7496daf96e379a3de1457a435080b81b9e0ea1d20a52f4827c4` | 0.8827524185 | 0.8824784756 |
 
-This satisfies the #202 engineering gate, but it is intentionally compact. It
-does not replace downstream evaluation (#206), baseline/ablation evidence
-(#205), or the final model-card/evidence bundle (#204).
+This satisfied the historical #202 execution gate, but it is intentionally
+compact and predates the corrected outer update. It does not validate the
+current optimizer. Within the archived Phase 2 program it also did not replace
+downstream evaluation (#206), baseline/ablation evidence (#205), or the final
+model-card/evidence bundle (#204).
 
 ## Published Phase 2 Downstream Eval
 
@@ -332,8 +342,10 @@ window counts, probe generation, and report publication.
 
 ## Claim Boundary
 
-Closing Phase 2 should support a stronger engineering statement: Lensemble can
-train and evaluate a federated end-to-end JEPA-style world model on larger
-participant-local robot silos with published artifacts. It should not claim
-paper-scale LeWorldModel performance, broad robotics generalization, or
-cryptographic contribution proofs unless those are separately evidenced.
+Closing Phase 2 established that the repository could execute and publish the
+intended data, training, evaluation, and artifact pipeline under the code
+available at that time. Because the recorded runs predate the outer-update
+correction, Phase 2 does not establish that the corrected federated loop
+converges or improves over controls. It also does not claim paper-scale
+LeWorldModel performance, broad robotics generalization, or cryptographic
+contribution proofs.

@@ -9,10 +9,17 @@ tags:
 - phase2
 ---
 
-# Lensemble Phase 2 SO-100 Federated JEPA World Model
+# Lensemble Phase 2 Historical SO-100 Federation Record
 
-This model repository contains the Phase 2 engineering evidence bundle for a
-federated JEPA-style world-model run over two public SO-100 participant silos.
+## Historical Evidence Status
+
+This model repository preserves a Phase 2 engineering artifact for a federated
+JEPA-style world-model run over two public SO-100 participant silos. The
+training, downstream, and control metrics predate the correction of the
+outer-update direction. They are retained for audit history only and **do not
+claim a corrected result**; they do not validate the corrected runtime. GitHub issue
+[#335](https://github.com/AbdelStark/Lensemble/issues/335) tracks the replacement
+run.
 
 ## Dataset Refs
 
@@ -26,7 +33,7 @@ Dataset repo: `hf://datasets/abdelstark/lensemble-phase2-so100-silos@97336927606
 Split policy: `episode_modulo`. Held-out policy:
 final_local_episode_per_silo for held-out evaluation for Phase 2 issue #206
 
-## Training
+## Historical Training Record
 
 - HF Job: [6a22ba68e6aa50b87b9ebef7](https://huggingface.co/jobs/abdelstark/6a22ba68e6aa50b87b9ebef7)
 - Pinned code SHA: `4b446a558882f25e47ee6410a4c32982bbf33477`
@@ -38,7 +45,7 @@ final_local_episode_per_silo for held-out evaluation for Phase 2 issue #206
   `effective_rank=1.5215493440628052`,
   `frame_drift_deg=10.538757949205232`
 
-## Downstream Eval
+## Historical Downstream Record
 
 - HF Job: [6a22c9e3ece949d7b3dca25a](https://huggingface.co/jobs/abdelstark/6a22c9e3ece949d7b3dca25a)
 - Env/planner: `synthetic://toy` / `icem`
@@ -47,14 +54,15 @@ final_local_episode_per_silo for held-out evaluation for Phase 2 issue #206
 - Effective dimension: 1.0000066342911489
 - Eval config hash: `f926ca5d1f230c960b6c10810a7f42620e99a05f144ac2a45991541940d014d4`
 
-## Baselines And Curves
+## Historical Baselines And Curves
 
 The generated curve report has 23 rows over
 `anchored-federation`, `naive-fedavg`. Phase 2 baseline coverage is partial: the generated table includes only completed, hash-bound public runs. Blocked comparisons: local-only, centralized-pooled, fork-a. Blocked rows must not be described as completed comparisons.
 
 ## Claim Boundaries
 
-- Engineering-scale evidence: published SO-100 participant silos, a GPU-backed three-round federated JEPA-style run, downstream synthetic planning eval, and a matched lambda_anc=0 control.
+- Historical engineering artifact: published SO-100 participant silos, a GPU-backed three-round federated JEPA-style run, downstream synthetic planning eval, and a matched lambda_anc=0 control executed under the superseded outer-update direction.
+- The recorded metrics are retained for failure analysis and provenance only; they do not validate the corrected optimizer or support a current federated-training result.
 - Does not claim paper-scale LeWorldModel performance, SO-100 task success, broad robotics generalization, or completed RFC-0006 cryptographic contribution proofs.
 - Baseline coverage is partial; blocked comparisons remain blocked until matched public runs exist.
 

@@ -22,7 +22,14 @@ from lensemble.eval.claim_mvp import ClaimMVPReport
 from lensemble.eval.phase2_curves import Phase2BaselinesCurvesReport
 from lensemble.eval.phase2_downstream import Phase2DownstreamEvalReport
 
-PHASE2_EVIDENCE_BUNDLE_SCHEMA_VERSION = 1
+PHASE2_EVIDENCE_BUNDLE_SCHEMA_VERSION = 2
+PHASE2_HISTORICAL_EVIDENCE_STATUS = "historical_pre_outer_update_fix"
+PHASE2_HISTORICAL_SUPERSEDED_REASON = (
+    "The recorded Phase 2 training, downstream, and control metrics predate the "
+    "correction of the outer-update direction. They are retained for audit history "
+    "only and do not validate the corrected runtime; GitHub issue #335 tracks the "
+    "replacement run."
+)
 
 Phase2ArtifactKind = Literal[
     "dataset-smoke-report",
@@ -142,6 +149,8 @@ class Phase2EvidenceBundle(BaseModel):
     schema_version: int
     generated_at: datetime
     bundle: Literal["phase2-federated-leworldmodel-evidence"]
+    evidence_status: Literal["historical_pre_outer_update_fix"]
+    superseded_reason: str = Field(min_length=1)
     artifact_checks: tuple[Phase2HubArtifactCheck, ...] = Field(min_length=1)
     dataset: Phase2DatasetBundleSummary
     training: Phase2TrainingBundleSummary
@@ -193,6 +202,18 @@ class Phase2EvidenceBundle(BaseModel):
                 code=LensembleErrorCode.CONFIG_INVALID,
                 remediation="state paper-scale and exhaustive-baseline boundaries",
             )
+        if "#335" not in self.superseded_reason:
+            raise ConfigError(
+                "historical Phase 2 evidence must cite the replacement-run tracker #335",
+                code=LensembleErrorCode.CONFIG_INVALID,
+                remediation="bind the historical status to the corrected rerun tracker",
+            )
+        if "historical evidence status" not in self.model_card_markdown.lower():
+            raise ConfigError(
+                "historical Phase 2 model-card text must disclose its evidence status",
+                code=LensembleErrorCode.CONFIG_INVALID,
+                remediation="render the producer-owned historical evidence notice",
+            )
         return self
 
 
@@ -240,7 +261,8 @@ def build_phase2_evidence_bundle(
     downstream = _downstream_summary(downstream_report)
     curves = _curves_summary(curves_report, curves_revision=curves_revision)
     claim_boundaries = (
-        "Engineering-scale evidence: published SO-100 participant silos, a GPU-backed three-round federated JEPA-style run, downstream synthetic planning eval, and a matched lambda_anc=0 control.",
+        "Historical engineering artifact: published SO-100 participant silos, a GPU-backed three-round federated JEPA-style run, downstream synthetic planning eval, and a matched lambda_anc=0 control executed under the superseded outer-update direction.",
+        "The recorded metrics are retained for failure analysis and provenance only; they do not validate the corrected optimizer or support a current federated-training result.",
         "Does not claim paper-scale LeWorldModel performance, SO-100 task success, broad robotics generalization, or completed RFC-0006 cryptographic contribution proofs.",
         "Baseline coverage is partial; blocked comparisons remain blocked until matched public runs exist.",
     )
@@ -260,6 +282,8 @@ def build_phase2_evidence_bundle(
         schema_version=PHASE2_EVIDENCE_BUNDLE_SCHEMA_VERSION,
         generated_at=generated_at or datetime.now(timezone.utc),
         bundle="phase2-federated-leworldmodel-evidence",
+        evidence_status=PHASE2_HISTORICAL_EVIDENCE_STATUS,
+        superseded_reason=PHASE2_HISTORICAL_SUPERSEDED_REASON,
         artifact_checks=tuple(artifact_checks),
         dataset=dataset,
         training=training,
@@ -436,10 +460,17 @@ tags:
 - phase2
 ---
 
-# Lensemble Phase 2 SO-100 Federated JEPA World Model
+# Lensemble Phase 2 Historical SO-100 Federation Record
 
-This model repository contains the Phase 2 engineering evidence bundle for a
-federated JEPA-style world-model run over two public SO-100 participant silos.
+## Historical Evidence Status
+
+This model repository preserves a Phase 2 engineering artifact for a federated
+JEPA-style world-model run over two public SO-100 participant silos. The
+training, downstream, and control metrics predate the correction of the
+outer-update direction. They are retained for audit history only and **do not
+claim a corrected result**; they do not validate the corrected runtime. GitHub issue
+[#335](https://github.com/AbdelStark/Lensemble/issues/335) tracks the replacement
+run.
 
 ## Dataset Refs
 
@@ -452,7 +483,7 @@ Dataset repo: `hf://datasets/{dataset.dataset_repo_id}@{dataset.dataset_revision
 Split policy: `{dataset.split_policy}`. Held-out policy:
 {dataset.heldout_split_policy}
 
-## Training
+## Historical Training Record
 
 - HF Job: [{training.job_id}]({training.job_url})
 - Pinned code SHA: `{training.code_sha}`
@@ -464,7 +495,7 @@ Split policy: `{dataset.split_policy}`. Held-out policy:
   `effective_rank={training.effective_rank}`,
   `frame_drift_deg={training.frame_drift_deg}`
 
-## Downstream Eval
+## Historical Downstream Record
 
 - HF Job: [{downstream.job_id}]({downstream.job_url})
 - Env/planner: `{downstream.env_id}` / `{downstream.planner}`
@@ -473,7 +504,7 @@ Split policy: `{dataset.split_policy}`. Held-out policy:
 - Effective dimension: {downstream.effective_dim}
 - Eval config hash: `{downstream.eval_config_hash}`
 
-## Baselines And Curves
+## Historical Baselines And Curves
 
 The generated curve report has {curves.curve_point_count} rows over
 {", ".join(f"`{role}`" for role in curves.run_roles)}. {curves.model_card_baseline_text}

@@ -10,9 +10,9 @@ Two paths are covered:
    preflights every participant agent, and writes ``phase3_consortium_dry_run.json`` WITHOUT running any
    federated round (no ``coordinator-artifacts`` round dirs are created).
 2. A real tiny ``--num-rounds 2`` run drives the full ``Phase3CoordinatorService`` +
-   ``Phase3ParticipantAgent`` runtime and emits REAL per-round JEPA metrics. The run is deterministic
-   (two identical runs into different dirs agree on every per-round metric tuple) and residency-safe (the
-   serialized report carries no raw-data keys).
+   ``Phase3ParticipantAgent`` runtime and emits REAL per-round JEPA metrics, including both absolute
+   latent-scale diagnostics. The run is deterministic (two identical runs into different dirs agree on
+   every per-round metric tuple) and residency-safe (the serialized report carries no raw-data keys).
 
 Four participants with quorum 3 (``--min-trainers 3``, ``--secure-agg-threshold 3``) match the Phase 3
 long-run smoke shape. The model is kept tiny so the whole run is CPU-fast and downloads nothing.
@@ -184,19 +184,25 @@ def test_dry_run_pins_probe_and_validates_without_compute(tmp_path: Path) -> Non
     assert round_dirs == []
 
 
-def _metric_tuples(report_path: Path) -> list[tuple[float, float, float, float]]:
+def _metric_tuples(
+    report_path: Path,
+) -> list[tuple[float, float, float, float, float, float]]:
     raw = json.loads(report_path.read_text(encoding="utf-8"))
-    tuples: list[tuple[float, float, float, float]] = []
+    tuples: list[tuple[float, float, float, float, float, float]] = []
     for row in raw["rounds"]:
         assert row["val_pred"] is not None
         assert row["val_sigreg"] is not None
         assert row["effective_rank"] is not None
+        assert row["latent_std_mean"] is not None
+        assert row["latent_rms"] is not None
         assert row["frame_drift_deg"] is not None
         tuples.append(
             (
                 float(row["val_pred"]),
                 float(row["val_sigreg"]),
                 float(row["effective_rank"]),
+                float(row["latent_std_mean"]),
+                float(row["latent_rms"]),
                 float(row["frame_drift_deg"]),
             )
         )
@@ -312,6 +318,7 @@ def test_outer_step_and_anchor_knobs_thread_into_coordinator_config(
     assert defaults.outer_lr == 0.5  # conservative real-run outer step
     assert defaults.outer_momentum == 0.0  # zero Nesterov momentum
     assert defaults.anchor_variant == "landmark"
+    assert defaults.backstop is False  # coordinator-side alignment is plaintext-only
 
 
 def test_encoder_backend_threads_into_model_config() -> None:

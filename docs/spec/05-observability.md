@@ -156,13 +156,14 @@ Emitted on the differential-privacy path
 
 | Metric | Unit | Cadence | Dimensions | Meaning |
 |---|---|---|---|---|
-| `dp/epsilon_cumulative` | scalar | per round | `round` | cumulative $\varepsilon$ spent across rounds so far, from the accountant; the budget that triggers `PrivacyBudgetExceeded` |
+| `dp/epsilon_cumulative` | scalar | per round | `round` | target persistent-accountant metric: cumulative $\varepsilon$ spent across rounds; current Phase-3 reports expose an independent one-round snapshot, not this series |
 | `dp/clip_fraction` | ratio | per round | `participant_id` | fraction of participant updates whose norm exceeded $C_{\text{clip}}$ and were clipped (`INV-DP-BOUND`) |
 
-`dp/epsilon_cumulative` is the monotone series the accountant compares against the configured budget; the
-round at which it crosses the budget is the round `PrivacyBudgetExceeded` is raised and training stops
-(see [04 — Error Model](04-error-model.md)). `δ` is a fixed configuration value recorded in the
-`RunManifest`, not a per-round metric.
+On the target path, `dp/epsilon_cumulative` is the monotone series the accountant compares against the
+configured budget; crossing it raises `PrivacyBudgetExceeded` before release and stops training (see
+[04 — Error Model](04-error-model.md)). The current report constructs a fresh accountant after each
+commit, so its one-round `epsilon_spent` must not be relabeled or interpreted as this cumulative metric.
+`δ` is a fixed configuration value recorded in the `RunManifest`, not a per-round metric.
 
 ### 2.5 Evaluation metrics (`eval/*`)
 

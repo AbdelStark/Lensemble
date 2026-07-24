@@ -165,6 +165,18 @@ def test_dynamic_env_observability_and_bundle_round_trip(tmp_path: Path) -> None
         bundle.observability.schema_version
         == DYNAMIC_ENV_OBSERVABILITY_REPORT_SCHEMA_VERSION
     )
+    assert bundle.observability.secure_sum_rounds == 0
+    assert bundle.observability.post_commit_cross_check_rounds == 2
+    assert bundle.observability.dp_accounted_rounds == 2
+    assert bundle.observability.effective_dp_rounds == 0
+    assert all(
+        row.aggregation_backend_status == "post_commit_cross_check"
+        for row in bundle.observability.rounds
+    )
+    assert all(
+        not row.secure_sum_consumed and not row.effective_dp
+        for row in bundle.observability.rounds
+    )
     assert bundle.raw_data_in_report is False
     assert all(check.exists for check in bundle.artifact_checks)
     assert (
@@ -234,6 +246,33 @@ def test_dynamic_env_reports_reject_future_schemas_first() -> None:
         parse_dynamic_env_evidence_bundle(
             {"schema_version": DYNAMIC_ENV_EVIDENCE_BUNDLE_SCHEMA_VERSION + 1}
         )
+
+
+def test_dynamic_env_schema_v1_observability_parses_conservatively(
+    tmp_path: Path,
+) -> None:
+    fixture = _bundle_fixture(tmp_path)
+    raw = json.loads(fixture["observability_path"].read_text(encoding="utf-8"))
+    raw["schema_version"] = 1
+    raw["secure_sum_rounds"] = len(raw["rounds"])
+    raw.pop("post_commit_cross_check_rounds")
+    raw.pop("effective_dp_rounds")
+    for row in raw["rounds"]:
+        row["aggregation_backend_status"] = "secure_sum"
+        row.pop("secure_sum_consumed")
+        row.pop("dp_accounting_status")
+        row.pop("effective_dp")
+
+    parsed = parse_dynamic_env_observability_report(raw)
+
+    assert parsed.schema_version == 1
+    assert parsed.secure_sum_rounds == 0
+    assert parsed.post_commit_cross_check_rounds == len(parsed.rounds)
+    assert parsed.effective_dp_rounds == 0
+    assert all(
+        row.aggregation_backend_status == "post_commit_cross_check"
+        for row in parsed.rounds
+    )
 
 
 def test_dynamic_env_scripts_generate_and_validate(tmp_path: Path) -> None:

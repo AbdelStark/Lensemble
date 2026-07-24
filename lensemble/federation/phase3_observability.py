@@ -46,9 +46,20 @@ from lensemble.federation.service import (
 from lensemble.federation.transport import InProcessTransport
 from lensemble.observability import redact_record
 
-PHASE3_OBSERVABILITY_REPORT_SCHEMA_VERSION = 1
+PHASE3_OBSERVABILITY_REPORT_SCHEMA_VERSION = 2
+Phase3ObservabilityEvidenceStatus = Literal[
+    "current",
+    "historical_pre_correctness_fix",
+]
 
 _GENERATED_AT = datetime(2026, 6, 5, 0, 0, 0, tzinfo=timezone.utc)
+_HISTORICAL_EVIDENCE_NOTICE = (
+    "Historical training/eval evidence: the referenced Phase 3 training and "
+    "gauge rows predate the outer-update direction correction and the "
+    "public-probe-v2 target-binding contract. They are retained for audit history "
+    "only and do not validate the corrected runtime; rerun tracking is recorded "
+    "in GitHub issue #335."
+)
 _OBSERVABILITY_REPORT_URI = "docs/evidence/phase3_observability_report.json"
 _DROPOUT_TRACE_URI = (
     "artifact://phase3-observability/induced-dropout/"
@@ -165,6 +176,9 @@ class Phase3RoundObservabilitySummary(BaseModel):
     timing: Phase3RoundTimingSummary
     communication: Phase3CommunicationSummary
     aggregation_backend_status: str = Field(min_length=1)
+    secure_sum_consumed: bool = False
+    dp_accounting_status: str = Field(default="legacy_unclassified", min_length=1)
+    effective_dp: bool = False
     dp_epsilon_spent: float | None = Field(default=None, ge=0.0)
     global_model_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
 
@@ -188,6 +202,9 @@ class Phase3DropoutDecisionSummary(BaseModel):
     reason: str = Field(min_length=1)
     effective_quorum: int = Field(ge=1)
     aggregation_backend_status: str = Field(min_length=1)
+    secure_sum_consumed: bool = False
+    dp_accounting_status: str = Field(default="legacy_unclassified", min_length=1)
+    effective_dp: bool = False
     dp_epsilon_spent: float | None = Field(default=None, ge=0.0)
 
 
@@ -227,6 +244,8 @@ class Phase3ObservabilityReport(BaseModel):
 
     schema_version: int
     generated_at: datetime
+    training_evidence_status: Phase3ObservabilityEvidenceStatus = "current"
+    training_evidence_superseded_reason: str | None = Field(default=None, min_length=1)
     consortium_id: str = Field(min_length=1)
     run_id: str = Field(min_length=1)
     config_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -245,9 +264,57 @@ class Phase3ObservabilityReport(BaseModel):
     final_bundle_handoff: str = Field(min_length=1)
     claim_boundary: str = Field(min_length=1)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_v1_privacy_semantics(cls, raw: Any) -> Any:
+        """Normalize legacy aggregation/DP statuses without editing artifacts."""
+
+        if not isinstance(raw, dict) or raw.get("schema_version") != 1:
+            return raw
+        migrated = dict(raw)
+        migrated.setdefault(
+            "training_evidence_status", "historical_pre_correctness_fix"
+        )
+        migrated.setdefault(
+            "training_evidence_superseded_reason", _HISTORICAL_EVIDENCE_NOTICE
+        )
+        legacy_boundary = str(migrated.get("claim_boundary", "")).strip()
+        if "Historical training/eval evidence:" not in legacy_boundary:
+            migrated["claim_boundary"] = (
+                f"{_HISTORICAL_EVIDENCE_NOTICE} Historical claim boundary: "
+                f"{legacy_boundary}"
+            )
+        for field in ("rounds", "dropout_decisions"):
+            rows = migrated.get(field)
+            if not isinstance(rows, (list, tuple)):
+                continue
+            migrated_rows: list[Any] = []
+            for row in rows:
+                if not isinstance(row, dict):
+                    migrated_rows.append(row)
+                    continue
+                migrated_row = dict(row)
+                if (
+                    migrated_row.get("aggregation_backend_status") == "secure_sum"
+                    and "secure_sum_consumed" not in migrated_row
+                ):
+                    migrated_row["aggregation_backend_status"] = (
+                        "post_commit_cross_check"
+                    )
+                    migrated_row["secure_sum_consumed"] = False
+                if (
+                    migrated_row.get("dp_epsilon_spent") is not None
+                    and "dp_accounting_status" not in migrated_row
+                ):
+                    migrated_row["dp_accounting_status"] = "deterministic_replay_only"
+                    migrated_row["effective_dp"] = False
+                migrated_rows.append(migrated_row)
+            migrated[field] = migrated_rows
+        return migrated
+
     @model_validator(mode="after")
     def _cross_check(self) -> "Phase3ObservabilityReport":
-        if self.schema_version != PHASE3_OBSERVABILITY_REPORT_SCHEMA_VERSION:
+        if not 1 <= self.schema_version <= PHASE3_OBSERVABILITY_REPORT_SCHEMA_VERSION:
             raise SchemaVersionMismatch(
                 f"Phase 3 observability report schema_version {self.schema_version!r} "
                 f"exceeds reader max {PHASE3_OBSERVABILITY_REPORT_SCHEMA_VERSION}",
@@ -303,6 +370,25 @@ class Phase3ObservabilityReport(BaseModel):
                 "Phase 3 observability claim boundary must reject paper-scale claims",
                 code=LensembleErrorCode.CONFIG_INVALID,
                 remediation="keep operational observability separate from model performance claims",
+            )
+        if self.training_evidence_status == "historical_pre_correctness_fix":
+            if self.training_evidence_superseded_reason is None:
+                raise ConfigError(
+                    "historical Phase 3 observability evidence requires a superseded reason",
+                    code=LensembleErrorCode.CONFIG_INVALID,
+                    remediation="record why referenced training evidence no longer validates the live runtime",
+                )
+            if "Historical training/eval evidence:" not in self.claim_boundary:
+                raise ConfigError(
+                    "historical Phase 3 observability evidence requires a claim-boundary notice",
+                    code=LensembleErrorCode.CONFIG_INVALID,
+                    remediation="surface the correctness-fix invalidation in the generated report",
+                )
+        elif self.training_evidence_superseded_reason is not None:
+            raise ConfigError(
+                "current Phase 3 observability evidence cannot declare a superseded reason",
+                code=LensembleErrorCode.CONFIG_INVALID,
+                remediation="mark referenced evidence historical or remove the reason",
             )
         labels = {artifact.label for artifact in self.artifact_publication}
         required_labels = {
@@ -409,14 +495,14 @@ def build_phase3_observability_report(
     source_artifacts = (
         Phase3ObservabilitySourceArtifactRef(
             label="Phase 3 long-run orchestration report",
-            uri=str(long_run_path),
+            uri=_artifact_uri(long_run_path),
             sha256=long_run_sha,
             schema_name="phase3_long_run_report",
             schema_version=long_run.schema_version,
         ),
         Phase3ObservabilitySourceArtifactRef(
             label="Phase 3 eval and matched-control report",
-            uri=str(eval_path),
+            uri=_artifact_uri(eval_path),
             sha256=eval_sha,
             schema_name="phase3_eval_report",
             schema_version=eval_report.schema_version,
@@ -436,6 +522,8 @@ def build_phase3_observability_report(
     report = Phase3ObservabilityReport(
         schema_version=PHASE3_OBSERVABILITY_REPORT_SCHEMA_VERSION,
         generated_at=generated_at,
+        training_evidence_status=long_run.evidence_status,
+        training_evidence_superseded_reason=long_run.superseded_reason,
         consortium_id=long_run.consortium_id,
         run_id=long_run.run_id,
         config_hash=long_run.config_hash,
@@ -456,13 +544,13 @@ def build_phase3_observability_report(
         artifact_publication=(
             _artifact_status(
                 label="phase3_long_run_report",
-                uri=str(long_run_path),
+                uri=_artifact_uri(long_run_path),
                 path=long_run_path,
                 notes="Checked-in #227 long-run consortium smoke report.",
             ),
             _artifact_status(
                 label="phase3_eval_report",
-                uri=str(eval_path),
+                uri=_artifact_uri(eval_path),
                 path=eval_path,
                 notes="Checked-in #228 eval and matched-control report.",
             ),
@@ -498,13 +586,28 @@ def build_phase3_observability_report(
             "dropout event, so no no-failure exception is needed."
         ),
         claim_boundary=(
-            "This Phase 3 observability report supports consortium-runtime, "
+            (
+                f"{_HISTORICAL_EVIDENCE_NOTICE} Historical claim boundary: "
+                if long_run.evidence_status == "historical_pre_correctness_fix"
+                else ""
+            )
+            + "This Phase 3 observability report supports consortium-runtime, "
             "dropout, communication, artifact, and redaction evidence. It does "
-            "not claim paper-scale LeWorldModel performance or SO-100 robotics "
-            "task success."
+            "not claim an optimizer-consumed secure sum or effective DP: the "
+            "optimizer consumed plaintext participant updates, simulated sums "
+            "are post-commit cross-checks, and epsilon values are one-round "
+            "deterministic-replay snapshots. It does not claim paper-scale "
+            "LeWorldModel performance or SO-100 robotics task success."
         ),
     )
     return parse_phase3_observability_report(report.model_dump(mode="json"))
+
+
+def _artifact_uri(path: Path) -> str:
+    path = Path(path)
+    if path.is_absolute():
+        return f"artifact://local/{path.name}"
+    return path.as_posix()
 
 
 class _DropoutArtifacts(BaseModel):
@@ -589,6 +692,21 @@ def _run_induced_dropout_smoke(*, run_dir: Path) -> _DropoutArtifacts:
         if privacy_report is not None
         else "not_reported"
     )
+    secure_sum_consumed = (
+        privacy_report.secure_aggregation.secure_sum_consumed
+        if privacy_report is not None
+        else False
+    )
+    dp_accounting_status = (
+        privacy_report.dp_accounting.status
+        if privacy_report is not None
+        else "not_reported"
+    )
+    effective_dp = (
+        privacy_report.dp_accounting.effective_dp
+        if privacy_report is not None
+        else False
+    )
     dp_epsilon = (
         privacy_report.dp_accounting.epsilon_spent
         if privacy_report is not None
@@ -606,6 +724,9 @@ def _run_induced_dropout_smoke(*, run_dir: Path) -> _DropoutArtifacts:
         timing=timing,
         communication=communication,
         aggregation_backend_status=aggregation_status,
+        secure_sum_consumed=secure_sum_consumed,
+        dp_accounting_status=dp_accounting_status,
+        effective_dp=effective_dp,
         dp_epsilon_spent=dp_epsilon,
         global_model_hash=record.global_model_hash,
     )
@@ -627,6 +748,9 @@ def _run_induced_dropout_smoke(*, run_dir: Path) -> _DropoutArtifacts:
         reason="induced_dropout_for_phase3_observability",
         effective_quorum=service.dropout_policy().effective_quorum,
         aggregation_backend_status=aggregation_status,
+        secure_sum_consumed=secure_sum_consumed,
+        dp_accounting_status=dp_accounting_status,
+        effective_dp=effective_dp,
         dp_epsilon_spent=dp_epsilon,
     )
     trace_path = run_dir / "phase3_observability_dropout_trace.jsonl"
@@ -714,6 +838,9 @@ def _round_summary_from_long_run(
             ),
         ),
         aggregation_backend_status=round_summary.aggregation_backend_status,
+        secure_sum_consumed=round_summary.secure_sum_consumed,
+        dp_accounting_status=round_summary.dp_accounting_status,
+        effective_dp=round_summary.effective_dp,
         dp_epsilon_spent=round_summary.dp_epsilon_spent,
         global_model_hash=round_summary.global_model_hash,
     )

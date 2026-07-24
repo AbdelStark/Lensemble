@@ -47,9 +47,15 @@ def test_phase3_long_run_smoke_closes_small_ci_run(tmp_path: Path) -> None:
         check.startswith("public_probe_hash_pinned:") for check in report.dry_run_checks
     )
     assert all(
-        round_summary.aggregation_backend_status == "secure_sum"
+        round_summary.aggregation_backend_status == "post_commit_cross_check"
         for round_summary in report.rounds
     )
+    assert all(not round_summary.secure_sum_consumed for round_summary in report.rounds)
+    assert all(
+        round_summary.dp_accounting_status == "deterministic_replay_only"
+        for round_summary in report.rounds
+    )
+    assert all(not round_summary.effective_dp for round_summary in report.rounds)
     assert all(
         round_summary.dp_epsilon_spent is not None for round_summary in report.rounds
     )
@@ -81,3 +87,25 @@ def test_parse_phase3_long_run_report_gates_future_schema_first(
 
     with pytest.raises(SchemaVersionMismatch):
         parse_phase3_long_run_report(raw)
+
+
+def test_schema_v1_long_run_report_parses_with_conservative_semantics(
+    tmp_path: Path,
+) -> None:
+    raw = run_phase3_long_run_smoke(
+        run_dir=tmp_path / "legacy-run", rounds=1
+    ).model_dump(mode="json")
+    raw["schema_version"] = 1
+    legacy_round = raw["rounds"][0]
+    legacy_round["aggregation_backend_status"] = "secure_sum"
+    legacy_round.pop("secure_sum_consumed")
+    legacy_round.pop("dp_accounting_status")
+    legacy_round.pop("effective_dp")
+
+    parsed = parse_phase3_long_run_report(raw)
+
+    assert parsed.schema_version == 1
+    assert parsed.rounds[0].aggregation_backend_status == "post_commit_cross_check"
+    assert parsed.rounds[0].secure_sum_consumed is False
+    assert parsed.rounds[0].dp_accounting_status == "deterministic_replay_only"
+    assert parsed.rounds[0].effective_dp is False

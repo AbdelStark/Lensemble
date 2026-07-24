@@ -1,10 +1,13 @@
-# Gate 7 — documentation link-check (07 §8 gate 7).
+# Gate 7 — documentation link-check (07 §8 gate 7) and the public MkDocs site.
 #
 # A build-blocking gate that keeps the corpus' internal cross-references machine-enforced rather than
 # aspirational: every relative link `[label](relpath#anchor)` under docs/ (and SPEC.md) must resolve to
 # an existing file and, where an #anchor is present, an existing heading under GitHub's heading-slug rule
-# (conventions §3). Intra-corpus references only — external (http/https) links are out of scope. The
-# checker is pure-stdlib, so this job needs no torch/dependency install.
+# (conventions §3). Intra-corpus references only — external (http/https) links are out of scope.
+#
+# Pull requests run the link check and strict site build. A green push to main additionally publishes
+# that exact MkDocs output to GitHub Pages and verifies that the public root is the research site, not a
+# stale event artifact.
 name: docs
 
 on:
@@ -14,7 +17,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: docs-${{ github.workflow }}-${{ github.ref }}
+  group: docs-pages-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 permissions:
@@ -30,22 +33,100 @@ jobs:
         with:
           python-version: "3.11"
       - name: Docs — intra-corpus link check
-        run: python scripts/check_docs_links.py docs/ SPEC.md
+        run: python scripts/check_docs_links.py docs/ SPEC.md README.md
 
   site:
     name: docs site build (mkdocs --strict)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      VIRTUAL_ENV: ${{ github.workspace }}/.venv
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.11"
+          version: "0.9.18"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Create the docs venv
+        run: |
+          uv venv .venv --python 3.11
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+      - name: Verify and export locked docs dependencies
+        run: |
+          uv lock --check
+          uv export --locked --extra docs --no-emit-project --no-hashes \
+            --output-file "$RUNNER_TEMP/lensemble-constraints.txt"
+          # Select the official CPU local build corresponding to the locked public torch version.
+          sed -i -E 's/^torch==([^ ;]+)/torch==\1+cpu/' \
+            "$RUNNER_TEMP/lensemble-constraints.txt"
+          grep -Eq '^torch==[^ ;]+\+cpu($|[ ;])' \
+            "$RUNNER_TEMP/lensemble-constraints.txt"
       # mkdocstrings analyzes the source statically; the CPU torch wheel keeps imports resolvable.
       - name: Install docs deps
         run: |
-          pip install "torch>=2.4,<3" --index-url https://download.pytorch.org/whl/cpu
-          pip install -e ".[docs]"
+          uv pip install "torch>=2.4,<3" \
+            --constraint "$RUNNER_TEMP/lensemble-constraints.txt" \
+            --find-links https://download.pytorch.org/whl/cpu/torch/
+          uv pip install -e ".[docs]" \
+            --constraint "$RUNNER_TEMP/lensemble-constraints.txt" \
+            --build-constraint "$RUNNER_TEMP/lensemble-constraints.txt" \
+            --find-links https://download.pytorch.org/whl/cpu/torch/
       # `python -m mkdocs` puts the repo root on sys.path so the config's `!!python/name:docs_slug.slugify`
       # and the `docs_hooks.py` hook resolve.
       - name: Build the site (zero warnings)
         run: python -m mkdocs build --strict
+      - name: Upload MkDocs site
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    name: deploy docs to GitHub Pages
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs:
+      - linkcheck
+      - site
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Deploy MkDocs site
+        id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Verify the public research site
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          page="$RUNNER_TEMP/lensemble-pages.html"
+          expected="Research stack for reproducible federated training and evaluation of action-conditioned JEPA world models."
+
+          for attempt in {1..12}; do
+            if curl --fail --location --silent --show-error "$PAGE_URL" --output "$page"; then
+              if grep --fixed-strings --quiet "$expected" "$page"; then
+                break
+              fi
+            fi
+            if [[ "$attempt" == "12" ]]; then
+              echo "Deployed page did not expose the expected research-site identity."
+              exit 1
+            fi
+            sleep 5
+          done
+
+          for forbidden in "Codex Hackathon" "reward ledger" "Mollie"; do
+            if grep --fixed-strings --ignore-case --quiet "$forbidden" "$page"; then
+              echo "Deployed page still contains stale event copy: $forbidden"
+              exit 1
+            fi
+          done

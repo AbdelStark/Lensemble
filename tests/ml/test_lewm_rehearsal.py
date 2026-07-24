@@ -1,9 +1,10 @@
-"""End-to-end rehearsal gate for the real-LeWM federated demo (#324, epic #314).
+"""End-to-end rehearsal gate for the real-LeWM adapter demo (#324, epic #314).
 
 Runs the rehearsal script in-process: the two-participant smoke run (auto + manual), the
 four-participant dropout/reconnect run with stale-round rejection, and a longer configurable
 gate — each must complete, export evidence, and pass the fail-closed claim audit. The runbook
-must exist, carry the Tapestry-like language and non-claims, and block positive claims on a
+must exist, make the system-composed probe and seed sweep binding, retain the
+frozen-checkpoint/non-privacy boundary, and block positive claims on a
 non-improving probe.
 """
 
@@ -70,21 +71,31 @@ def test_rehearsal_script_runs_as_a_command() -> None:
 
 def test_runbook_carries_the_claim_boundary_and_gates() -> None:
     text = RUNBOOK.read_text(encoding="utf-8")
-    assert text.count("Tapestry-like") >= 5  # "repeatedly"
+    normalized = " ".join(text.split())
     for needle in (
         "scripts/lewm_demo_rehearsal.py",
+        "scripts/lewm_system_probe.py",
+        "scripts/lewm_probe_seedsweep.py",
         "scripts/lewm_probe_check.py",
-        "blocks public positive",
-        "Never claim",
-        "full from-scratch LeWM browser pretraining",
-        "production browser training",
+        "optional and non-binding",
+        "Do not use it as the headline",
+        "12,512-parameter (0.069%) residual",
+        "frozen checkpoint",
+        "One trusted local coordinator",
+        "secure aggregation and differential privacy are not wired",
+        "full-model federated-training quality",
+        "production readiness",
         "paper-scale",
-        "real_lewm_mode=available",
-        "never switch the run to the surrogate path",
-        "sleeps anywhere in the path",
-        "Four-phone stage runbook",
+        "real_lewm_mode=unavailable",
+        "do not switch the run to the surrogate mode",
     ):
-        assert needle in text, needle
+        assert needle in normalized, needle
+    for retired_event_phrase in (
+        "Four-phone stage runbook",
+        "presenter",
+        "public-demo",
+    ):
+        assert retired_event_phrase not in text
 
 
 def test_runbook_commands_reference_existing_files() -> None:
@@ -95,6 +106,8 @@ def test_runbook_commands_reference_existing_files() -> None:
         "scripts/lewm_tworooms_realdata_check.py",
         "scripts/lewm_adapter_overfit_check.py",
         "scripts/lewm_probe_check.py",
+        "scripts/lewm_system_probe.py",
+        "scripts/lewm_probe_seedsweep.py",
         "scripts/lewm_demo_rehearsal.py",
         "tests/ml/test_lewm_evidence_audit.py",
     ):

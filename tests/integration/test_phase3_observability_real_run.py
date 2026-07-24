@@ -1,9 +1,10 @@
-"""The checked-in Phase 3 observability report is bound to the real HF Jobs run (#246).
+"""The checked-in Phase 3 observability report is one coherent historical record.
 
-`docs/evidence/phase3_observability_report.json` is regenerated from the real headline run report
-(`phase3_consortium_run_report.json`) + the real eval/control report. It must carry the real run identity
-and checkpoint hash, link the anchored-vs-naive gauge contrast, capture at least one induced dropout with
-a quorum-preserving close, and leak no raw trajectory (the `phase3-observability-redaction-v1` contract).
+The report is regenerated from the historical local lifecycle smoke and the
+hash-bound eval/control report. It must carry that same smoke identity and
+checkpoint hash, disclose its superseded evidence status, capture at least one
+induced dropout with a quorum-preserving close, and leak no raw trajectory (the
+``phase3-observability-redaction-v1`` contract).
 """
 
 from __future__ import annotations
@@ -18,15 +19,18 @@ from lensemble.federation.phase3_observability import (
 _REPORT = Path("docs/evidence/phase3_observability_report.json")
 
 
-def test_observability_report_binds_the_real_run() -> None:
+def test_observability_report_binds_the_historical_smoke() -> None:
     report = load_phase3_observability_report(_REPORT)
 
-    assert report.consortium_id == "lensemble-phase3-consortium"
-    assert report.run_id == "phase3-consortium-v1"
-    # The real headline run's final global-model hash.
+    assert report.consortium_id == "lensemble-phase3-long-run-smoke"
+    assert report.run_id == "phase3-long-run-smoke-v1"
     assert report.checkpoint_hash == (
-        "bb31c0922de639cb9220c4cc5fc35d79aec719eb6fcedb09159bdff8cfb8fd43"
+        "ed3081ee514af142a226443f113a37c24d7d5872bfb707f11abe10893a0ad50d"
     )
+    assert report.training_evidence_status == "historical_pre_correctness_fix"
+    assert report.training_evidence_superseded_reason is not None
+    assert "#335" in report.training_evidence_superseded_reason
+    assert "do not validate the corrected runtime" in report.claim_boundary
     assert len(report.participants) == 4
 
 

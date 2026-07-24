@@ -325,7 +325,7 @@ def _build_probe(cfg: LensembleConfig, seed: int = 0) -> PublicProbe:
         points=points,
         landmark_idx=landmark_idx,
         landmark_targets=targets,
-        content_hash=probe_content_hash(points, landmark_idx),
+        content_hash=probe_content_hash(points, landmark_idx, targets),
         probe_version=1,
     )
 

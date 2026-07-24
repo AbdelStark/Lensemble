@@ -129,9 +129,14 @@
     }
   ],
   "epic": "#259",
-  "headline": "The M1 anchored federation prevents the naive-FedAvg gauge collapse, but this is now a corrected SO-100 gauge-only result: held-out magnitude collapse (~7.5e-6 latent variance; thoughts/collapse_fix_probe.py) and the central ceiling probe (thoughts/central_ceiling_probe.py) show the checkpoint is not useful downstream. skill_vs_identity is gameable, and effective_rank is scale-invariant.",
-  "honest_boundary": "Corrected SO-100 gauge-only boundary: M1 prevents the naive-FedAvg gauge collapse, but the held-out representation has magnitude collapse (~7.5e-6 latent variance; thoughts/collapse_fix_probe.py) and the central ceiling probe (thoughts/central_ceiling_probe.py) shows the downstream ceiling is not cleared. skill_vs_identity is gameable; effective_rank is scale-invariant and blind to magnitude collapse; latent-MPC success_rate=0.0 is a negative result, not a near-static-video success story. The #259 SO-100 checkpoint is not a useful downstream world model; the dynamic-env RFC-0017 pivot is the ground-truth usefulness path. Relaxed-DP (DP-off) probe regime for the gauge measurement; secure-aggregation simulated. Consortium-engineering + from-scratch federated-training evidence, NOT a cryptographic honest-computation proof and NOT a paper-scale robotics claim.",
+  "evidence_status": "historical_pre_correctness_fix",
+  "headline": "Historical SO-100 gauge audit: under the superseded runtime, the M1 anchored configuration exhibited less latent-gauge collapse than naive FedAvg. The trajectory does not validate the corrected optimizer. The held-out audit also found magnitude collapse (~7.5e-6 latent variance) and no downstream-usefulness result; skill_vs_identity is gameable and effective_rank is scale-invariant.",
+  "honest_boundary": "Historical SO-100 gauge-only boundary: these values were produced before the outer-update direction and public-probe-v2 target-binding fixes, so they are failure-analysis evidence rather than a current anchored-federation result. The held-out representation has magnitude collapse (~7.5e-6 latent variance), and the associated central ceiling audit did not establish downstream usefulness. skill_vs_identity is gameable; effective_rank is scale-invariant and blind to magnitude collapse; latent-MPC success_rate=0.0 is a negative result. The #259 SO-100 checkpoint is not a useful downstream world model. The run used a relaxed-DP (DP-off) probe regime and simulated secure aggregation. This is not a cryptographic honest-computation proof or a paper-scale robotics claim. GitHub issue #335 tracks the corrected rerun.",
   "inference": {
+    "blocker_refs": [
+      "#96",
+      "#244"
+    ],
     "controls": [
       {
         "label": "converged-federated",
@@ -146,6 +151,7 @@
           "planning_samples": 128,
           "success_rate": 0.0
         },
+        "metric_boundary": "Historical SO-100 proxy audit: these metrics predate the outer-update direction and public-probe-v2 target-binding fixes and do not validate the corrected runtime (#335). skill_vs_identity is gameable; effective_rank is scale-invariant; latent-MPC success_rate=0.0 is a negative result, not a near-static-video success story. A historical diagnostic measured magnitude collapse at ~7.5e-6 latent variance, and an associated central ceiling diagnostic did not establish downstream usefulness (#244).",
         "model_repo": "abdelstark/lensemble-phase3-converged-checkpoint",
         "multistep_prediction": {
           "effective_rank": 2.208156108856201,
@@ -171,6 +177,7 @@
           "planning_samples": 128,
           "success_rate": 0.0
         },
+        "metric_boundary": "Historical SO-100 proxy audit: these metrics predate the outer-update direction and public-probe-v2 target-binding fixes and do not validate the corrected runtime (#335). skill_vs_identity is gameable; effective_rank is scale-invariant; latent-MPC success_rate=0.0 is a negative result, not a near-static-video success story. A historical diagnostic measured magnitude collapse at ~7.5e-6 latent variance, and an associated central ceiling diagnostic did not establish downstream usefulness (#244).",
         "model_repo": "abdelstark/lensemble-phase3-naive-control",
         "multistep_prediction": {
           "effective_rank": 1.009084939956665,
@@ -184,10 +191,12 @@
         "revision": "cd8481c4c041d610008491f13e64bf092d3bc94d"
       }
     ],
+    "evidence_status": "historical_pre_correctness_fix",
     "held_out_data_ref": "abdelstark/lensemble-phase3-so100-silos/phase3-so100-silo4.h5",
-    "honest_boundary": "Latent-space goal-reaching / multi-step prediction on real held-out SO-100 data. Closed-loop physical task-success is NOT claimed here \u2014 it stays gated on the unvendored stable-worldmodel simulator (#96). Not a cryptographic honest-computation proof.",
+    "honest_boundary": "Historical SO-100 proxy audit on real held-out data: these values predate the outer-update direction correction and public-probe-v2 target-binding contract, so they do not validate the corrected runtime; GitHub issue #335 tracks the replacement run. skill_vs_identity is gameable, effective_rank is scale-invariant, and latent-MPC success_rate=0.0 is a negative result, not a near-static-video success story. A historical diagnostic measured magnitude collapse at ~7.5e-6 latent variance, and an associated central ceiling diagnostic did not establish downstream usefulness. Closed-loop physical task-success is NOT claimed: the unvendored stable-worldmodel simulator (#96) and a genuinely useful non-collapsed checkpoint (#244) remain blockers. Not a cryptographic honest-computation proof.",
     "horizon": 8,
-    "schema_version": 1,
+    "schema_version": 2,
+    "superseded_reason": "These SO-100 inference values predate the correction of the outer-update direction and the public-probe-v2 target-binding contract. They are retained for audit history only and do not validate the corrected runtime; GitHub issue #335 tracks the replacement run.",
     "task_env_id": "held-out-so100://phase3-so100-silo4",
     "windows_available": 1176
   },
@@ -207,5 +216,6 @@
     "secure_aggregation_backend": "simulated",
     "warm_start": null
   },
-  "schema_version": 1
+  "schema_version": 2,
+  "superseded_reason": "These runs predate the correction of the outer-update direction and the public-probe-v2 target-binding contract. Their metrics are retained for audit history only and do not validate the corrected runtime; GitHub issue #335 tracks the replacement run."
 }

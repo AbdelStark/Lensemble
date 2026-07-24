@@ -18,7 +18,7 @@ import torch
 from pydantic import BaseModel, ConfigDict
 from torch import Tensor
 
-from lensemble.data.probe import probe_content_hash
+from lensemble.data.probe import verify_probe_content
 from lensemble.errors import LensembleErrorCode, ProbeError
 from lensemble.gauge.procrustes import procrustes_align
 
@@ -83,9 +83,10 @@ def frame_drift(
     the inter-frame rotation; ``rotation_angle_deg`` is the headline figure and ``procrustes_residual``
     the alignment residual. ``drift_from_global`` is each participant's angle against ``"global"``.
 
-    Probe pin (``INV-PROBE-PIN``): when ``probe`` is given its content hash is recomputed; if
-    ``expected_probe_hash`` is given and differs, raises :class:`~lensemble.errors.ProbeError` and
-    refuses to run. The verified hash populates ``probe_hash``.
+    Probe pin (``INV-PROBE-PIN``): when ``probe`` is given its full content hash is recomputed over
+    points, landmark indices, and landmark targets and checked against both its stored pin and
+    ``expected_probe_hash`` (when given). Any mismatch raises
+    :class:`~lensemble.errors.ProbeError`; the verified full hash populates ``probe_hash``.
 
     ``degenerate_safe`` (#262): a STRONG frame anchor (the converged regime) can pin two participants onto
     a near-identical frame, whose inter-pair Procrustes ``M`` is rank-deficient — that is the GOOD anchored
@@ -97,14 +98,17 @@ def frame_drift(
     from lensemble.errors import DegenerateProcrustes
 
     if probe is not None:
-        recomputed = probe_content_hash(probe.points, probe.landmark_idx).hex()
-        if expected_probe_hash is not None and recomputed != expected_probe_hash:
-            raise ProbeError(
-                "probe content hash does not match the pinned hash; refusing to measure drift",
-                code=LensembleErrorCode.PROBE_INVALID,
-                remediation="re-pin the probe or pass the probe these embeddings were produced from",
-            )
-        probe_hash = recomputed
+        expected_hash: bytes | None = None
+        if expected_probe_hash is not None:
+            try:
+                expected_hash = bytes.fromhex(expected_probe_hash)
+            except ValueError as exc:
+                raise ProbeError(
+                    "expected_probe_hash must be the 64-hex v2 full PublicProbe commitment",
+                    code=LensembleErrorCode.PROBE_INVALID,
+                    remediation="supply the full hash over points, indices, and landmark targets",
+                ) from exc
+        probe_hash = verify_probe_content(probe, expected_hash=expected_hash).hex()
     else:
         probe_hash = expected_probe_hash if expected_probe_hash is not None else ""
 

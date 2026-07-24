@@ -36,6 +36,17 @@ federation public API ([02 §1.3](../spec/02-public-api.md#13-coordinator-and-pa
 the Stage-B simulation (v0.2) and over a network boundary for the Stage-C sovereignty demonstration
 (v0.3) by swapping only the transport, not the state machine.
 
+> **Current implementation boundary.** The state machine and secure/private transitions below define
+> the target runtime contract. The current coordinator receives each released pseudo-gradient in
+> plaintext and commits from those values. Simulated/TEE aggregation runs only as a post-commit
+> fixed-point equivalence check (`secure_sum_consumed=false`), masking reports explicit fallback, and
+> deterministic replay noise plus a fresh one-round post-commit accountant is neither effective nor
+> cumulative DP. Consequently, the live path does not yet realize masked update ingress, secure-sum
+> optimizer consumption, participant-side pre-release alignment, or pre-release budget exhaustion.
+> The optional coordinator backstop is an explicit raw-plaintext research harness only: construction
+> fails when a pinned backstop is combined with privacy, quantization, masking, or the current TEE
+> cross-check (`INV-ALIGN-BEFORE-RELEASE`).
+
 ## Motivation
 
 [RFC-0003](RFC-0003-federated-protocol.md) defines what one round *means*; it does not define when a
@@ -48,11 +59,12 @@ fault-tolerance behavior untestable.
 Three forces shape the runtime. First, **elasticity**: sovereign nodes have heterogeneous compute and
 unreliable links, so the round must complete with a quorum rather than wait for every participant
 (INTELLECT-1/PRIME elastic fault tolerance, [RFC-0003 §6](RFC-0003-federated-protocol.md#6-heterogeneity--fault-tolerance)). Second,
-**determinism on the aggregation path**: the outer step is the proof-ready surface
+**determinism on the aggregation path**: the outer step is the future proof-integration surface
 ([RFC-0006 §2](RFC-0006-verifiable-contribution.md#2-the-provable-surface-and-what-stays-cheap)), so the runtime must make the set of contributing
 deltas, their order, and the round seed an explicit, recorded input to a pure function, not an artifact
-of arrival timing. Third, **transport portability**: the contribution of Lensemble is the gauge and the
-federation discipline, not the networking; the runtime must let the Stage-B in-process simulation and
+of arrival timing. Third, **transport portability**: the project-specific
+behavior under study is gauge handling and federation discipline rather than
+networking; the runtime must let the Stage-B in-process simulation and
 the Stage-C networked deployment share one state machine so the experiments and the deployment validate
 the same code path.
 
@@ -84,11 +96,12 @@ the same code path.
   backend). Owned by [RFC-0011](RFC-0011-secure-aggregation.md). The runtime calls it through an
   abstract aggregator interface.
 - The `(ε,δ)` accountant and mechanism. Owned by [RFC-0012](RFC-0012-differential-privacy.md). The
-  runtime queries the accountant at the privatize step and on budget exhaustion drives the round to
-  `ABORTED`.
+  target runtime queries the accountant at the privatize step and on budget exhaustion drives the round
+  to `ABORTED`; the current report-only path does neither.
 - The gauge correction (anchoring loss, Procrustes closed form, drift threshold). Owned by
-  [RFC-0002](RFC-0002-gauge-and-aggregation.md). The runtime invokes `procrustes_align` /
-  `frame_drift` in the `ALIGNING` state.
+  [RFC-0002](RFC-0002-gauge-and-aggregation.md). The target participant invokes its
+  participant-specific `procrustes_align` before release; the coordinator's `ALIGNING` state performs
+  sum/committed-model diagnostics. The current coordinator transform is a plaintext-only harness.
 - The checkpoint/commitment byte formats. Owned by
   [RFC-0010](RFC-0010-artifact-checkpoint-format.md) and
   [RFC-0014](RFC-0014-provenance-commitments.md).
@@ -120,9 +133,9 @@ from lensemble.federation.round import GlobalState, PseudoGradient  # see 03 §G
 class RoundState(str, Enum):
     """Lifecycle of one outer round (the federation round state machine, §2)."""
     OPEN = "open"               # global state pinned; RoundOpen broadcast; awaiting joins/commitments
-    COLLECTING = "collecting"   # participants run H inner steps; masked Updates arrive
-    AGGREGATING = "aggregating" # secure-agg reveals Σ_c Δ_c; determinism self-check
-    ALIGNING = "aligning"       # frame-drift measured on probe; Procrustes backstop if drift > τ
+    COLLECTING = "collecting"   # target: masked Updates arrive; current path receives plaintext releases
+    AGGREGATING = "aggregating" # target: secure sum consumed; current path reduces plaintext releases
+    ALIGNING = "aligning"       # target: aggregate/committed-frame diagnostics, no per-client transform
     COMMITTING = "committing"   # outer Nesterov step; hash-commit (θ_{t+1}, φ_{t+1})
     CLOSED = "closed"           # RoundClose emitted; ledger appended; ready for round t+1
     ABORTED = "aborted"         # quorum / determinism / privacy / commitment failure; round discarded
@@ -149,21 +162,24 @@ class Coordinator:
 
 
 class Participant:
-    """Holds sovereign data; runs the inner loop; emits a privatized, bound PseudoGradient.
+    """Holds sovereign data; runs the inner loop; emits a transformed, bound PseudoGradient.
 
     Trusts neither coordinator nor peers with raw data (INV-RESIDENCY).
     """
     def __init__(self, config: LensembleConfig, *, participant_id: str, transport: "Transport") -> None: ...
 
     def local_round(self, global_state: GlobalState, round_seed: int) -> PseudoGradient:
-        """Run H inner AdamW steps on local data, form Δ_c, clip+noise, bind to R_c, return it.
+        """Run H inner AdamW steps, align/re-difference raw local weights, then clip+noise and bind.
 
         Preconditions: probe hash in `global_state` equals the pinned probe hash (INV-PROBE-PIN, else
         ProbeError); round-0 encoder is hash-identical to the warm-start (INV-WARMSTART-T0, else
         GaugeError); the sketch matrix A is derived from `round_seed` (INV-SKETCH-CONSISTENCY).
-        Postconditions: returned PseudoGradient satisfies l2_norm <= C_clip (INV-DP-BOUND), covers
-        only (θ, φ) param groups (INV-ACTIONHEAD-LOCAL), and carries exactly one dataset_root
-        (INV-COMMIT-BINDING). Raw observations/actions/embeddings never appear (INV-RESIDENCY).
+        Postconditions: any participant-specific alignment happened before release transforms
+        (INV-ALIGN-BEFORE-RELEASE); the internal post-clip, pre-noise norm satisfies the C_clip bound
+        (INV-DP-BOUND); returned l2_norm equals the released delta norm and may exceed C_clip after
+        noise. The carrier covers only (θ, φ) groups (INV-ACTIONHEAD-LOCAL) and carries exactly one
+        dataset_root (INV-COMMIT-BINDING). Raw observations/actions/embeddings never appear
+        (INV-RESIDENCY).
         """
 
     def join(self, coordinator_endpoint: str) -> GlobalState:
@@ -179,9 +195,11 @@ The `Coordinator` does not construct, broadcast, or aggregate any per-embodiment
 $h_\psi^{(c)}$; the broadcast and aggregation payloads are materialized only over the encoder $\theta$
 and predictor $\phi$ param groups (`INV-ACTIONHEAD-LOCAL`, enforced in `lensemble.federation` per
 [RFC-0001 §4](RFC-0001-architecture.md#4-federation-map)). The outer Nesterov step
-($(\theta_{t+1},\phi_{t+1}) = (\theta_t,\phi_t) - \eta_{\text{out}}\,\mathrm{Nesterov}(\tfrac1C\sum_c\Delta_c)$,
+($(\theta_{t+1},\phi_{t+1}) = (\theta_t,\phi_t) + \eta_{\text{out}}\,\mathrm{Nesterov}(\tfrac1C\sum_c\Delta_c)$,
 [RFC-0003 §2](RFC-0003-federated-protocol.md#2-round-structure-diloco-outer-loop)) lives in `outer_optimizer.py` and is the
-bitwise-deterministic function guarded by `INV-AGG-DETERMINISM` (§4).
+bitwise-deterministic function guarded by `INV-AGG-DETERMINISM` (§4). Here
+$\Delta_c=\text{local}-\text{global}$ is added; equivalently, DiLoCo's
+$G_c=\text{global}-\text{local}=-\Delta_c$ is subtracted.
 
 ### 2. The `RoundState` state machine
 
@@ -206,8 +224,8 @@ consistent:
         │        Aggregation): re-sum;         │ self-check fails on retry   ┌──────────────┐
         │        on second failure ────────────┘                            │   ALIGNING   │
         │                                                                    └──────────────┘
-        │ CommitmentMismatch / CheckpointIntegrityError                             │ drift measured;
-        │ / PrivacyBudgetExceeded (fail-closed, no retry)                           │ backstop if τ
+        │ CommitmentMismatch / CheckpointIntegrityError                             │ aggregate /
+        │ / PrivacyBudgetExceeded (fail-closed, no retry)                           │ committed-frame diagnostics
         │                                                                           ▼
         │                                                                    ┌──────────────┐
         └──────────────────────────────────────────────────────────────────│  COMMITTING  │
@@ -232,27 +250,35 @@ In prose, each transition with its trigger, precondition, and failure handling:
   valid `Commitment` (its dataset Merkle root `R_c`, [RFC-0014](RFC-0014-provenance-commitments.md)).
   `K = max(min_participants, secure_agg_threshold)` (§3). Failure: if the quorum is not reached by the
   open timeout, the round transitions to `ABORTED` with `FaultToleranceExceeded`.
-- **`COLLECTING` → `AGGREGATING`.** Participants run `H` inner AdamW steps (lifecycle step 2), form
-  `Δ_c` (step 3), clip-and-noise (step 4, `INV-DP-BOUND`), and send a masked `Update`. Trigger: all
+- **`COLLECTING` → `AGGREGATING` (target privacy path).** Participants run `H` inner AdamW steps
+  (lifecycle step 2), form raw `Δ_c` (step 3), align raw local full weights and re-difference when needed
+  (step 4, `INV-ALIGN-BEFORE-RELEASE`), then clip/noise, optionally quantize, encode, and mask the
+  resulting `Δ'_c` (steps 5–6). Trigger: all
   expected `Update`s have arrived, OR the collect timeout fires while a quorum's worth of `Update`s are
   present (elastic completion, §3). Failure: if participant count drops below `K` (dropouts), the round
   transitions to `ABORTED` with `FaultToleranceExceeded`. A `PrivacyBudgetExceeded` reported by any
   participant's accountant before release ([RFC-0012](RFC-0012-differential-privacy.md)) drives the
   round to `ABORTED` fail-closed (training stops; no retry).
-- **`AGGREGATING` → `ALIGNING`.** The secure aggregator reveals `Σ_c Δ_c` over the *set of contributing
+- **`AGGREGATING` → `ALIGNING` (target privacy path).** The secure aggregator reveals
+  `Σ_c released(Δ'_c)` over the *set of contributing
   participants for this round* (lifecycle step 5; [RFC-0011](RFC-0011-secure-aggregation.md)). The
-  coordinator runs the determinism self-check (§4): it re-sums the revealed contributions in the fixed
-  canonical order and compares bitwise. Trigger: the revealed sum reproduces. Failure: below the
+  runtime binds the backend-produced sum and reruns the backend/reveal computation or verifies its
+  committed deterministic transcript; it does not ask the coordinator to re-sum hidden individual
+  contributions. Trigger: the revealed sum reproduces. Failure: below the
   secure-aggregation threshold → `ABORTED` with `SecureAggregationError`; a self-check mismatch →
   `NonDeterministicAggregation`, re-sum once, and on a second mismatch → `ABORTED` (never swallowed,
-  `INV-AGG-DETERMINISM`).
-- **`ALIGNING` → `COMMITTING`.** The coordinator measures frame drift on the public probe
-  (`frame_drift`, [RFC-0002 §9](RFC-0002-gauge-and-aggregation.md#9-the-frame-drift-diagnostic-the-headline-measurement)) and, *only if* drift exceeds the
-  configured threshold `τ`, folds in the hard Procrustes alignment `Q_c^*` (`procrustes_align`,
-  [RFC-0002 §5](RFC-0002-gauge-and-aggregation.md#5-layer-3--procrustes-re-alignment-at-aggregation-backstop); lifecycle step 6). Trigger: drift measured and the
-  backstop (if any) applied. Failure: a degenerate SVD raises `DegenerateProcrustes`; the runtime
-  clamps/conditions per [RFC-0002 §5](RFC-0002-gauge-and-aggregation.md#5-layer-3--procrustes-re-alignment-at-aggregation-backstop) and proceeds, or aborts if
-  conditioning fails. With Layer-2 anchoring active this backstop should rarely bind.
+  `INV-AGG-DETERMINISM`). In the current path, the coordinator instead reduces individual plaintext
+  deltas; the later backend report is not optimizer input.
+- **`ALIGNING` → `COMMITTING` (target privacy path).** The coordinator may compute diagnostics that are
+  functions of the revealed aggregate or committed global model and public probe (`frame_drift`,
+  [RFC-0002 §9](RFC-0002-gauge-and-aggregation.md#9-the-frame-drift-diagnostic-the-headline-measurement)).
+  It does **not** transform individual participants here: secure aggregation has destroyed that
+  information. Any participant-specific `Q_c^*`, full-weight transform, and re-difference already
+  happened before release. In the current plaintext research harness, individually keyed raw deltas
+  remain visible; the coordinator materializes their aligned mapping exactly once before its
+  determinism preview and reuses that mapping for commit. That harness is rejected with `ConfigError`
+  when DP/quantization/a sum-only backend is selected. A degenerate participant-side SVD raises
+  `DegenerateProcrustes` before release.
 - **`COMMITTING` → `CLOSED`.** The coordinator applies the deterministic outer Nesterov step (lifecycle
   step 7), hash-commits `(θ_{t+1}, φ_{t+1})` ([RFC-0010](RFC-0010-artifact-checkpoint-format.md),
   `INV-CHECKPOINT-HASH`), appends a `ContributionRecord` to the `ContributionLedger`
@@ -310,18 +336,19 @@ a varying participant count (a known DiLoCo property). The mechanics:
 The outer step is the proof-ready surface ([RFC-0006 §2](RFC-0006-verifiable-contribution.md#2-the-provable-surface-and-what-stays-cheap)), so the
 runtime makes its inputs explicit and its computation reproducible. The runtime guarantees:
 
-- The set of contributing deltas for round `t` is fixed at the `COLLECTING→AGGREGATING` transition (no
+- The set of contributing releases for round `t` is fixed at the `COLLECTING→AGGREGATING` transition (no
   delta arriving after the transition is admitted into the round; it reconciles next round).
-- The summation order is the canonical order — participants sorted by `participant_id` (a total order),
-  not arrival order — so the reduction `Σ_c Δ_c` is order-independent of the network
+- On the current plaintext path, summation uses canonical participant-id order. On the target masking
+  path, integer-field mask cancellation is associative/order-independent and the backend-produced
+  revealed sum is the only optimizer input
   ([RFC-0003 §7](RFC-0003-federated-protocol.md#7-determinism-concurrency-error-propagation): fixed reduction order, fp32/fp64, no atomics).
 - The round seed `s_t`, the prior global params `(θ_t, φ_t)`, and the contributing set (with `C_t`) are
   recorded in the `RunManifest` ([RFC-0009](RFC-0009-configuration-reproducibility.md)), so the outer
   step is a pure function of recorded inputs.
-- A determinism self-check runs at `AGGREGATING`: the coordinator re-sums in the canonical order and
-  compares bitwise to the first reduction. A mismatch raises `NonDeterministicAggregation`; the runtime
-  re-sums once, and on a second mismatch drives the round to `ABORTED` and surfaces the error (never
-  swallowed). This is the abort-and-recompute response of
+- A determinism self-check runs at `AGGREGATING`: the current plaintext harness previews the exact
+  materialized mapping twice; the target path replays/verifies the backend-produced sum commitment.
+  A mismatch raises `NonDeterministicAggregation` and drives the round to `ABORTED` (never swallowed).
+  This is the abort-and-recompute response of
   [RFC-0003 §9](RFC-0003-federated-protocol.md#9-failure-modes) and [04 §5.4](../spec/04-error-model.md#54-aggregation-lensembleaggregation).
 
 Inner-loop determinism is best-effort and seed-pinned, gated by `torch.use_deterministic_algorithms`
@@ -339,7 +366,7 @@ message (`INV-RESIDENCY`, fail-closed `ResidencyViolation`).
 |---|---|---|---|---|
 | `RoundOpen` | coord → participant | enters `OPEN`; broadcast | `(θ_t, φ_t)` ref/hash, sketch seed `s_t`, probe hash, landmark hashes, `H` | integrity (hash) |
 | `Commitment` | participant → coord | counts toward `OPEN→COLLECTING` quorum | dataset Merkle root `R_c` ([RFC-0014](RFC-0014-provenance-commitments.md)) | binding (`INV-COMMIT-BINDING`) |
-| `Update` | participant → aggregator | counts toward `COLLECTING→AGGREGATING` | `Δ_c` (the `PseudoGradient.delta`), masked | DP (clip+noise) + secure-agg mask |
+| `Update` | participant → aggregator | counts toward `COLLECTING→AGGREGATING` | aligned released `Δ'_c` (the `PseudoGradient.delta`) | Target: participant-aligned before effective DP/quantization + secure-agg mask. Current: configured clip/replay-noise delta visible in plaintext to coordinator |
 | `RoundClose` | coord → all | marks `CLOSED` | `(θ_{t+1}, φ_{t+1})` content hash | integrity (hash, `INV-CHECKPOINT-HASH`) |
 
 The transport is abstracted behind a single interface so the same state machine runs in-process (Stage
@@ -382,9 +409,10 @@ raises `CommitmentMismatch` and the update is rejected (`INV-COMMIT-BINDING`, ne
   federation past `collect_timeout`; its contribution is dropped for the round and reconciles next round
   (§3).
 - **No nondeterministic concurrency on the aggregation path.** Concurrency is confined to message
-  ingress and to the (already trust-domain-internal) inner loops. The reduction, the determinism
-  self-check, the alignment, and the outer step run on the single coordinator thread in the canonical
-  order (§4), so concurrency never enters `INV-AGG-DETERMINISM`'s function.
+  ingress and to the (already trust-domain-internal) inner loops. Participant-specific alignment belongs
+  to that participant's pre-release path. The aggregate reduction, determinism self-check, diagnostics,
+  and outer step run on the single coordinator thread in canonical order (§4), so concurrency never
+  enters `INV-AGG-DETERMINISM`'s function.
 
 ### 7. Failure modes
 
@@ -395,14 +423,15 @@ are never swallowed ([04 §7](../spec/04-error-model.md#7-error-handling-rules))
 | Trigger | Detected at | Error | State response |
 |---|---|---|---|
 | Quorum `< K` at open / dropouts during collect | `OPEN→COLLECTING` quorum check; `COLLECTING` monitor | `FaultToleranceExceeded` | `ABORTED`; global state unchanged; wait for joins, retry round `t` |
-| Participants below secure-agg threshold | aggregator threshold ([RFC-0011](RFC-0011-secure-aggregation.md)) | `SecureAggregationError` | `ABORTED`; retry round `t` if dropouts recoverable, else stop |
+| Participants below secure-agg threshold (target masking path) | aggregator threshold ([RFC-0011](RFC-0011-secure-aggregation.md)) | `SecureAggregationError` | `ABORTED`; retry round `t` if dropouts recoverable, else stop; current masking selection reports fallback |
 | Revealed sum non-reproducible | determinism self-check (§4) | `NonDeterministicAggregation` | re-sum once; second failure → `ABORTED`; never swallowed |
-| `(ε,δ)` budget spent | accountant pre-release ([RFC-0012](RFC-0012-differential-privacy.md)) | `PrivacyBudgetExceeded` | `ABORTED` fail-closed; stop training (no retry) |
+| `(ε,δ)` budget spent (target persistent accountant) | accountant pre-release ([RFC-0012](RFC-0012-differential-privacy.md)) | `PrivacyBudgetExceeded` | `ABORTED` fail-closed; stop training (no retry); current post-commit one-round reporting cannot trigger this |
 | `Δ_c` not bound to a valid `R_c` | ingress binding check | `CommitmentMismatch` | reject the update; `ABORTED`; never swallowed (`INV-COMMIT-BINDING`) |
 | Probe hash ≠ pinned probe hash | participant probe-pin check | `ProbeError` | participant rejects `RoundOpen`; re-anchor required (`INV-PROBE-PIN`) |
 | Round-0 encoder ≠ warm-start | join handshake | `GaugeError` | reject join (`INV-WARMSTART-T0`) |
 | Participant uses a different `A` from `s_t` | sketch-consistency check | `GaugeError` | reject contribution (`INV-SKETCH-CONSISTENCY`) |
-| Degenerate Procrustes SVD | `ALIGNING` (`procrustes_align`) | `DegenerateProcrustes` | clamp/condition ([RFC-0002 §5](RFC-0002-gauge-and-aggregation.md#5-layer-3--procrustes-re-alignment-at-aggregation-backstop)); abort if conditioning fails |
+| Degenerate Procrustes SVD | participant pre-release alignment (`procrustes_align`) | `DegenerateProcrustes` | clamp/condition ([RFC-0002 §5](RFC-0002-gauge-and-aggregation.md#5-layer-3--procrustes-re-alignment-at-aggregation-backstop)); refuse release if conditioning fails |
+| Coordinator backstop combined with DP, quantization, or sum-only backend | construction / update metadata preflight | `ConfigError` | fail closed (`INV-ALIGN-BEFORE-RELEASE`); use participant-side alignment or a trusted/MPC boundary |
 | Committed checkpoint fails integrity hash | `COMMITTING` / rejoiner recovery | `CheckpointIntegrityError` | refuse the artifact; `ABORTED` (`INV-CHECKPOINT-HASH`) |
 | Released delta includes raw data / private embedding | residency guard at participant egress | `ResidencyViolation` | fail-closed; never caught-and-ignored (`INV-RESIDENCY`) |
 | Released delta includes an action-head param group | param-group check at `PseudoGradient` construction | `ResidencyViolation` | reject; action heads are local (`INV-ACTIONHEAD-LOCAL`) |
@@ -444,9 +473,9 @@ are never swallowed ([04 §7](../spec/04-error-model.md#7-error-handling-rules))
 - **Coordinator is a single point of failure and trust in Phase 1.** It owns liveness (no coordinator,
   no round) and orchestration; it is honest-but-curious. Phase 2 makes the outer step provable
   ([RFC-0006](RFC-0006-verifiable-contribution.md)) but does not remove the liveness dependency.
-  Mitigation path: coordinator failover is an Open Question (post-v1.0); secure aggregation
-  ([RFC-0011](RFC-0011-secure-aggregation.md)) already hides individual `Δ_c` from a curious
-  coordinator, so the confidentiality cost of centralization is bounded even in Phase 1.
+  Mitigation path: coordinator failover is an Open Question (post-v1.0). Target secure aggregation
+  ([RFC-0011](RFC-0011-secure-aggregation.md)) will hide individual `Δ_c` from a curious coordinator;
+  the current plaintext path does not bound that confidentiality cost.
 - **Elastic averaging over a varying contributing set is a moving target.** Recording `C_t` keeps the
   outer step reproducible, but a round whose contributing set differs from the prior round's is not
   directly comparable; this is acceptable for DiLoCo's outer optimizer but complicates per-round
@@ -505,10 +534,12 @@ CPU-runnable tests on tiny synthetic fixtures (no large downloads,
   round; assert the federation does not stall and the dropped participant reconciles next round; assert
   the coordinator's round loop never blocks indefinitely on a single participant.
 - **Round-lifecycle integration.** The end-to-end toy round of
-  [RFC-0001 §Testing](RFC-0001-architecture.md#testing-strategy) (`RoundOpen` → local steps → clip+noise → simulated
-  secure-agg → optional Procrustes backstop → deterministic outer step → hash commit → `RoundClose`)
-  exercises this runtime; assert two identical-seed runs produce identical `RunManifest` aggregation
-  hashes.
+  [RFC-0001 §Testing](RFC-0001-architecture.md#testing-strategy) (`RoundOpen` → local steps → optional
+  participant-side Procrustes backstop and re-difference → clip+noise → optional quantization →
+  mask/secure-sum → deterministic outer step → hash commit → `RoundClose`) exercises the target
+  runtime; assert two identical-seed runs produce identical `RunManifest` aggregation hashes. The
+  current coordinator-side backstop is tested separately as a guarded raw-plaintext harness and MUST
+  reject release-transformed inputs.
 
 ## Open Questions
 

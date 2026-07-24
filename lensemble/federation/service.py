@@ -211,9 +211,11 @@ class Phase3CoordinatorService:
         )
         self._validate_config_agreement()
         self.transport: Transport = transport or InProcessTransport()
-        # #262: pass the live Layer-3 Procrustes backstop flag through to the round engine. Default OFF so
-        # every existing service test stays the measured pass-through; the consortium launcher turns it ON
-        # for the real anchored-federation run.
+        # #262: pass the guarded plaintext Layer-3 research-harness flag through to the round engine.
+        # Production participant-side pre-release alignment is not integrated here yet.
+        self._coordinator_side_alignment = bool(
+            enable_backstop and config.data.probe_path is not None
+        )
         self.coordinator = Coordinator(
             config,
             transport=self.transport,
@@ -460,6 +462,7 @@ class Phase3CoordinatorService:
                     self.manifest,
                     updates,
                     round_index=round_index,
+                    coordinator_side_alignment=self._coordinator_side_alignment,
                 )
             )
             record = self.coordinator.ledger_records()[-1]

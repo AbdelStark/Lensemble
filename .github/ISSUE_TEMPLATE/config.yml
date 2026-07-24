@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Read the security reporting policy
+    url: https://github.com/AbdelStark/Lensemble/security/policy
+    about: Do not disclose suspected vulnerabilities or sensitive evidence in a public issue.
+  - name: Ask a question or discuss an early idea
+    url: https://github.com/AbdelStark/Lensemble/discussions
+    about: Use Discussions for support questions and ideas that are not yet actionable issues.

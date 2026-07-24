@@ -42,8 +42,8 @@ from pydantic import BaseModel, ConfigDict
 from torch import Tensor
 
 from lensemble.artifacts.checkpoint import load_checkpoint
-from lensemble.data.probe import load_probe, probe_content_hash
-from lensemble.errors import LensembleErrorCode, ProbeError, SchemaVersionMismatch
+from lensemble.data.probe import load_probe, verify_probe_content
+from lensemble.errors import LensembleErrorCode, SchemaVersionMismatch
 from lensemble.gauge.drift import (
     FRAME_DRIFT_SCHEMA_VERSION,
     FrameDriftReport,
@@ -149,19 +149,11 @@ def _load_committed_encoder(committed_weights: Path) -> tuple[Encoder, int]:
 def _verify_probe_pin(probe: "PublicProbe") -> str:
     """INV-PROBE-PIN: recompute the probe content hash and refuse on a mismatch with its stored pin.
 
-    A probe whose recomputed ``probe_content_hash(points, landmark_idx)`` differs from its stored
-    ``content_hash`` is rejected with :class:`~lensemble.errors.ProbeError` (``PROBE_INVALID``) — the
-    recomputation never runs against a probe that does not match its own pin. Returns the verified hex hash.
+    The v2 digest binds points, landmark indices, and landmark targets. A stored-vs-recomputed mismatch
+    is rejected with :class:`~lensemble.errors.ProbeError` (``PROBE_INVALID``) before any alignment
+    computation. Returns the verified hex hash.
     """
-    recomputed = probe_content_hash(probe.points, probe.landmark_idx)
-    if recomputed != probe.content_hash:
-        raise ProbeError(
-            "probe content hash does not match its pinned content_hash; refusing to recompute alignment "
-            "against an unpinned probe (a probe change is a re-anchoring event, RFC-0004 §3.1)",
-            code=LensembleErrorCode.PROBE_INVALID,
-            remediation="re-pin the probe to its committed content hash (INV-PROBE-PIN)",
-        )
-    return recomputed.hex()
+    return verify_probe_content(probe).hex()
 
 
 @torch.no_grad()

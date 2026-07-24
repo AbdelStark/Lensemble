@@ -23,8 +23,8 @@ The bridge (how the op-oriented ``Transport`` maps onto the four messages):
                                 seed the local hash→weights store so ``fetch_params`` resolves
 ``submit_update(...)``          ``send`` an ``Update`` (via ``from_pseudogradient``) to the coord
 ``collect_updates(t)``          drain the coordinator inbox via ``recv`` until ``None``; ingress-
-                                validate + bind-check every ``Update``/``Commitment``; rebuild the
-                                ``PseudoGradient`` s for round ``t``
+                                validate + bind-check every ``Update``/``Commitment``; cache validated
+                                ``PseudoGradient`` s and return an idempotent round-``t`` snapshot
 ``recover_global_state(...)``   return the last broadcast ``GlobalState``
 ``fetch_params(ref)``           resolve ``ref`` from the local artifact store, HASH-VERIFIED
 ``register(...)``               record the participant endpoint (control-plane bookkeeping)
@@ -63,7 +63,11 @@ from lensemble.federation.messages import (
 )
 from lensemble.federation.pseudogradient import PseudoGradient
 from lensemble.federation.state import GlobalState, ParamRef
-from lensemble.federation.transport import weights_content_hash
+from lensemble.federation.transport import (
+    _clone_weights,
+    _validate_submission_round,
+    weights_content_hash,
+)
 from lensemble.provenance.commit import verify_binding
 from lensemble.provenance.merkle import CommitmentScheme
 
@@ -210,6 +214,11 @@ class NetworkedTransport:
         # The per-(round, participant) committed dataset root R_c, set by an ingress Commitment (or the
         # participant-side commit_root helper). An Update's Δ_c is bound against this (INV-COMMIT-BINDING).
         self._committed_roots: dict[tuple[int, str], bytes] = {}
+        # Ingress-validated updates are retained by round. Phase3CoordinatorService inspects the present
+        # set before Coordinator.try_round() reads it, so collect_updates must be idempotent rather than
+        # a destructive inbox read. Cached and returned carriers own distinct tensor storage so callers
+        # cannot mutate the retained snapshot through PseudoGradient.delta.
+        self._validated_updates: dict[int, dict[str, PseudoGradient]] = {}
         # The commitment scheme R_c is checked under (Phase-1 sha256 / 32-byte; CommitmentScheme default).
         self._scheme = CommitmentScheme()
 
@@ -266,7 +275,7 @@ class NetworkedTransport:
             err.expected_hash = ref.content_hash  # type: ignore[attr-defined]
             err.got_hash = actual  # type: ignore[attr-defined]
             raise err
-        return dict(stored)
+        return _clone_weights(stored)
 
     def submit_update(
         self,
@@ -275,17 +284,17 @@ class NetworkedTransport:
         round_index: int,
         update: PseudoGradient,
     ) -> None:
-        """``send`` the participant's privatized, bound ``PseudoGradient`` as an ``Update`` (RFC-0013 §5).
+        """``send`` the participant's released, bound ``PseudoGradient`` as an ``Update`` (RFC-0013 §5).
 
         Routes the delta through :func:`~lensemble.federation.messages.from_pseudogradient`, which
         residency-guards the carrier (``INV-RESIDENCY``: a non-``PseudoGradient`` raw payload fails closed)
         and serializes the released ``Δ_c`` as JSON-native floats. The ``Update`` is sent point-to-point to
         the coordinator peer (``participant → aggregator``, §5).
         """
+        _validate_submission_round(round_index=round_index, update=update)
         message = from_pseudogradient(update, participant_id=participant_id)
-        # `round_index` is carried by the Update (== update.round_index); kept in the signature for the
-        # op-oriented Transport contract. Send to the coordinator (the aggregator endpoint).
-        _ = round_index
+        # `round_index` is carried by the Update and was checked against the operation envelope above.
+        # Send to the coordinator (the aggregator endpoint).
         self._channel.send(self._coordinator_id, message)
 
     # --- coordinator-facing operations (RFC-0013 §5; consumed by #42) ---
@@ -313,18 +322,21 @@ class NetworkedTransport:
         self._channel.broadcast(message)
 
     def collect_updates(self, round_index: int) -> "Mapping[str, PseudoGradient]":
-        """Drain the coordinator inbox; ingress-validate + bind-check; return round-``t`` updates (RFC-0013 §5).
+        """Ingest the inbox and return an idempotent round-``t`` snapshot (RFC-0013 §5).
 
         Pops every queued message via ``recv`` until ``None`` (the §5 timeout). EACH message is
         re-validated at ingress (``parse_control_message`` — a malformed/too-new payload raises the typed
         error and the update is NOT counted, so the round state does not advance). A ``Commitment`` records
-        the participant's committed ``R_c`` for this round. An ``Update`` for ``round_index`` is bound
-        against that committed ``R_c`` via :func:`~lensemble.provenance.commit.verify_binding`
+        the participant's committed ``R_c`` for its round. Every ``Update`` is bound against that
+        committed ``R_c`` via :func:`~lensemble.provenance.commit.verify_binding`
         (:class:`~lensemble.errors.CommitmentMismatch` on mismatch — ``INV-COMMIT-BINDING``, never
         swallowed), then reconstructed into a :class:`PseudoGradient` (which re-validates finiteness and the
-        32-byte ``R_c`` length). Returns ``{participant_id: PseudoGradient}`` for the matching round.
+        32-byte ``R_c`` length), preserving the wire's ``clipped`` / ``quantized`` flags, and cached by
+        round. Returns a fresh carrier/tensor copy of
+        ``{participant_id: PseudoGradient}`` for the requested round, so repeated reads return the same
+        validated present set even after the wire inbox has been drained and remain isolated from caller
+        mutation.
         """
-        collected: dict[str, PseudoGradient] = {}
         while True:
             raw_message = self._channel.recv(timeout_s=0.0)
             if raw_message is None:
@@ -338,12 +350,17 @@ class NetworkedTransport:
                     bytes.fromhex(message.dataset_root)
                 )
             elif isinstance(message, Update):
-                if message.round_index != round_index:
-                    continue  # an Update for a different round is not part of THIS round's present set
                 pg = self._ingest_update(message)
-                collected[message.participant_id] = pg
+                self._validated_updates.setdefault(message.round_index, {})[
+                    message.participant_id
+                ] = self._clone_update(pg)
             # RoundOpen/RoundClose on the coordinator inbox are control echoes; ignored here.
-        return collected
+        return {
+            participant_id: self._clone_update(update)
+            for participant_id, update in self._validated_updates.get(
+                round_index, {}
+            ).items()
+        }
 
     # --- seeding seams (used by the coordinator's _seed_fetch_store; mirror InProcessTransport.commit) ---
 
@@ -362,8 +379,10 @@ class NetworkedTransport:
         recomputes — so a participant fetching θ_t/φ_t resolves and hash-verifies (``INV-CHECKPOINT-HASH``).
         """
         self._committed = global_state
-        self._weights[global_state.theta_ref.content_hash] = dict(theta_weights)
-        self._weights[global_state.phi_ref.content_hash] = dict(phi_weights)
+        self._weights[global_state.theta_ref.content_hash] = _clone_weights(
+            theta_weights
+        )
+        self._weights[global_state.phi_ref.content_hash] = _clone_weights(phi_weights)
 
     def commit_root(
         self, *, participant_id: str, round_index: int, root: bytes
@@ -379,6 +398,19 @@ class NetworkedTransport:
 
     # --- helpers ---
 
+    @staticmethod
+    def _clone_update(update: PseudoGradient) -> PseudoGradient:
+        """Clone a validated carrier so cached snapshots never share mutable tensor storage."""
+
+        return PseudoGradient(
+            delta=update.delta.detach().clone(),
+            l2_norm=update.l2_norm,
+            dataset_root=update.dataset_root,
+            round_index=update.round_index,
+            clipped=update.clipped,
+            quantized=update.quantized,
+        )
+
     def _ingest_update(self, message: Update) -> PseudoGradient:
         """Bind-check an ingress ``Update`` and reconstruct its ``PseudoGradient`` (residency-guarded).
 
@@ -386,8 +418,9 @@ class NetworkedTransport:
         :func:`~lensemble.provenance.commit.verify_binding` (:class:`~lensemble.errors.CommitmentMismatch`
         on mismatch, ``INV-COMMIT-BINDING``, never swallowed; an uncommitted participant has no valid
         ``R_c``, so its update is rejected the same way). The reconstructed
-        :class:`PseudoGradient` re-validates finiteness + the 32-byte root, so a malformed delta fails
-        closed at the carrier boundary too.
+        :class:`PseudoGradient` re-validates finiteness + the 32-byte root, while the message's
+        ``clipped`` / ``quantized`` release-transform flags are preserved verbatim. A malformed delta
+        fails closed at the carrier boundary too.
         """
         declared_root = bytes.fromhex(message.dataset_root)
         committed_root = self._committed_roots.get(
@@ -411,5 +444,6 @@ class NetworkedTransport:
             l2_norm=float(message.l2_norm),
             dataset_root=declared_root,
             round_index=message.round_index,
-            clipped=True,
+            clipped=message.clipped,
+            quantized=message.quantized,
         )

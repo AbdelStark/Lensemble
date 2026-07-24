@@ -11,7 +11,7 @@
 | **Created** | 2026-06-02 |
 | **Target milestone** | v0.1 (episode hashing, Merkle commitment, binding, ledger scaffold); residency over a real boundary and the networked ledger in v0.3; the STARK-friendly-hash migration in Stage D (post-v1.0) |
 | **Area** | provenance |
-| **Requires** | [RFC-0003](RFC-0003-federated-protocol.md) (the `Commitment` message and binding), [RFC-0004](RFC-0004-data-provenance.md) (the data layer and accounting requirements) |
+| **Requires** | [RFC-0003](RFC-0003-federated-protocol.md) (the `Commitment` message and binding), [RFC-0004](RFC-0004-data-provenance.md) (the data layer and provenance requirements) |
 | **Defers to** | [RFC-0006](RFC-0006-verifiable-contribution.md) (the Phase-2 proofs the commitments enable), [RFC-0010](RFC-0010-artifact-checkpoint-format.md) (the global-model content hash recorded in the ledger) |
 
 ## Summary
@@ -41,11 +41,13 @@ proves data **origin/provenance**, not data quality and not honest computation.
 ## Motivation
 
 In a data-sovereign federation, raw trajectories never cross a boundary (`INV-RESIDENCY`,
-[RFC-0004 §2](RFC-0004-data-provenance.md)); only privatized, aggregated model deltas do
-([RFC-0003 §2](RFC-0003-federated-protocol.md)). That property is also a verifiability problem: a
+[RFC-0004 §2](RFC-0004-data-provenance.md)); only released model deltas and commitments do. The current
+coordinator sees each released delta in plaintext; privatization and secure aggregation remain target
+protections ([RFC-0003 §2](RFC-0003-federated-protocol.md)). That residency property is also a
+verifiability problem: a
 coordinator that never sees the data cannot, by inspection of a delta, say *which* data produced it. For
-contribution accounting (who improved the model, on what data), for licensing claims, and for the
-Phase-2 statement "this update was computed from data under committed root `R_c`"
+reproducible provenance and for the Phase-2 statement "this update was computed from data under
+committed root `R_c`"
 ([RFC-0006 §3](RFC-0006-verifiable-contribution.md)), the federation needs a succinct, tamper-evident
 commitment to each participant's dataset that the participant produces locally and publishes once.
 
@@ -89,9 +91,6 @@ roadmap step 2b). Honoring them now is strictly cheaper than retrofitting them a
 - The pseudo-gradient construction and the round lifecycle. Owned by
   [RFC-0003](RFC-0003-federated-protocol.md); this RFC owns only the `Commitment` payload and its
   binding semantics.
-- Incentive/payment mechanisms, slashing, on-chain settlement. Out of scope
-  ([RFC-0006 §Non-Goals](RFC-0006-verifiable-contribution.md)); the ledger is an audit substrate, not
-  an economic layer.
 - The checkpoint/artifact format and its content hash. Owned by
   [RFC-0010](RFC-0010-artifact-checkpoint-format.md); the ledger records that hash, it does not define it.
 
@@ -420,7 +419,7 @@ Stating this boundary is part of the design's integrity
 
 - **A flat hash of the whole dataset vs a Merkle tree.** What it is: `R_c = H(concat of all episode
   bytes)`. Why considered: simplest possible commitment, smallest code, and sufficient for Phase-1
-  tamper-evidence and contribution accounting alone. Why rejected: a flat hash supports no inclusion
+  tamper-evidence alone. Why rejected: a flat hash supports no inclusion
   proof and no incremental commitment, so it forecloses the Phase-2 provenance-binding membership
   argument ([RFC-0006 §3](RFC-0006-verifiable-contribution.md)) — a verifier could not argue that a
   specific episode is in the committed set without re-hashing the entire dataset, and a participant could
@@ -452,10 +451,9 @@ Stating this boundary is part of the design's integrity
   Question.
 - **No ledger / commitments only.** What it is: bind `Δ_c` to `R_c` per round but keep no durable log.
   Why considered: the binding alone supports per-round rejection of unattributed deltas. Why rejected:
-  without an append-only, hash-chained record there is no audit substrate for contribution accounting
+  without an append-only, hash-chained record there is no durable provenance audit
   ([RFC-0004 §5](RFC-0004-data-provenance.md)) and nothing for the Phase-2 layer to formalize; the
-  ledger is the cheap durable artifact that makes "who contributed what, on what data" answerable after
-  the fact.
+  ledger records which dataset root was bound to each round and resulting model hash.
 
 ## Drawbacks
 
@@ -567,7 +565,7 @@ Strategy) on every CI run; share the canonicalization decision with
 ## References
 
 - [RFC-0004 — Data, Sovereignty & Provenance](RFC-0004-data-provenance.md) (the data layer §2, the
-  provenance-commitment requirements §4, contribution accounting §5, data-quality metadata §6).
+  provenance-commitment requirements §4, provenance records §5, data-quality metadata §6).
 - [RFC-0006 — Verifiable Contribution](RFC-0006-verifiable-contribution.md) (the Phase-2 proofs these
   commitments bind to §2, the proof-ready requirements §3, the roadmap §7).
 - [RFC-0003 — Federated Training Protocol](RFC-0003-federated-protocol.md) (the `Commitment` message §8,

@@ -1,17 +1,19 @@
 """lensemble.federation.pseudogradient — the one private object that crosses the boundary (RFC-0003 3).
 
 ``PseudoGradient`` is the DiLoCo outer-loop delta ``Δ_c = (θ_c, φ_c) − (θ_t, φ_t)`` — the H-step local
-update treated as one gradient — after DP clip+noise, bound to the dataset Merkle root it was computed
-under. It is the *only* participant-derived object permitted across a trust boundary, and it crosses only
-under secure aggregation + DP.
+update treated as one gradient — after the configured release transform, bound to the dataset Merkle
+root it was computed under. It is the only tensor carrier permitted by the residency guard. The current
+in-process coordinator can still observe individual released deltas; secure-sum and claim-grade DP are
+separate runtime properties and must not be inferred from this type.
 
 Invariants enforced here: ``INV-ACTIONHEAD-LOCAL`` — ``delta`` is materialized only over the federated
 param groups (encoder ``θ`` + predictor ``φ``); an action-head group reaching it raises
 ``ResidencyViolation`` (fail-closed, never swallowed). ``INV-COMMIT-BINDING`` — exactly one 32-byte
 ``dataset_root``. ``INV-RESIDENCY`` — ``delta`` is the only tensor field, and the type carries the
 ``PseudoGradient`` egress role so the egress guard permits it (and only its ``delta``) to cross. The
-DP bound ``‖Δ_c‖ ≤ C_clip`` itself (``INV-DP-BOUND``) is enforced in ``lensemble.privacy.dp``, not here;
-``l2_norm`` is the fp32 norm measured AFTER clipping and BEFORE noising.
+DP bound ``‖Δ_c‖ ≤ C_clip`` itself (``INV-DP-BOUND``) is enforced internally after clipping and before
+noise in ``lensemble.privacy.dp``. ``l2_norm`` is instead the honest fp32 norm of this carrier's final
+released ``delta`` and can exceed ``C_clip`` after noise.
 """
 
 from __future__ import annotations
@@ -41,10 +43,11 @@ class PseudoGradient:
     """The released DiLoCo delta (RFC-0003 3 / 03 6). Frozen; validated at construction.
 
     Fields: ``delta`` (flat fp32, concat of encoder ``θ`` then predictor ``φ`` param-group deltas in a
-    fixed order), ``l2_norm`` (``‖delta‖`` in fp32, post-clip / pre-noise — recorded for the DP-bound
-    check), ``dataset_root`` (the 32-byte ``R_c`` this delta binds to, ``INV-COMMIT-BINDING``),
-    ``round_index`` (target round ``t``), ``clipped`` (clip projection applied), ``quantized`` (int8 wire
-    quantization applied — orthogonal to the gauge).
+    fixed order), ``l2_norm`` (the fp32 norm of that final released vector, after any configured noise
+    and quantization), ``dataset_root`` (the 32-byte ``R_c`` this delta binds to, ``INV-COMMIT-BINDING``),
+    ``round_index`` (target round ``t``), ``clipped`` (the clip mechanism was enabled/applied before release,
+    not an indication that the norm saturated at the threshold), ``quantized`` (int8 wire quantization
+    applied — orthogonal to the gauge).
     """
 
     # Egress role so the residency guard permits this carrier and ONLY its `delta` tensor to cross.
@@ -58,6 +61,10 @@ class PseudoGradient:
     quantized: bool = False
 
     def __post_init__(self) -> None:
+        if self.delta.ndim != 1:
+            raise ValueError(
+                f"delta must be a flat 1-D parameter vector, got shape {tuple(self.delta.shape)}"
+            )
         if self.delta.dtype != torch.float32:
             raise ValueError(f"delta must be fp32, got {self.delta.dtype}")
         if not bool(torch.isfinite(self.delta).all()):
@@ -71,7 +78,7 @@ class PseudoGradient:
         recomputed = float(self.delta.norm())
         if abs(self.l2_norm - recomputed) > 1e-6 + 1e-5 * recomputed:
             raise ValueError(
-                f"l2_norm {self.l2_norm} does not match ||delta|| {recomputed} (post-clip norm)"
+                f"l2_norm {self.l2_norm} does not match released ||delta|| {recomputed}"
             )
 
 
@@ -94,8 +101,9 @@ def build_pseudogradient(
     When ``quantize`` is set (the ``federation.quantize_pseudo_gradient`` config flag, default off), the
     assembled flat delta is round-tripped through int8 wire quantization (a bounded, deterministic
     perturbation; ``lensemble.federation.quant``) and ``PseudoGradient.quantized`` is set ``True``.
-    Quantization runs on the already clipped-and-noised delta and before secure-aggregation masking
-    (RFC-0012 §6). ``l2_norm`` is the fp32 norm of the final (possibly quantized) ``delta``.
+    Quantization runs after the configured privacy transform (which may be bypassed) and before any
+    secure-aggregation masking (RFC-0012 §6). ``l2_norm`` is the fp32 norm of the final (possibly
+    quantized) ``delta``.
     """
     for name in param_deltas:
         group = name.split(".", 1)[0]

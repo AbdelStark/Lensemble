@@ -16,15 +16,17 @@
 
 ## Summary
 
-This RFC defines how Lensemble proves its claims. It is the backbone of the paper. The central
-result is not "we trained distributed" (solved prior art) but "we measured and controlled the latent
-gauge under federation, and federation closes the gap to centralized without moving data." It
-specifies four falsifiable claims (§1); the headline empirical artifact, the **latent frame-drift
-diagnostic** (the first measurement of latent frame-drift under federated self-supervision, §2); the
-primary downstream metric, **planning success via latent MPC** (§3); the supporting metrics (§4); the
-four bracketing baselines and the headline gap-recovery fraction (§5); the **ablation ladder** that
-maps one-to-one onto the gauge layers of [RFC-0002 §4](RFC-0002-gauge-and-aggregation.md#4-layer-2--frame-anchoring-on-a-public-probe-the-gauge-fix) (§6); the
-non-IID and scale sweeps (§7); the reproducibility discipline (§8); and the success criteria (§9).
+This RFC defines how Lensemble tests its research hypotheses. It specifies four
+falsifiable hypotheses (§1); the **latent frame-drift diagnostic** (§2); the primary
+downstream metric, **planning success via latent MPC** (§3); supporting metrics (§4);
+four bracketing baselines and a gap-recovery fraction (§5); an **ablation ladder**
+that maps one-to-one onto the gauge layers of
+[RFC-0002 §4](RFC-0002-gauge-and-aggregation.md#4-layer-2--frame-anchoring-on-a-public-probe-the-gauge-fix)
+(§6); non-IID and scale sweeps (§7); reproducibility requirements (§8); and
+acceptance criteria (§9). The checked-in full-model evidence predates correction
+of the outer-step direction and therefore does not establish the hypotheses in
+this RFC; corrected evaluation remains tracked in
+[#335](https://github.com/AbdelStark/Lensemble/issues/335).
 The metric implementations live in `lensemble.eval` (`metrics.py`, `mpc.py`, `harness.py`); the
 emission contract is owned by [RFC-0015](RFC-0015-observability-diagnostics.md) and the stable type
 contract for `EvalReport`/`FrameDriftReport` by [03-data-model.md §13](../spec/03-data-model.md#13-reporting-types-evalreport-framedriftreport-contributionrecord). The public entry points
@@ -32,18 +34,19 @@ are `evaluate(...)`, `Planner`, and `frame_drift(...)` ([conventions §5](../spe
 
 ## Motivation
 
-Federated and decentralized training of supervised models and LLMs is established prior art; merely
-demonstrating that Lensemble trains across silos proves nothing new. The novel, contestable claim is
-that an *end-to-end* JEPA world model — encoder and predictor co-trained, "Fork B" — can be
-federated at all, given the $O(d)$ latent gauge argued in
-[RFC-0002 §4](RFC-0002-gauge-and-aggregation.md#4-layer-2--frame-anchoring-on-a-public-probe-the-gauge-fix), and that frame anchoring controls that gauge well
-enough to recover most of the centralized–local quality gap without moving raw data. Two things must
-therefore be measured that no prior evaluation measures:
+Federated and decentralized training of supervised models and language models
+is established prior art; execution across silos is not sufficient evidence of
+model quality. Lensemble instead tests whether an *end-to-end* JEPA world model
+— encoder and predictor co-trained, "Fork B" — can remain useful,
+magnitude-stable, and gauge-stable under federation. The $O(d)$ latent-gauge
+argument in
+[RFC-0002 §4](RFC-0002-gauge-and-aggregation.md#4-layer-2--frame-anchoring-on-a-public-probe-the-gauge-fix)
+motivates two measurements:
 
 1. **The gauge itself.** Whether independently-updated participants drift into mutually-rotated
    coordinate frames, and whether the anchor holds the frame pinned, is directly observable as a
    rotation between encoder outputs on a shared public probe. This measurement — the frame-drift
-   diagnostic — is the headline artifact and a standalone contribution.
+   diagnostic — is a direct test of the gauge-control hypothesis.
 2. **That controlling the gauge buys downstream capability.** Frame stability is necessary but not
    sufficient; the model must plan. Planning success via latent MPC is the metric that ultimately
    matters; representation-probe accuracy and effective dimension support it and guard against silent
@@ -106,7 +109,7 @@ practical value of anchored federation and triggers the Fork A degrade
 
 ### 2. Headline diagnostic — latent frame drift
 
-The novel measurement at the center of the paper. On the fixed public probe $\mathcal{P}$
+On the fixed public probe $\mathcal{P}$
 ([RFC-0004 §3](RFC-0004-data-provenance.md#3-the-public-probe-set-mathcalp)), after each round $t$ compute, for each ordered pair of
 participants $(c,c')$, the optimal Procrustes rotation between their encoder outputs on the probe and
 report a rotation magnitude. The closed form is exactly that of
@@ -127,9 +130,10 @@ contracted in [02-public-api.md §1.6](../spec/02-public-api.md#16-frame_drift-a
 $(\lvert\mathcal{P}\rvert\cdot N, d)$. The pairwise alignment is computed by `procrustes_align(source,
 target) -> tuple[Tensor, float]` returning $(Q^\star, \text{residual})$ ([conventions §5](../spec/conventions.md#5-public-api-surface)).
 
-**Expected figure.** Naive `FedAvg` curves diverge (frames rotate apart); the anchored configuration
-stays flat/low. To our knowledge this is the first measurement of latent frame-drift under federated
-self-supervision; it stands on its own as a contribution.
+**Expected diagnostic.** The hypothesis predicts that naive `FedAvg` curves
+diverge as frames rotate apart while an effective anchored configuration stays
+flat or low. A run must be reported as a failed hypothesis test when that
+contrast is absent; the protocol does not assume the expected outcome.
 
 **Determinism and reproducibility (load-bearing).** The diagnostic MUST be a deterministic function
 of (committed encoder weights $\theta_c$, the pinned public probe $\mathcal{P}$). Inputs derive only

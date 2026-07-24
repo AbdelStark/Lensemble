@@ -28,13 +28,14 @@ from lensemble.federation.phase3_observability import (
     Phase3ObservabilityReport,
 )
 from lensemble.federation.phase3_orchestration import (
+    Phase3EvidenceStatus,
     Phase3LongRunReport,
     load_phase3_long_run_report,
     phase3_long_run_smoke_config,
     phase3_long_run_smoke_manifest,
 )
 
-PHASE3_EVIDENCE_BUNDLE_SCHEMA_VERSION = 1
+PHASE3_EVIDENCE_BUNDLE_SCHEMA_VERSION = 2
 
 Phase3ArtifactLocation = Literal["local", "hub"]
 Phase3RepoType = Literal["model", "dataset"]
@@ -51,11 +52,16 @@ Phase3ArtifactKind = Literal[
     "model-card",
     "evidence-bundle",
 ]
-Phase3PublicationStatus = Literal["local_smoke", "published", "blocked"]
+Phase3PublicationStatus = Literal[
+    "local_smoke",
+    "published",
+    "blocked",
+    "historical",
+]
 
 _GENERATED_AT = datetime(2026, 6, 5, 0, 0, 0, tzinfo=timezone.utc)
 _MODEL_REPO_ID = "abdelstark/lensemble-phase3-consortium-checkpoint"
-_DATASET_REPO_ID = "abdelstark/lensemble-phase3-consortium-data"
+_DATASET_REPO_ID = "abdelstark/lensemble-phase3-so100-silos"
 _FORBIDDEN_KEYS = (
     "raw_data",
     "raw_observation",
@@ -112,6 +118,7 @@ class Phase3ManifestBundleSummary(BaseModel):
     secure_aggregation_backend: str = Field(min_length=1)
     dp_required: bool
     public_probe_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    public_probe_hash_contract: str = Field(min_length=1)
     claim_boundary: str = Field(min_length=1)
 
 
@@ -125,6 +132,7 @@ class Phase3DatasetBundleSummary(BaseModel):
     participant_count: int = Field(ge=1)
     participant_ids: tuple[str, ...] = Field(min_length=1)
     public_probe_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    public_probe_hash_contract: str = Field(min_length=1)
     published_participant_count: int = Field(ge=0)
     placeholder_participant_count: int = Field(ge=0)
     raw_data_crosses_boundary: Literal[False] = False
@@ -137,6 +145,8 @@ class Phase3TrainingBundleSummary(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     run_id: str = Field(min_length=1)
+    evidence_status: Phase3EvidenceStatus = "current"
+    superseded_reason: str | None = Field(default=None, min_length=1)
     participant_count: int = Field(ge=1)
     target_rounds: int = Field(ge=1)
     closed_rounds: int = Field(ge=0)
@@ -159,11 +169,14 @@ class Phase3PrivacyAggregationBundleSummary(BaseModel):
     secure_aggregation_backend: str = Field(min_length=1)
     secure_aggregation_threshold: int = Field(ge=1)
     secure_sum_rounds: int = Field(ge=0)
+    post_commit_cross_check_rounds: int = Field(default=0, ge=0)
+    legacy_reported_secure_sum_rounds: int = Field(default=0, ge=0)
     dp_enabled: bool
     dp_accountant: str = Field(min_length=1)
     dp_epsilon: float = Field(gt=0.0)
     dp_delta: float = Field(gt=0.0, lt=1.0)
     dp_accounted_rounds: int = Field(ge=0)
+    effective_dp_rounds: int = Field(default=0, ge=0)
     max_round_epsilon_spent: float = Field(ge=0.0)
 
 
@@ -203,6 +216,7 @@ class Phase3PublicationBundleSummary(BaseModel):
     model_repo_revision: str = Field(min_length=1)
     dataset_repo_id: str = Field(min_length=1)
     dataset_repo_revision: str = Field(min_length=1)
+    dataset_bound_to_training: bool = False
     expected_model_repo_files: tuple[str, ...] = Field(min_length=1)
     blockers: tuple[str, ...]
 
@@ -229,9 +243,28 @@ class Phase3EvidenceBundle(BaseModel):
     raw_data_in_report: Literal[False] = False
     model_card_markdown: str = Field(min_length=1)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_v1_privacy_summary(cls, raw: Any) -> Any:
+        """Reclassify legacy reported secure-sum rounds as cross-checks."""
+
+        if not isinstance(raw, dict) or raw.get("schema_version") != 1:
+            return raw
+        migrated = dict(raw)
+        privacy = migrated.get("privacy_aggregation")
+        if isinstance(privacy, dict):
+            privacy = dict(privacy)
+            legacy_count = int(privacy.get("secure_sum_rounds", 0))
+            privacy.setdefault("legacy_reported_secure_sum_rounds", legacy_count)
+            privacy.setdefault("post_commit_cross_check_rounds", legacy_count)
+            privacy["secure_sum_rounds"] = 0
+            privacy.setdefault("effective_dp_rounds", 0)
+            migrated["privacy_aggregation"] = privacy
+        return migrated
+
     @model_validator(mode="after")
     def _cross_check(self) -> "Phase3EvidenceBundle":
-        if self.schema_version != PHASE3_EVIDENCE_BUNDLE_SCHEMA_VERSION:
+        if not 1 <= self.schema_version <= PHASE3_EVIDENCE_BUNDLE_SCHEMA_VERSION:
             raise SchemaVersionMismatch(
                 f"Phase 3 evidence bundle schema_version {self.schema_version!r} "
                 f"exceeds reader max {PHASE3_EVIDENCE_BUNDLE_SCHEMA_VERSION}",
@@ -278,6 +311,31 @@ class Phase3EvidenceBundle(BaseModel):
                 "Phase 3 model card is missing explicit non-claims",
                 code=LensembleErrorCode.CONFIG_INVALID,
                 remediation="state the provenance, cryptographic-proof, and paper-scale boundaries",
+            )
+        if self.training.evidence_status == "historical_pre_correctness_fix":
+            if self.publication.status != "historical":
+                raise ConfigError(
+                    "superseded Phase 3 training evidence must use historical publication status",
+                    code=LensembleErrorCode.CONFIG_INVALID,
+                    remediation="do not present a pre-correction immutable revision as a current publication",
+                )
+            historical_text = (
+                "historical evidence status",
+                "outer-update direction correction",
+                "public-probe-v2 target-binding contract",
+                "do not validate the corrected runtime",
+            )
+            if any(text not in card for text in historical_text):
+                raise ConfigError(
+                    "historical Phase 3 model card is missing its correctness notice",
+                    code=LensembleErrorCode.CONFIG_INVALID,
+                    remediation="surface why and when the evidence became historical",
+                )
+        elif self.publication.status == "historical":
+            raise ConfigError(
+                "current Phase 3 training evidence cannot use historical publication status",
+                code=LensembleErrorCode.CONFIG_INVALID,
+                remediation="use local_smoke, published, or blocked for current evidence",
             )
         validate_phase3_bundle_residency(self.model_dump(mode="json"))
         return self
@@ -344,9 +402,46 @@ def materialize_phase3_run_contracts(
 
     long_run = load_phase3_long_run_report(long_run_report_path)
     probe_hash = _public_probe_hash(long_run)
+    historical = long_run.evidence_status == "historical_pre_correctness_fix"
     cfg = phase3_long_run_smoke_config(rounds=long_run.target_rounds)
-    manifest = phase3_long_run_smoke_manifest(cfg, public_probe_hash=probe_hash)
+    manifest = phase3_long_run_smoke_manifest(
+        cfg,
+        public_probe_hash=probe_hash,
+        public_probe_hash_contract=(
+            "legacy-unscoped" if historical else "public-probe-v2"
+        ),
+    )
+    if historical:
+        manifest = manifest.model_copy(
+            update={
+                "claim_boundary": (
+                    "Historical pre-correctness-fix tiny in-process Phase 3 "
+                    "orchestration smoke. The declared secure_aggregation_required "
+                    "and dp_required fields describe the intended policy, not an "
+                    "achieved confidentiality guarantee: the optimizer consumed "
+                    "plaintext participant deltas, the simulated sum was a "
+                    "post-commit cross-check, and deterministic per-round noise "
+                    "snapshots were neither effective nor cumulative DP. The probe "
+                    "digest is legacy-unscoped. Audit history only; this artifact "
+                    "does not validate the corrected runtime or paper-scale robotics "
+                    "performance. Issue #335 tracks the rerun."
+                )
+            }
+        )
     registry = phase3_registry_from_consortium_manifest(manifest)
+    if historical:
+        registry = registry.model_copy(
+            update={
+                "claim_boundary": (
+                    "Historical pre-correctness-fix dataset/probe registry for the "
+                    "tiny Phase 3 smoke. It contains placeholder local dataset "
+                    "references and a legacy-unscoped probe digest. Audit history "
+                    "only; it is not a current operational-training contract, a "
+                    "raw-data publication artifact, a provenance ledger, or a "
+                    "cryptographic proof. Issue #335 tracks the corrected rerun."
+                )
+            }
+        )
     write_consortium_manifest(manifest, manifest_path)
     write_phase3_dataset_registry(registry, registry_path)
     return manifest, registry
@@ -379,30 +474,145 @@ def build_phase3_evidence_bundle(
     privacy_summary = _privacy_summary(long_run)
     eval_summary = _eval_summary(eval_report)
     observability_summary = _observability_summary(observability_report)
+    expected_probe_hash = _public_probe_hash(long_run)
+    identity_mismatches = {
+        "manifest.consortium_id": (
+            manifest.consortium_id,
+            long_run.consortium_id,
+        ),
+        "manifest.run_id": (manifest.run_id, long_run.run_id),
+        "manifest.public_probe": (
+            manifest.public_probe.content_hash,
+            expected_probe_hash,
+        ),
+        "registry.consortium_id": (
+            registry.consortium_id,
+            long_run.consortium_id,
+        ),
+        "registry.run_id": (registry.run_id, long_run.run_id),
+        "registry.public_probe": (
+            registry.public_probe.content_hash,
+            expected_probe_hash,
+        ),
+        "registry.public_probe_hash_contract": (
+            registry.public_probe.hash_contract,
+            manifest.public_probe.hash_contract,
+        ),
+    }
+    mismatched = [
+        f"{name}={actual!r} (expected {expected!r})"
+        for name, (actual, expected) in identity_mismatches.items()
+        if actual != expected
+    ]
+    if mismatched:
+        raise ConfigError(
+            "Phase 3 bundle inputs do not describe one run: " + "; ".join(mismatched),
+            code=LensembleErrorCode.CONFIG_INVALID,
+            remediation="bundle a manifest, registry, and report with identical run and probe identities",
+        )
+    evidence_statuses = {
+        training_summary.evidence_status,
+        eval_report.evidence_status,
+        observability_report.training_evidence_status,
+    }
+    if len(evidence_statuses) != 1:
+        raise ConfigError(
+            "Phase 3 bundle inputs disagree on training-evidence status",
+            code=LensembleErrorCode.CONFIG_INVALID,
+            remediation="regenerate eval and observability reports from the same long-run report",
+        )
+    if training_summary.evidence_status == "historical_pre_correctness_fix":
+        if publication_status != "historical":
+            raise ConfigError(
+                "historical Phase 3 evidence requires publication_status='historical'",
+                code=LensembleErrorCode.CONFIG_INVALID,
+                remediation="preserve immutable revisions as audit history pending the corrected rerun",
+            )
+    elif publication_status == "historical":
+        raise ConfigError(
+            "current Phase 3 evidence cannot use publication_status='historical'",
+            code=LensembleErrorCode.CONFIG_INVALID,
+            remediation="choose a current publication status",
+        )
     publication_summary = _publication_summary(
         status=publication_status,
         model_repo_revision=model_repo_revision,
         dataset_repo_revision=dataset_repo_revision,
+        dataset_bound_to_training=dataset_summary.placeholder_participant_count == 0,
+    )
+    uses_placeholder_data = dataset_summary.placeholder_participant_count > 0
+    runtime_claim = (
+        "Consortium-runtime evidence: four simulated participant agents completed "
+        "a deterministic tiny-model lifecycle smoke with ten closed rounds; the "
+        "optimizer consumed plaintext participant updates, while simulated sums "
+        "were post-commit equivalence cross-checks."
+        if uses_placeholder_data
+        else (
+            "Consortium-runtime evidence: four participant agents on the declared "
+            "action contract completed ten closed federated rounds; the optimizer "
+            "consumed plaintext participant updates, while simulated/TEE sums were "
+            "post-commit equivalence cross-checks."
+        )
+    )
+    scale_claim = (
+        "Training/eval scale: the bundled training run uses placeholder synthetic "
+        "smoke data and tiny tokens/latent. Separately hash-bound control reports "
+        "contain SO-100 representation metrics; neither surface is a paper-scale "
+        "robotics result."
+        if uses_placeholder_data
+        else (
+            "Training/eval scale: this is consortium-engineering and real-training "
+            "evidence on tiny tokens/latent, not a public HF Jobs paper-scale "
+            "robotics training result."
+        )
+    )
+    controls_claim = (
+        "Controls: anchored-federation, naive-FedAvg, Fork-A/frozen-encoder, and "
+        "local-only controls are completed as hash-bound representation-metric "
+        "rows; no matched control rows remain blocked."
+        if not eval_summary.blocked_controls
+        else (
+            "Controls: completed representation-metric rows are reported only for "
+            f"{', '.join(eval_summary.completed_controls) or 'none'}; blocked "
+            f"matched controls remain explicit: {', '.join(eval_summary.blocked_controls)}."
+        )
     )
     claim_boundaries = (
-        "Consortium-runtime evidence: four sovereign participant agents on the union SO-100 action contract completed a governed Phase 3 run with ten closed federated rounds, secure-sum aggregation, and DP accounting.",
-        "Training/eval scale: this is consortium-engineering and real-training evidence on tiny tokens/latent, not a public HF Jobs paper-scale robotics training result.",
-        "Controls: anchored-federation, naive-FedAvg, Fork-A/frozen-encoder, and local-only controls are completed as representation-metric rows; no Phase 3 control rows remain blocked.",
-        "Privacy controls: secure_sum aggregation status and DP accounting are exercised as operational controls, not cryptographic computation proofs (RFC-0006 honest-computation proofs remain out of scope).",
+        runtime_claim,
+        scale_claim,
+        controls_claim,
+        "Privacy controls: deterministic noise and fresh one-round epsilon snapshots exercise mechanism plumbing but are not claim-grade effective DP or cumulative budget enforcement.",
     )
+    if training_summary.evidence_status == "historical_pre_correctness_fix":
+        claim_boundaries = (
+            "Historical evidence status: these Phase 3 training and gauge rows predate the outer-update direction correction and the public-probe-v2 target-binding contract. They are audit history and do not validate the corrected runtime; issue #335 tracks the rerun.",
+            *claim_boundaries,
+        )
     non_claims = (
         "Phase 3 does not include a provenance ledger implementation.",
         "Phase 3 does not cryptographically prove honest participant computation.",
         "Phase 3 does not claim paper-scale LeWorldModel performance.",
         "Phase 3 does not claim public SO-100 robotics task success.",
-        "Phase 3 is consortium-engineering and real-training evidence, not a cryptographic honest-computation proof; RFC-0006 honest-computation proofs are out of scope.",
+        "The bundle combines a synthetic runtime smoke with separately hash-bound historical real-data control reports; neither surface is a cryptographic honest-computation proof.",
     )
+    if training_summary.evidence_status == "historical_pre_correctness_fix":
+        non_claims = (
+            "The historical Phase 3 metrics are not evidence for the corrected outer update or the target-bound probe contract.",
+            *non_claims,
+        )
     known_limitations = tuple(
         f"{row.control_role}: {row.reason}" for row in eval_report.blocked_controls
     ) + (
-        "DP-utility / federated-collapse (#244): the published checkpoints exhibit global-representation collapse over rounds under the DP noise/clipping budget, so latent quality degrades and downstream planning success would be uninformative on these checkpoints.",
+        "Secure aggregation is not integrated into the live optimizer path: current simulated/TEE sums are post-commit cross-checks over plaintext updates already consumed by the coordinator.",
+        "Current DP noise is deterministically replayable from shared run configuration, and accounting is recreated per round; effective DP and cumulative enforcement are not claimed.",
+        "DP-utility / federated-collapse (#244): the historical checkpoints exhibit global-representation collapse over rounds under the configured deterministic clipping/noise settings. This is a failure observation, not evidence of an effective or cumulative DP budget, and downstream planning success would be uninformative on these checkpoints.",
         "Downstream task-success (stable-worldmodel #96): closed-loop physical SO-100 task success is deferred, not claimed; it requires the unvendored stable-worldmodel planner suite and a non-collapsing federated checkpoint, because a recorded held-out split is open-loop and cannot apply arbitrary planner actions to recorded frames.",
     )
+    if training_summary.evidence_status == "historical_pre_correctness_fix":
+        known_limitations = (
+            "Corrected-runtime rerun (#335): every training/gauge metric in this bundle was produced before the outer-update sign and probe-target-binding fixes and must be regenerated before comparison or promotion.",
+            *known_limitations,
+        )
     model_card = render_phase3_model_card(
         manifest=manifest_summary,
         dataset=dataset_summary,
@@ -564,6 +774,18 @@ def render_phase3_model_card(
     limitations = "\n".join(f"- {item}" for item in known_limitations) or "- none"
     completed = ", ".join(f"`{item}`" for item in eval_controls.completed_controls)
     blocked = ", ".join(f"`{item}`" for item in eval_controls.blocked_controls)
+    introduction = (
+        "This model repository preserves historical Phase 3 consortium-training "
+        "audit evidence for a federated JEPA / LeWorldModel-flavour world model."
+        if training.evidence_status == "historical_pre_correctness_fix"
+        else "This model repository records Phase 3 consortium-training evidence "
+        "for a federated JEPA / LeWorldModel-flavour world model."
+    )
+    reports_heading = (
+        "Reports In This Historical Record"
+        if training.evidence_status == "historical_pre_correctness_fix"
+        else "Reports In This Evidence Bundle"
+    )
     return f"""---
 license: apache-2.0
 library_name: lensemble
@@ -577,8 +799,8 @@ tags:
 
 # Lensemble Phase 3 Consortium JEPA World Model
 
-This model repository records the Phase 3 consortium-training release-candidate
-evidence for a federated JEPA / LeWorldModel-flavour world model.
+{introduction}
+{_historical_model_card_notice(training)}
 
 ## Consortium Runtime Evidence
 
@@ -588,6 +810,7 @@ evidence for a federated JEPA / LeWorldModel-flavour world model.
 - Coordinator: `{manifest.coordinator_id}`
 - Protocol: `{manifest.protocol_version}`
 - Public probe hash: `{manifest.public_probe_hash}`
+- Public probe hash contract: `{manifest.public_probe_hash_contract}`
 - Secure aggregation backend: `{privacy.secure_aggregation_backend}`
 - DP accountant: `{privacy.dp_accountant}`
 
@@ -612,9 +835,11 @@ evidence for a federated JEPA / LeWorldModel-flavour world model.
 
 ## Privacy And Observability Controls
 
-- Secure-sum rounds: {privacy.secure_sum_rounds}
-- DP-accounted rounds: {privacy.dp_accounted_rounds}
-- Max per-round epsilon spent: {privacy.max_round_epsilon_spent}
+- Optimizer-consumed secure-sum rounds: {privacy.secure_sum_rounds}
+- Post-commit sum cross-check rounds: {privacy.post_commit_cross_check_rounds}
+- One-round DP mechanism-accounting snapshots: {privacy.dp_accounted_rounds}
+- Claim-grade effective-DP rounds: {privacy.effective_dp_rounds}
+- Max one-round epsilon snapshot: {privacy.max_round_epsilon_spent}
 - Observability round summaries: {observability.round_summary_count}
 - Induced dropout outcomes: {", ".join(observability.induced_dropout_outcomes)}
 - Redaction contract: `{observability.redaction_contract_id}`
@@ -627,6 +852,7 @@ evidence for a federated JEPA / LeWorldModel-flavour world model.
 - Raw data crosses participant boundary: `{dataset.raw_data_crosses_boundary}`
 - Model repo target: `hf://models/{publication.model_repo_id}@{publication.model_repo_revision}`
 - Dataset repo target: `hf://datasets/{publication.dataset_repo_id}@{publication.dataset_repo_revision}`
+- Dataset revision bound to this training run: `{publication.dataset_bound_to_training}`
 - Publication status: `{publication.status}`
 
 ## Claim Boundaries
@@ -641,14 +867,14 @@ evidence for a federated JEPA / LeWorldModel-flavour world model.
 
 {limitations}
 
-## Reports In This Release Candidate
+## {reports_heading}
 
 - `reports/phase3_evidence_bundle.json`
 - `reports/phase3_long_run_smoke_report.json`
 - `reports/phase3_eval_report.json`
 - `reports/phase3_observability_report.json`
-- `reports/phase3_long_run_manifest.json`
-- `reports/phase3_long_run_dataset_registry.json`
+- `reports/phase3_long_run_smoke_manifest.json`
+- `reports/phase3_long_run_smoke_dataset_registry.json`
 - `artifacts/final/header.json`
 - `artifacts/final/weights.safetensors`
 """
@@ -673,6 +899,7 @@ def _manifest_summary(
         secure_aggregation_backend=manifest.runtime.secure_aggregation_backend,
         dp_required=manifest.runtime.dp_required,
         public_probe_hash=manifest.public_probe.content_hash,
+        public_probe_hash_contract=manifest.public_probe.hash_contract,
         claim_boundary=manifest.claim_boundary,
     )
 
@@ -693,6 +920,7 @@ def _dataset_summary(
         participant_count=len(registry.participants),
         participant_ids=tuple(item.participant_id for item in registry.participants),
         public_probe_hash=registry.public_probe.content_hash,
+        public_probe_hash_contract=registry.public_probe.hash_contract,
         published_participant_count=published,
         placeholder_participant_count=placeholders,
         raw_data_crosses_boundary=False,
@@ -708,6 +936,8 @@ def _training_summary(
 ) -> Phase3TrainingBundleSummary:
     return Phase3TrainingBundleSummary(
         run_id=long_run.run_id,
+        evidence_status=long_run.evidence_status,
+        superseded_reason=long_run.superseded_reason,
         participant_count=long_run.run_shape.participant_count,
         target_rounds=long_run.target_rounds,
         closed_rounds=long_run.closed_rounds,
@@ -738,20 +968,40 @@ def _privacy_summary(
             1
             for row in long_run.rounds
             if row.aggregation_backend_status == "secure_sum"
+            and row.secure_sum_consumed
         ),
+        post_commit_cross_check_rounds=sum(
+            1
+            for row in long_run.rounds
+            if row.aggregation_backend_status == "post_commit_cross_check"
+        ),
+        legacy_reported_secure_sum_rounds=0,
         dp_enabled=long_run.run_shape.dp_enabled,
         dp_accountant=long_run.run_shape.dp_accountant,
         dp_epsilon=long_run.run_shape.dp_epsilon,
         dp_delta=long_run.run_shape.dp_delta,
         dp_accounted_rounds=len(epsilons),
+        effective_dp_rounds=sum(1 for row in long_run.rounds if row.effective_dp),
         max_round_epsilon_spent=max(epsilons) if epsilons else 0.0,
     )
 
 
 def _eval_summary(eval_report: Phase3EvalReport) -> Phase3EvalControlBundleSummary:
+    matched_control_roles = {
+        "anchored-federation",
+        "naive-fedavg",
+        "fork-a-frozen-encoder",
+        "local-only",
+    }
     return Phase3EvalControlBundleSummary(
         completed_controls=tuple(
-            sorted({row.control_role for row in eval_report.metric_rows})
+            sorted(
+                {
+                    row.control_role
+                    for row in eval_report.metric_rows
+                    if row.control_role in matched_control_roles
+                }
+            )
         ),
         blocked_controls=tuple(
             row.control_role for row in eval_report.blocked_controls
@@ -789,11 +1039,23 @@ def _publication_summary(
     status: Phase3PublicationStatus,
     model_repo_revision: str,
     dataset_repo_revision: str,
+    dataset_bound_to_training: bool,
 ) -> Phase3PublicationBundleSummary:
     blockers: tuple[str, ...] = ()
-    if status != "published":
+    if status == "historical":
         blockers = (
-            "Model-card/evidence publication is represented as a local release-candidate target until an immutable Hub revision is recorded.",
+            "The immutable Hub revisions are retained as historical audit artifacts; they do not contain evidence from the corrected outer update and target-bound probe contract.",
+            (
+                "The associated SO-100 dataset revision is not bound to this "
+                "historical synthetic-smoke training run."
+                if not dataset_bound_to_training
+                else "The historical training registry binds the recorded dataset revision."
+            ),
+            "GitHub issue #335 tracks the corrected rerun and replacement publication.",
+        )
+    elif status != "published":
+        blockers = (
+            "Model-card/evidence publication is represented as a local publication target until an immutable Hub revision is recorded.",
             "The Phase 3 dataset repo target is declared, but public task-scale SO-100 eval data remains blocked.",
         )
     return Phase3PublicationBundleSummary(
@@ -802,6 +1064,7 @@ def _publication_summary(
         model_repo_revision=model_repo_revision,
         dataset_repo_id=_DATASET_REPO_ID,
         dataset_repo_revision=dataset_repo_revision,
+        dataset_bound_to_training=dataset_bound_to_training,
         expected_model_repo_files=(
             "README.md",
             "reports/phase3_evidence_bundle.json",
@@ -816,6 +1079,20 @@ def _publication_summary(
         ),
         blockers=blockers,
     )
+
+
+def _historical_model_card_notice(training: Phase3TrainingBundleSummary) -> str:
+    if training.evidence_status != "historical_pre_correctness_fix":
+        return ""
+    return """
+
+## Historical Evidence Status
+
+These training and gauge rows predate the outer-update direction correction and
+the `public-probe-v2` target-binding contract. They are retained for audit
+history only and **do not validate the corrected runtime**. GitHub issue #335
+tracks the required rerun and replacement publication.
+"""
 
 
 def _phase3_run_manifest_hash(report: Phase3LongRunReport) -> str:

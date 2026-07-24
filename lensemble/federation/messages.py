@@ -14,7 +14,7 @@ Message         Direction              Drives transition               Protectio
 ==============  =====================  ==============================  ===========================
 ``RoundOpen``   coord → participant    enters ``OPEN`` (broadcast)     integrity (hash)
 ``Commitment``  participant → coord    counts toward the quorum        binding (``INV-COMMIT-BINDING``)
-``Update``      participant → agg.     counts toward ``AGGREGATING``   DP clip+noise + secure-agg mask
+``Update``      participant → agg.     counts toward ``AGGREGATING``   released delta + transform flags
 ``RoundClose``  coord → all            marks ``CLOSED``                integrity (``INV-CHECKPOINT-HASH``)
 ==============  =====================  ==============================  ===========================
 
@@ -26,11 +26,12 @@ validation — mirroring :func:`lensemble.provenance.commit.parse_dataset_commit
 ``INV-RESIDENCY`` (the load-bearing property of this module). **No** message carries a raw observation,
 raw action, or private embedding ``f_theta(x)``. ``RoundOpen`` / ``RoundClose`` carry only content hashes
 and coordination scalars; ``Commitment`` carries only the 32-byte dataset Merkle root ``R_c`` as hex; the
-``Update`` carries the *released* masked ``Δ_c`` as a JSON-native finite list of floats — exactly the
-:class:`~lensemble.federation.pseudogradient.PseudoGradient.delta` that crosses, nothing else. The
-``Update`` constructors (:func:`from_pseudogradient` / :func:`to_delta_tensor`) route the carrier through
-:func:`lensemble.data.residency.guard_egress` so a non-``PseudoGradient``-shaped raw-tensor payload fails
-closed with :class:`~lensemble.errors.ResidencyViolation` (never swallowed).
+``Update`` carries the released ``Δ_c`` as a JSON-native finite list of floats plus the non-sensitive
+``clipped`` / ``quantized`` transform flags — exactly the
+:class:`~lensemble.federation.pseudogradient.PseudoGradient` release metadata needed to reconstruct the
+carrier. The ``Update`` constructors (:func:`from_pseudogradient` / :func:`to_delta_tensor`) route the
+carrier through :func:`lensemble.data.residency.guard_egress` so a non-``PseudoGradient``-shaped
+raw-tensor payload fails closed with :class:`~lensemble.errors.ResidencyViolation` (never swallowed).
 """
 
 from __future__ import annotations
@@ -53,7 +54,7 @@ if TYPE_CHECKING:
 
 # The wire schema version for the four control messages (conventions §8). Bumped on any change to a
 # message's field set / semantics; gated FIRST by parse_control_message (a too-new version fails closed).
-CONTROL_MESSAGE_SCHEMA_VERSION = 1
+CONTROL_MESSAGE_SCHEMA_VERSION = 2
 
 _HASH_HEX_LEN = 64  # SHA-256 as lowercase hex (INV-CHECKPOINT-HASH / INV-PROBE-PIN / INV-COMMIT-BINDING)
 
@@ -151,13 +152,14 @@ class Commitment(_ControlMessageBase):
 class Update(_ControlMessageBase):
     """participant → aggregator; counts toward ``COLLECTING→AGGREGATING`` (RFC-0013 §5).
 
-    Carries the *released* masked ``Δ_c`` — the
-    :class:`~lensemble.federation.pseudogradient.PseudoGradient.delta` after DP clip+noise (and secure-agg
-    masking, owned by RFC-0011) — as a JSON-native finite ``tuple[float, ...]``, bound to the participant's
-    ``dataset_root`` ``R_c``. This is the ONLY participant-derived object permitted across the boundary; it
-    is NEVER a raw observation/action/embedding (``INV-RESIDENCY``), and the ``delta`` is validated finite
-    (a NaN/Inf is a malformed update). Build it via :func:`from_pseudogradient` (which residency-guards the
-    carrier) and recover the tensor via :func:`to_delta_tensor`.
+    Carries the released :class:`~lensemble.federation.pseudogradient.PseudoGradient.delta` as a
+    JSON-native finite ``tuple[float, ...]``, bound to the participant's ``dataset_root`` ``R_c``.
+    ``clipped`` records whether the configured clip mechanism was enabled and applied before release; it
+    does not mean the norm necessarily saturated at the clipping threshold. ``quantized`` records whether
+    the int8 wire round-trip was applied. This is the ONLY participant-derived tensor permitted across the
+    boundary; it is NEVER a raw observation/action/embedding (``INV-RESIDENCY``), and the ``delta`` is
+    validated finite (a NaN/Inf is a malformed update). Build it via :func:`from_pseudogradient` (which
+    residency-guards the carrier) and recover the tensor via :func:`to_delta_tensor`.
     """
 
     kind: Literal["update"] = "update"
@@ -168,8 +170,10 @@ class Update(_ControlMessageBase):
     )
     delta: tuple[
         float, ...
-    ]  # the masked Δ_c as JSON-native finite floats (never a tensor)
-    l2_norm: float = Field(ge=0.0)  # ‖delta‖ recorded for the DP-bound check
+    ]  # the released Δ_c as JSON-native finite floats (never a tensor)
+    l2_norm: float = Field(ge=0.0)  # honest norm of this released delta payload
+    clipped: bool  # clip mechanism was enabled/applied; not a saturation indicator
+    quantized: bool  # int8 wire round-trip was applied
 
     @field_validator("dataset_root")
     @classmethod
@@ -256,9 +260,15 @@ def parse_control_message(
             code=LensembleErrorCode.SCHEMA_VERSION_MISMATCH,
             remediation="upgrade lensemble to read this message, or re-emit at the supported schema",
         )
+    normalized = dict(raw)
+    if version == 1 and normalized.get("kind") == "update":
+        # Schema v1 did not carry release-transform flags. NetworkedTransport historically reconstructed
+        # every v1 Update as clipped=True, quantized=False, so preserve exactly that conservative behavior.
+        normalized.setdefault("clipped", True)
+        normalized.setdefault("quantized", False)
     # The discriminated union validates `kind` and the per-message fields (extra="forbid"); a malformed
     # payload raises pydantic ValidationError, propagated unchanged to the ingress caller.
-    return _ControlMessageEnvelope.model_validate({"message": dict(raw)}).message
+    return _ControlMessageEnvelope.model_validate({"message": normalized}).message
 
 
 def from_pseudogradient(pg: PseudoGradient, *, participant_id: str) -> Update:
@@ -268,7 +278,8 @@ def from_pseudogradient(pg: PseudoGradient, *, participant_id: str) -> Update:
     ``PseudoGradient`` carrier (its ``delta`` the sole permitted tensor) can become an ``Update``; a
     non-``PseudoGradient``-shaped raw-tensor payload fails closed with
     :class:`~lensemble.errors.ResidencyViolation` (never swallowed). The released ``delta`` is serialized as
-    a JSON-native finite ``tuple[float, ...]`` (no tensor crosses the wire), bound to ``pg.dataset_root``.
+    a JSON-native finite ``tuple[float, ...]`` (no tensor crosses the wire), bound to ``pg.dataset_root``;
+    its ``clipped`` and ``quantized`` release-transform flags are preserved verbatim.
     """
     # Fail-closed: only a vetted PseudoGradient carrier passes the guard. A bare-tensor / unknown payload
     # raises ResidencyViolation here, before any field is read onto the wire.
@@ -284,6 +295,8 @@ def from_pseudogradient(pg: PseudoGradient, *, participant_id: str) -> Update:
         dataset_root=pg.dataset_root.hex(),
         delta=tuple(float(x) for x in delta.tolist()),
         l2_norm=float(pg.l2_norm),
+        clipped=pg.clipped,
+        quantized=pg.quantized,
     )
 
 
@@ -306,7 +319,7 @@ def _residency_violation() -> "Any":
         "only a PseudoGradient may become an Update; a raw payload may not cross the boundary "
         "(INV-RESIDENCY)",
         code=LensembleErrorCode.RESIDENCY_VIOLATION,
-        remediation="release a privatized PseudoGradient.delta; never place a raw tensor in a message",
+        remediation="release a PseudoGradient.delta; never place a raw tensor in a message",
     )
     err.tensor_role = "raw_tensor_or_embedding"  # type: ignore[attr-defined]
     return err

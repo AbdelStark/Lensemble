@@ -599,7 +599,8 @@ def test_discipline_4_probe_pin_negative_mismatched_hash_raises(
     with pytest.raises(ProbeError) as exc:
         verify_probe_pin(probe, b"\x00" * 32)
     assert exc.value.code == LensembleErrorCode.PROBE_INVALID
-    assert exc.value.expected_hash == probe.content_hash  # type: ignore[attr-defined]
+    assert exc.value.expected_hash == b"\x00" * 32  # type: ignore[attr-defined]
+    assert exc.value.got_hash == probe.content_hash  # type: ignore[attr-defined]
     assert exc.value.remediation
 
 

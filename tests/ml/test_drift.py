@@ -36,6 +36,17 @@ def _silos(angles: dict[str, float]) -> dict[str, torch.Tensor]:
     return {pid: base @ _rot(deg).T for pid, deg in angles.items()}
 
 
+def _full_probe(probe: SimpleNamespace) -> SimpleNamespace:
+    targets = probe.points[probe.landmark_idx].unsqueeze(1)
+    content_hash = probe_content_hash(probe.points, probe.landmark_idx, targets)
+    return SimpleNamespace(
+        points=probe.points,
+        landmark_idx=probe.landmark_idx,
+        landmark_targets=targets,
+        content_hash=content_hash,
+    )
+
+
 def test_degenerate_safe_records_zero_for_coinciding_frames() -> None:
     """#262: a strong anchor can pin participants onto a near-identical (rank-deficient) frame. The default
     diagnostic raises DegenerateProcrustes; ``degenerate_safe=True`` records it as 0° drift (the GOOD case).
@@ -108,20 +119,34 @@ def test_report_is_bitwise_reproducible() -> None:
 
 def test_probe_hash_mismatch_raises(synthetic_probe: SimpleNamespace) -> None:
     silos = _silos({"p0": 0.0, "p1": 5.0})
+    probe = _full_probe(synthetic_probe)
     with pytest.raises(ProbeError) as exc:
-        frame_drift(silos, probe=synthetic_probe, expected_probe_hash="00" * 32)
+        frame_drift(silos, probe=probe, expected_probe_hash="00" * 32)
     assert exc.value.code == LensembleErrorCode.PROBE_INVALID
     assert exc.value.remediation
 
 
 def test_probe_hash_is_recorded_on_match(synthetic_probe: SimpleNamespace) -> None:
-    pinned = probe_content_hash(
-        synthetic_probe.points, synthetic_probe.landmark_idx
-    ).hex()
+    probe = _full_probe(synthetic_probe)
+    pinned = probe.content_hash.hex()
     report = frame_drift(
         _silos({"p0": 0.0, "p1": 5.0}),
-        probe=synthetic_probe,
+        probe=probe,
         expected_probe_hash=pinned,
     )
     assert isinstance(report, FrameDriftReport)
     assert report.probe_hash == pinned
+
+
+def test_tampered_probe_targets_are_rejected(
+    synthetic_probe: SimpleNamespace,
+) -> None:
+    probe = _full_probe(synthetic_probe)
+    probe.landmark_targets[0, 0, 0] += 1.0
+
+    with pytest.raises(ProbeError, match="stored content_hash"):
+        frame_drift(
+            _silos({"p0": 0.0, "p1": 5.0}),
+            probe=probe,
+            expected_probe_hash=probe.content_hash.hex(),
+        )

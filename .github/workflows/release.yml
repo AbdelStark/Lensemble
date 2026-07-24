@@ -1,11 +1,11 @@
-# Release automation: tag -> build -> clean-venv smoke -> publish (09 §5.3; #78).
+# Release automation: exact-commit gates -> build -> clean-venv smoke -> publish (09 §5.3; #78).
 #
 # Triggered by an annotated tag `vX.Y.Z`. The version-agreement gate (pyproject == __version__ ==
 # CHANGELOG) and the smoke install run BEFORE any upload, because PyPI publication is irreversible per
-# version (09 §5.3 RISK). The blocking CI gates (lint/types/tests/coverage), the determinism gate, and the
-# docs link-check run on the same commit via their own workflows; this workflow adds the version checks
-# and the build/smoke/publish flow. The large-binary research-artifact bundle is NOT built here (it is not
-# committed and CI never downloads it, 09 §5.4).
+# version (09 §5.3 RISK). Tag pushes do not trigger the branch/PR workflows, so this workflow executes
+# every §5.2 release gate itself on the tagged commit and makes the artifact build depend on them. The
+# large-binary research-artifact bundle is NOT built here (it is not committed and CI never downloads
+# it, 09 §5.4).
 name: release
 
 on:
@@ -14,11 +14,117 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write # create the GitHub release
+  contents: read
 
 jobs:
+  release-gates:
+    name: exact-commit release gates
+    runs-on: ubuntu-latest
+    env:
+      VIRTUAL_ENV: ${{ github.workspace }}/.venv
+      HYPOTHESIS_PROFILE: lensemble
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.9.18"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Create the release-gate venv
+        run: |
+          uv venv .venv --python 3.11
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Verify and export locked dependencies
+        run: |
+          uv lock --check
+          uv export --locked --extra dev --no-emit-project --no-hashes \
+            --output-file "$RUNNER_TEMP/lensemble-constraints.txt"
+          # Select the official CPU local build corresponding to the locked public torch version.
+          sed -i -E 's/^torch==([^ ;]+)/torch==\1+cpu/' \
+            "$RUNNER_TEMP/lensemble-constraints.txt"
+          grep -Eq '^torch==[^ ;]+\+cpu($|[ ;])' \
+            "$RUNNER_TEMP/lensemble-constraints.txt"
+
+      - name: Install torch (CPU wheel — no CUDA on a blocking gate)
+        run: |
+          uv pip install "torch>=2.4,<3" \
+            --constraint "$RUNNER_TEMP/lensemble-constraints.txt" \
+            --find-links https://download.pytorch.org/whl/cpu/torch/
+
+      - name: Install lensemble + dev tools
+        run: |
+          uv pip install -e ".[dev]" \
+            --constraint "$RUNNER_TEMP/lensemble-constraints.txt" \
+            --build-constraint "$RUNNER_TEMP/lensemble-constraints.txt" \
+            --find-links https://download.pytorch.org/whl/cpu/torch/
+
+      - name: Show the ordered release-gate plan
+        run: python scripts/release_gates.py plan
+
+      # Gate 1: lint + types.
+      - name: Gate 1 — lint + types
+        run: |
+          ruff check .
+          ruff format --check .
+          pyright
+
+      # Gate 2: unit + property tests, starting the combined coverage data.
+      - name: Gate 2 — unit + property
+        run: coverage run -m pytest tests/unit tests/property
+
+      # Gates 3–5 are named explicitly so the proof/reproducibility contracts cannot disappear into a
+      # generic full-suite step. The remaining suite below excludes these files to avoid running them twice.
+      - name: Gate 3 — aggregation determinism
+        run: coverage run --append -m pytest tests/ml/test_aggregation_determinism.py
+
+      - name: Gate 4 — same-seed manifest reproducibility
+        run: coverage run --append -m pytest tests/ml/test_reproducibility.py
+
+      - name: Gate 5 — public recomputation + proof-readiness audit
+        run: |
+          coverage run --append -m pytest \
+            tests/ml/test_recompute_alignment.py \
+            tests/integration/test_proofready_audit.py
+
+      - name: Remaining CPU test suite
+        run: |
+          coverage run --append -m pytest \
+            tests/integration tests/ml tests/e2e tests/regression \
+            --ignore=tests/integration/test_proofready_audit.py \
+            --ignore=tests/ml/test_aggregation_determinism.py \
+            --ignore=tests/ml/test_reproducibility.py \
+            --ignore=tests/ml/test_recompute_alignment.py
+
+      # Gate 6: coverage + docs links.
+      - name: Gate 6 — coverage thresholds
+        run: |
+          coverage report --fail-under=85
+          coverage report \
+            --include='*/lensemble/data/residency.py,*/lensemble/aggregation/secure_agg.py,*/lensemble/provenance/commit.py,*/lensemble/privacy/dp.py' \
+            --fail-under=100
+
+      - name: Gate 6 — docs links
+        run: python scripts/check_docs_links.py docs SPEC.md README.md
+
+      # Gate 7: changelog/package version agreement. The tag match is checked again before build.
+      - name: Gate 7 — version agreement
+        run: python scripts/release_gates.py version-agreement
+
+      # Gate 8: make the canonical RunManifest round-trip explicit even though the unit suite also
+      # contains it; this preserves the release checklist as a visible, independently failing step.
+      - name: Gate 8 — RunManifest schema round-trip
+        run: |
+          pytest \
+            tests/unit/test_manifest.py::test_manifest_round_trips_through_canonical_json \
+            -q
+
   build-and-smoke:
     name: build + clean-venv smoke (no upload yet)
+    needs: release-gates
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -28,30 +134,90 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.9.18"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Verify and export locked release dependencies
+        run: |
+          uv lock --check
+          uv export --locked --extra release --no-emit-project --no-hashes \
+            --output-file "$RUNNER_TEMP/lensemble-constraints.txt"
+          # The smoke environment is Linux/CPU; pin the local CPU build of the locked torch release.
+          sed -i -E 's/^torch==([^ ;]+)/torch==\1+cpu/' \
+            "$RUNNER_TEMP/lensemble-constraints.txt"
+          grep -Eq '^torch==[^ ;]+\+cpu($|[ ;])' \
+            "$RUNNER_TEMP/lensemble-constraints.txt"
+
       # Gate: the three version sources agree AND equal the tag, before anything is built (09 §5.2).
       - name: Version-agreement gate
         id: version
         run: |
           python scripts/release_gates.py version-agreement
           PKG=$(python scripts/release_gates.py version-agreement | awk '{print $NF}')
-          TAG="${GITHUB_REF_NAME#v}"
-          if [ -n "$TAG" ] && [ "$PKG" != "$TAG" ]; then
-            echo "::error::package version $PKG != tag $TAG"; exit 1
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            TAG="${GITHUB_REF_NAME#v}"
+            if [ "$PKG" != "$TAG" ]; then
+              echo "::error::package version $PKG != tag $TAG"; exit 1
+            fi
           fi
           echo "version=$PKG" >> "$GITHUB_OUTPUT"
 
       - name: Build sdist + wheel (PEP 517)
         run: |
-          python -m pip install --upgrade build
-          python -m build
+          uv build --python 3.11 --clear \
+            --build-constraints "$RUNNER_TEMP/lensemble-constraints.txt"
 
-      # Clean-venv smoke install asserting the installed version equals the tag, BEFORE any publish.
-      - name: Clean-venv smoke install
+      - name: Check artifact metadata and package contents
         run: |
-          python -m venv /tmp/smoke
-          /tmp/smoke/bin/pip install --upgrade pip
-          /tmp/smoke/bin/pip install dist/*.whl
-          /tmp/smoke/bin/python -c "import lensemble, sys; v='${{ steps.version.outputs.version }}'; sys.exit(0 if lensemble.__version__ == v else 1)"
+          uv venv "$RUNNER_TEMP/release-tools" --python 3.11
+          uv pip install --python "$RUNNER_TEMP/release-tools/bin/python" twine \
+            --constraint "$RUNNER_TEMP/lensemble-constraints.txt"
+          "$RUNNER_TEMP/release-tools/bin/twine" check --strict dist/*
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          wheels = list(Path("dist").glob("*.whl"))
+          sdists = list(Path("dist").glob("*.tar.gz"))
+          assert len(wheels) == 1, f"expected one wheel, found {wheels}"
+          assert len(sdists) == 1, f"expected one sdist, found {sdists}"
+          with ZipFile(wheels[0]) as archive:
+              names = set(archive.namelist())
+          assert "lensemble/py.typed" in names
+          for license_name in ("LICENSE", "LICENSE-docs", "LICENSE-data"):
+              assert any(name.endswith(f"/licenses/{license_name}") for name in names)
+          PY
+
+      # Clean-venv smoke install asserting version, typed-package data, and CLI entry point BEFORE publish.
+      - name: Clean-venv smoke install
+        env:
+          EXPECTED_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          uv venv "$RUNNER_TEMP/smoke" --python 3.11
+          uv pip install --python "$RUNNER_TEMP/smoke/bin/python" "torch>=2.4,<3" \
+            --constraint "$RUNNER_TEMP/lensemble-constraints.txt" \
+            --find-links https://download.pytorch.org/whl/cpu/torch/
+          uv pip install --python "$RUNNER_TEMP/smoke/bin/python" dist/*.whl \
+            --constraint "$RUNNER_TEMP/lensemble-constraints.txt" \
+            --build-constraint "$RUNNER_TEMP/lensemble-constraints.txt" \
+            --find-links https://download.pytorch.org/whl/cpu/torch/
+          "$RUNNER_TEMP/smoke/bin/python" - <<'PY'
+          import os
+          from importlib.metadata import version
+          from importlib.resources import files
+
+          import lensemble
+
+          expected = os.environ["EXPECTED_VERSION"]
+          assert lensemble.__version__ == expected
+          assert version("lensemble") == expected
+          assert files("lensemble").joinpath("py.typed").is_file()
+          PY
+          "$RUNNER_TEMP/smoke/bin/lensemble" --help >/dev/null
 
       - uses: actions/upload-artifact@v4
         with:
@@ -63,24 +229,67 @@ jobs:
     needs: build-and-smoke
     runs-on: ubuntu-latest
     permissions:
+      # Scoped to this final job: PyPI upload uses the project token, while
+      # `gh release create` needs write access to attach the already-smoked
+      # artifacts to the immutable tag.
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.9.18"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
       - uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist
 
-      # Immutable PyPI publish — gated on the project token; a release without it builds + smokes only.
-      - name: Publish to PyPI
-        if: ${{ env.PYPI_API_TOKEN != '' }}
+      # GitHub does not allow a secret directly in an `if:` expression. Expose only a boolean output,
+      # keeping the token itself scoped to this probe and the upload step (not third-party actions).
+      - name: Detect PyPI credentials
+        id: pypi_auth
         env:
           PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          python -m pip install --upgrade twine
-          python -m twine upload --non-interactive -u __token__ -p "$PYPI_API_TOKEN" dist/*
+          if [ -n "${PYPI_API_TOKEN:-}" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Require PyPI credentials for a release tag
+        if: startsWith(github.ref, 'refs/tags/v') && steps.pypi_auth.outputs.available != 'true'
+        run: |
+          echo "::error::PYPI_API_TOKEN is required for a version-tag release"
+          exit 1
+
+      - name: Install the locked publisher
+        if: startsWith(github.ref, 'refs/tags/v') && steps.pypi_auth.outputs.available == 'true'
+        run: |
+          uv lock --check
+          uv export --locked --extra release --no-emit-project --no-hashes \
+            --output-file "$RUNNER_TEMP/lensemble-constraints.txt"
+          uv venv "$RUNNER_TEMP/publish" --python 3.11
+          uv pip install --python "$RUNNER_TEMP/publish/bin/python" twine \
+            --constraint "$RUNNER_TEMP/lensemble-constraints.txt"
+
+      # Immutable PyPI publish — tag-only and gated on the project token. Manual dispatch is build-only.
+      - name: Publish to PyPI
+        if: startsWith(github.ref, 'refs/tags/v') && steps.pypi_auth.outputs.available == 'true'
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          "$RUNNER_TEMP/publish/bin/twine" upload \
+            --non-interactive dist/*
 
       - name: GitHub release (references the tag + changelog block)
+        if: startsWith(github.ref, 'refs/tags/v') && steps.pypi_auth.outputs.available == 'true'
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* \
             --title "$GITHUB_REF_NAME" \

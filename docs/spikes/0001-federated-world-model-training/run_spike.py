@@ -211,7 +211,7 @@ def write_probe(path: Path, cfg: LensembleConfig, source: str) -> None:
             points=points,
             landmark_idx=landmark_idx,
             landmark_targets=targets,
-            content_hash=probe_content_hash(points, landmark_idx),
+            content_hash=probe_content_hash(points, landmark_idx, targets),
             probe_version=1,
         ),
         path,
@@ -231,7 +231,7 @@ def build_anchor(encoder: nn.Module, source: str):
         points=points,
         landmark_idx=landmark_idx,
         landmark_targets=targets,
-        content_hash=probe_content_hash(points, landmark_idx),
+        content_hash=probe_content_hash(points, landmark_idx, targets),
         probe_version=1,
     )
     return FrameAnchor(

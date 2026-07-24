@@ -4,7 +4,8 @@
 # gate validates). The link-check gate (scripts/check_docs_links.py) is the authoritative cross-reference
 # check over docs/ + SPEC.md.
 site_name: Lensemble
-site_description: Federated, end-to-end JEPA world models — trained across sovereign data, verifiable by construction.
+site_description: Research stack for reproducible federated training and evaluation of action-conditioned JEPA world models.
+site_url: https://abdelstark.github.io/Lensemble/
 repo_url: https://github.com/AbdelStark/Lensemble
 docs_dir: docs
 theme:
@@ -52,23 +53,24 @@ not_in_nav: |
 
 nav:
   - Home: index.md
-  - API Reference: reference.md
-  - Ablation Ladder: ablation-ladder.md
+  - Research and Reproduction:
+      - Ablation Ladder: ablation-ladder.md
+      - Full-Model Federation Spike: spikes/0001-federated-world-model-training/README.md
+  - Evidence:
+      - Phase 2 Model Card (historical): evidence/phase2_model_card.md
+      - Phase 3 Model Card (historical): evidence/phase3_model_card.md
+      - MVP Model Card (historical SO-100): evidence/phase3_mvp_model_card.md
+      - Frozen-Checkpoint Adapter Demo Card: evidence/lewm_tworooms_demo_card.md
   - Roadmap:
       - Implementation: roadmap/IMPLEMENTATION.md
       - Phase 2 Empirical Evidence: roadmap/PHASE2.md
       - Phase 3 Consortium Training: roadmap/PHASE3.md
       - Dynamic Env Evidence: roadmap/DYNAMIC_ENV.md
+  - Optional Demos:
       - Browser Federated Demo: roadmap/BROWSER_FEDERATED_DEMO.md
       - Tapestry-like LeWM Pivot: roadmap/TAPESTRY_LEWM.md
       - Tapestry-like LeWM Runbook: roadmap/TAPESTRY_LEWM_RUNBOOK.md
-  - Evidence:
-      - Phase 2 Model Card: evidence/phase2_model_card.md
-      - Phase 3 Model Card: evidence/phase3_model_card.md
-      - MVP Model Card (corrected SO-100): evidence/phase3_mvp_model_card.md
-      - Tapestry-like LeWM Demo Card: evidence/lewm_tworooms_demo_card.md
-  - Spikes:
-      - Federated World-Model Training: spikes/0001-federated-world-model-training/README.md
+  - API Reference: reference.md
   - Specification:
       - Overview: spec/00-overview.md
       - Architecture: spec/01-architecture.md

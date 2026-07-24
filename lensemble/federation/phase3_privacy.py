@@ -7,10 +7,10 @@ accounting status without exposing per-participant update values.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import torch
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from lensemble.aggregation import (
     FieldParams,
@@ -23,6 +23,7 @@ from lensemble.aggregation import (
 from lensemble.errors import (
     LensembleErrorCode,
     PrivacyBudgetExceeded,
+    SchemaVersionMismatch,
     SecureAggregationError,
 )
 from lensemble.privacy import build_accountant
@@ -32,10 +33,19 @@ if TYPE_CHECKING:
     from lensemble.config.schema import LensembleConfig
     from lensemble.federation.pseudogradient import PseudoGradient
 
-PHASE3_AGGREGATION_PRIVACY_REPORT_SCHEMA_VERSION = 1
+PHASE3_AGGREGATION_PRIVACY_REPORT_SCHEMA_VERSION = 2
 
-AggregationBackendStatus = Literal["secure_sum", "explicit_fallback"]
-DPAccountingStatus = Literal["accounted", "disabled", "noise_disabled"]
+AggregationBackendStatus = Literal[
+    "secure_sum",
+    "post_commit_cross_check",
+    "explicit_fallback",
+]
+DPAccountingStatus = Literal[
+    "accounted",
+    "deterministic_replay_only",
+    "disabled",
+    "noise_disabled",
+]
 
 _FIELD_MODULUS = 2**61 - 1
 _FIELD_SCALE = 2.0**20
@@ -96,6 +106,55 @@ class Phase3AggregationPrivacyReport(BaseModel):
     redaction_policy: str = Field(min_length=1)
     claim_boundary: str = Field(min_length=1)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_v1_report_semantics(cls, raw: Any) -> Any:
+        """Reclassify schema-v1 claims without rewriting historical artifacts.
+
+        Version 1 called the simulated/TEE post-commit equivalence result a
+        consumed ``secure_sum`` and called deterministic replay noise effective
+        DP. Both paths are known to have been report-only mechanism checks, so a
+        current reader normalizes their in-memory meaning conservatively.
+        """
+
+        if not isinstance(raw, dict) or raw.get("schema_version") != 1:
+            return raw
+        migrated = dict(raw)
+        secure = migrated.get("secure_aggregation")
+        if isinstance(secure, dict):
+            secure = dict(secure)
+            if secure.get("backend_status") == "secure_sum":
+                secure["backend_status"] = "post_commit_cross_check"
+                secure["secure_sum_consumed"] = False
+            migrated["secure_aggregation"] = secure
+        dp = migrated.get("dp_accounting")
+        if isinstance(dp, dict):
+            dp = dict(dp)
+            if dp.get("status") == "accounted":
+                dp["status"] = "deterministic_replay_only"
+                dp["effective_dp"] = False
+            migrated["dp_accounting"] = dp
+        return migrated
+
+    @model_validator(mode="after")
+    def _gate_schema_version(self) -> "Phase3AggregationPrivacyReport":
+        if (
+            not 1
+            <= self.schema_version
+            <= (PHASE3_AGGREGATION_PRIVACY_REPORT_SCHEMA_VERSION)
+        ):
+            raise SchemaVersionMismatch(
+                "Phase 3 aggregation/privacy report schema_version "
+                f"{self.schema_version!r} exceeds reader max "
+                f"{PHASE3_AGGREGATION_PRIVACY_REPORT_SCHEMA_VERSION}",
+                code=LensembleErrorCode.SCHEMA_VERSION_MISMATCH,
+                remediation=(
+                    "read with a build supporting this Phase 3 "
+                    "aggregation/privacy schema"
+                ),
+            )
+        return self
+
 
 def build_phase3_aggregation_privacy_report(
     config: "LensembleConfig",
@@ -103,13 +162,14 @@ def build_phase3_aggregation_privacy_report(
     updates: "dict[str, PseudoGradient]",
     *,
     round_index: int,
+    coordinator_side_alignment: bool = False,
 ) -> Phase3AggregationPrivacyReport:
     """Build a Phase 3 report for one successful aggregation/privacy round.
 
-    The report consumes a secure-sum backend when the selected local backend is
-    runnable in-process. For backends whose production control plane is not
-    available in a local smoke, the report records an explicit fallback instead
-    of silently treating visible individual updates as secure aggregation.
+    The live coordinator has already committed from plaintext participant
+    updates before this function runs. Simulated/TEE backends therefore produce
+    only a post-commit fixed-point equivalence cross-check. Backends whose
+    production control plane is unavailable record an explicit fallback.
     """
 
     if not updates:
@@ -126,6 +186,14 @@ def build_phase3_aggregation_privacy_report(
         participant_count=max(1, int(config.federation.participant_count)),
         round_index=round_index,
     )
+    alignment_boundary = (
+        " The averaged_update_sha256 and any simulated/TEE equivalence "
+        "cross-check bind the pre-alignment released-update mean, not the "
+        "participant-specific aligned mapping consumed by the plaintext "
+        "optimizer; they are not optimizer-input equivalence evidence."
+        if coordinator_side_alignment
+        else ""
+    )
     return Phase3AggregationPrivacyReport(
         consortium_id=manifest.consortium_id,
         run_id=manifest.run_id,
@@ -139,8 +207,15 @@ def build_phase3_aggregation_privacy_report(
             "weights, and individual update values are omitted."
         ),
         claim_boundary=(
-            "Operational secure-aggregation and DP accounting report only; not a "
-            "provenance ledger and not a cryptographic proof of honest participant computation."
+            "Post-commit mechanism report: the live optimizer consumed plaintext "
+            "per-participant updates. Any simulated/TEE sum is a fixed-point "
+            "equivalence cross-check only, not optimizer input, and "
+            "secure_sum_consumed is false. DP epsilon is a fresh one-round "
+            "mechanism-accounting snapshot over deterministic replay noise, not "
+            "cumulative budget enforcement or claim-grade effective DP. This is "
+            "not a provenance ledger or a cryptographic proof of honest "
+            "participant computation."
+            f"{alignment_boundary}"
         ),
     )
 
@@ -213,8 +288,8 @@ def _secure_aggregation_report(
             )
         return Phase3SecureAggregationReport(
             backend=backend,
-            backend_status="secure_sum",
-            secure_sum_consumed=True,
+            backend_status="post_commit_cross_check",
+            secure_sum_consumed=False,
             fallback_used=False,
             fallback_reason=None,
             threshold=threshold,
@@ -223,7 +298,7 @@ def _secure_aggregation_report(
             field_scale=field.scale,
             fixed_point_tolerance=fixed_point_tolerance,
             secure_sum_sha256=flat_content_hash(secure_sum),
-            averaged_update_sha256=flat_content_hash(secure_sum / contributing),
+            averaged_update_sha256=flat_content_hash(direct_sum / contributing),
             secure_sum_max_abs_error=error,
             secure_sum_matches_plaintext=True,
         )
@@ -236,7 +311,8 @@ def _secure_aggregation_report(
         fallback_reason=(
             "masking backend requires pairwise key-routing and dropout-recovery "
             "shares from the production transport; this local smoke records the "
-            "fallback explicitly instead of claiming a masked secure-sum reveal"
+            "fallback explicitly after the optimizer consumed plaintext "
+            "participant updates instead of claiming a masked secure-sum reveal"
         ),
         threshold=threshold,
         contributing_count=contributing,
@@ -333,8 +409,8 @@ def _dp_accounting_report(
     )
     return Phase3DPAccountingReport(
         enabled=True,
-        effective_dp=True,
-        status="accounted",
+        effective_dp=False,
+        status="deterministic_replay_only",
         accountant=privacy.accountant,
         clip_norm=float(privacy.clip_norm),
         noise_multiplier=float(privacy.noise_multiplier),

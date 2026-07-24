@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any, Literal, Sequence
 
 import torch
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from lensemble.config import (
     LensembleConfig,
@@ -32,6 +32,7 @@ from lensemble.config import (
     Phase3PublicProbe,
     Phase3RuntimePolicy,
 )
+from lensemble.config.consortium import Phase3ProbeHashContract
 from lensemble.config.manifest import config_hash
 from lensemble.contracts import WMCP_VERSION, ActionKind, ActionSpec
 from lensemble.data.episode import Window
@@ -53,7 +54,24 @@ from lensemble.federation.service import Phase3CoordinatorService
 from lensemble.federation.transport import InProcessTransport, Transport
 from lensemble.model import build_action_head, build_encoder
 
-PHASE3_LONG_RUN_REPORT_SCHEMA_VERSION = 1
+PHASE3_LONG_RUN_REPORT_SCHEMA_VERSION = 2
+Phase3EvidenceStatus = Literal[
+    "current",
+    "historical_pre_correctness_fix",
+]
+_LEGACY_EVIDENCE_REASON = (
+    "This run predates the correction of the outer-update direction and the "
+    "public-probe-v2 target-binding contract. Its training and gauge metrics "
+    "are retained for audit history only and do not validate the corrected runtime; "
+    "rerun tracking is recorded in GitHub issue #335."
+)
+PHASE3_HISTORICAL_CLAIM_BOUNDARY = (
+    f"{_LEGACY_EVIDENCE_REASON} Historical operational scope: the artifact records "
+    "a deterministic tiny-model coordinator/participant lifecycle smoke. Its "
+    "simulated sums were post-commit cross-checks over plaintext optimizer inputs, "
+    "and its deterministic-noise epsilon values were one-round mechanism snapshots, "
+    "not effective or cumulative DP."
+)
 
 _D = 8
 _NUM_TOKENS = 4
@@ -122,9 +140,10 @@ class Phase3RunShape(BaseModel):
 class Phase3RoundRunSummary(BaseModel):
     """Residency-safe summary for one closed Phase 3 round.
 
-    The four learning metrics are optional: the local CI smoke leaves them unset, while a real HF Jobs
+    The six learning diagnostics are optional: the local CI smoke leaves them unset, while a real HF Jobs
     consortium run (``run_phase3_consortium`` with ``compute_metrics=True``) fills them in from the
-    committed global checkpoint and the public probe (RFC-0005 §4, RFC-0002). They carry no raw data.
+    committed global checkpoint and the public probe (RFC-0005 §4, RFC-0017, RFC-0002). They carry no
+    raw data.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -134,10 +153,15 @@ class Phase3RoundRunSummary(BaseModel):
     contributing_count: int = Field(ge=1)
     global_model_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     aggregation_backend_status: str = Field(min_length=1)
+    secure_sum_consumed: bool = False
+    dp_accounting_status: str = Field(default="legacy_unclassified", min_length=1)
+    effective_dp: bool = False
     dp_epsilon_spent: float | None = Field(default=None, ge=0.0)
     val_pred: float | None = Field(default=None)
     val_sigreg: float | None = Field(default=None)
     effective_rank: float | None = Field(default=None, ge=0.0)
+    latent_std_mean: float | None = Field(default=None, ge=0.0)
+    latent_rms: float | None = Field(default=None, ge=0.0)
     frame_drift_deg: float | None = Field(default=None, ge=0.0)
 
 
@@ -162,6 +186,8 @@ class Phase3LongRunReport(BaseModel):
     consortium_id: str = Field(min_length=1)
     run_id: str = Field(min_length=1)
     generated_at: datetime
+    evidence_status: Phase3EvidenceStatus = "current"
+    superseded_reason: str | None = Field(default=None, min_length=1)
     run_shape: Phase3RunShape
     dry_run_checks: tuple[str, ...] = Field(min_length=1)
     closed_rounds: int = Field(ge=0)
@@ -177,6 +203,61 @@ class Phase3LongRunReport(BaseModel):
     participants: tuple[Phase3ParticipantRunSummary, ...]
     blockers: tuple[str, ...] = ()
     claim_boundary: str = Field(min_length=1)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_v1_round_semantics(cls, raw: Any) -> Any:
+        """Conservatively reclassify schema-v1 report rows in memory.
+
+        Version 1 reports were emitted before the runtime distinguished a
+        post-commit sum cross-check from optimizer consumption and before
+        deterministic replay noise was separated from effective DP.
+        """
+
+        if not isinstance(raw, dict) or raw.get("schema_version") != 1:
+            return raw
+        migrated = dict(raw)
+        migrated.setdefault("evidence_status", "historical_pre_correctness_fix")
+        migrated.setdefault("superseded_reason", _LEGACY_EVIDENCE_REASON)
+        migrated["claim_boundary"] = PHASE3_HISTORICAL_CLAIM_BOUNDARY
+        rounds = migrated.get("rounds")
+        if isinstance(rounds, (list, tuple)):
+            migrated_rounds: list[Any] = []
+            for row in rounds:
+                if not isinstance(row, dict):
+                    migrated_rounds.append(row)
+                    continue
+                migrated_row = dict(row)
+                if (
+                    migrated_row.get("aggregation_backend_status") == "secure_sum"
+                    and "secure_sum_consumed" not in migrated_row
+                ):
+                    migrated_row["aggregation_backend_status"] = (
+                        "post_commit_cross_check"
+                    )
+                    migrated_row["secure_sum_consumed"] = False
+                if (
+                    migrated_row.get("dp_epsilon_spent") is not None
+                    and "dp_accounting_status" not in migrated_row
+                ):
+                    migrated_row["dp_accounting_status"] = "deterministic_replay_only"
+                    migrated_row["effective_dp"] = False
+                migrated_rounds.append(migrated_row)
+            migrated["rounds"] = migrated_rounds
+        return migrated
+
+    @model_validator(mode="after")
+    def _validate_evidence_status(self) -> "Phase3LongRunReport":
+        if (
+            self.evidence_status == "historical_pre_correctness_fix"
+            and self.superseded_reason is None
+        ):
+            raise ValueError("historical Phase 3 evidence requires superseded_reason")
+        if self.evidence_status == "current" and self.superseded_reason is not None:
+            raise ValueError(
+                "current Phase 3 evidence cannot declare superseded_reason"
+            )
+        return self
 
 
 def phase3_long_run_smoke_config(
@@ -242,6 +323,7 @@ def phase3_long_run_smoke_manifest(
     cfg: LensembleConfig,
     *,
     public_probe_hash: str | None = None,
+    public_probe_hash_contract: Phase3ProbeHashContract = "public-probe-v2",
 ) -> Phase3ConsortiumManifest:
     """Return a four-participant manifest matching the long-run smoke config."""
 
@@ -266,6 +348,11 @@ def phase3_long_run_smoke_manifest(
     probe = Phase3PublicProbe(
         probe_id="phase3-long-run-smoke-probe",
         version=1,
+        hash_contract=(
+            public_probe_hash_contract
+            if public_probe_hash is not None
+            else "placeholder-unbound"
+        ),
         content_hash=public_probe_hash or "b" * 64,
     )
     participants = tuple(
@@ -366,7 +453,7 @@ def _build_public_probe(cfg: LensembleConfig) -> PublicProbe:
         points=points,
         landmark_idx=landmark_idx,
         landmark_targets=targets,
-        content_hash=probe_content_hash(points, landmark_idx),
+        content_hash=probe_content_hash(points, landmark_idx, targets),
         probe_version=1,
     )
 
@@ -521,7 +608,7 @@ def run_phase3_long_run_smoke(
     """Run a deterministic four-participant, multi-round Phase 3 smoke.
 
     With ``compute_metrics=True`` the report's round rows carry real (tiny-model) per-round
-    ``val_pred``/``val_sigreg``/``effective_rank``/``frame_drift_deg`` measured off the committed global
+    prediction, rank, latent-scale, and frame-drift diagnostics measured off the committed global
     checkpoints — the same path the HF Jobs consortium launcher exercises at non-toy scale.
     """
 
@@ -534,9 +621,12 @@ def run_phase3_long_run_smoke(
         metric_windows=2,
         compute_metrics=compute_metrics,
         claim_boundary=(
-            "Local deterministic Phase 3 long-run smoke: proves orchestration, "
-            "artifact/report generation, secure-sum reporting, and DP accounting "
-            "for a tiny model. It is not a published HF Jobs robotics result."
+            "Local deterministic Phase 3 long-run smoke: exercises orchestration, "
+            "artifact/report generation, post-commit secure-sum cross-check "
+            "reporting, and one-round DP mechanism-accounting snapshots for a "
+            "tiny model. The optimizer consumes plaintext participant updates; "
+            "this is not secure aggregation, claim-grade DP, or a published HF "
+            "Jobs robotics result."
         ),
     )
 
@@ -548,6 +638,8 @@ class _RoundMetrics:
     val_pred: float | None = None
     val_sigreg: float | None = None
     effective_rank: float | None = None
+    latent_std_mean: float | None = None
+    latent_rms: float | None = None
     frame_drift_deg: float | None = None
 
 
@@ -565,7 +657,7 @@ def _round_learning_metrics(
     eval_action_spec: ActionSpec,
     metric_windows: int,
 ) -> _RoundMetrics:
-    """Evaluate the just-committed global model: val_pred/val_sigreg/effective_rank + frame_drift_deg."""
+    """Evaluate prediction, geometry, absolute scale, and drift on the committed global model."""
 
     artifacts_dir = run_dir / "coordinator-artifacts"
     final_ckpt = artifacts_dir / f"round-{round_index + 1:05d}"
@@ -596,6 +688,8 @@ def _round_learning_metrics(
         val_pred=window_metrics.val_pred,
         val_sigreg=window_metrics.val_sigreg,
         effective_rank=window_metrics.effective_rank,
+        latent_std_mean=window_metrics.latent_std_mean,
+        latent_rms=window_metrics.latent_rms,
         frame_drift_deg=frame_drift_deg,
     )
 
@@ -656,6 +750,7 @@ def _run_consortium_rounds(
         # early divergence killable) via `hf jobs logs -f` — the report file is only written at the end.
         print(
             f"[round {round_index}] eff_rank={metrics.effective_rank} "
+            f"latent_std_mean={metrics.latent_std_mean} latent_rms={metrics.latent_rms} "
             f"val_pred={metrics.val_pred} val_sigreg={metrics.val_sigreg} "
             f"frame_drift_deg={metrics.frame_drift_deg} "
             f"hash={record.global_model_hash[:12]}",
@@ -672,6 +767,21 @@ def _run_consortium_rounds(
                     if privacy_report is not None
                     else "not_reported"
                 ),
+                secure_sum_consumed=(
+                    privacy_report.secure_aggregation.secure_sum_consumed
+                    if privacy_report is not None
+                    else False
+                ),
+                dp_accounting_status=(
+                    privacy_report.dp_accounting.status
+                    if privacy_report is not None
+                    else "not_reported"
+                ),
+                effective_dp=(
+                    privacy_report.dp_accounting.effective_dp
+                    if privacy_report is not None
+                    else False
+                ),
                 dp_epsilon_spent=(
                     privacy_report.dp_accounting.epsilon_spent
                     if privacy_report is not None
@@ -680,6 +790,8 @@ def _run_consortium_rounds(
                 val_pred=metrics.val_pred,
                 val_sigreg=metrics.val_sigreg,
                 effective_rank=metrics.effective_rank,
+                latent_std_mean=metrics.latent_std_mean,
+                latent_rms=metrics.latent_rms,
                 frame_drift_deg=metrics.frame_drift_deg,
             )
         )
@@ -790,14 +902,18 @@ def run_phase3_consortium(
 
     This is the library entry point the HF Jobs launcher calls: it runs the networked
     coordinator-service + sovereign participant-agent runtime (not the claim-MVP path) over the supplied
-    participant configs, and — when ``compute_metrics`` is set — measures ``val_pred``/``val_sigreg``/
-    ``effective_rank`` on the held-out eval split plus per-round ``frame_drift_deg`` from released
-    pseudo-gradients. No raw participant trajectory ever leaves a participant boundary.
+    participant configs, and — when ``compute_metrics`` is set — measures prediction, anti-collapse,
+    effective-rank, and absolute latent-scale diagnostics on the held-out eval split plus per-round
+    ``frame_drift_deg`` from released pseudo-gradients. No raw participant trajectory ever leaves a
+    participant boundary.
 
-    ``enable_backstop`` (#262) turns the LIVE Layer-3 Procrustes backstop ON in the coordinator: each
-    over-threshold participant's encoder terminal frame + predictor I/O are aligned to the shared round-0
-    reference before the outer step. Default OFF (the measured pass-through); the real anchored-federation
-    run sets it ON.
+    ``enable_backstop`` (#262) enables a coordinator-side Layer-3 Procrustes
+    research harness. It is valid only while the coordinator receives plaintext,
+    unclipped participant carriers with privacy and quantization disabled; it
+    cannot run after a genuine secure-sum boundary. The default is OFF. A
+    production secure-aggregation path must perform participant-specific
+    alignment and re-differencing before clipping, noise, quantization, and
+    masking inside the participant trust domain.
     """
 
     run_dir = Path(run_dir)
@@ -948,7 +1064,7 @@ _SMOKE_EVAL_BUDGET = "deferred to #228; smoke reserves synthetic downstream eval
 def _default_artifact_targets() -> Phase3ArtifactTargets:
     return Phase3ArtifactTargets(
         model_repo="hf://models/abdelstark/lensemble-phase3-consortium-checkpoint",
-        dataset_repo="hf://datasets/abdelstark/lensemble-phase3-consortium-data",
+        dataset_repo="hf://datasets/abdelstark/lensemble-phase3-so100-silos",
         reports_prefix="reports/phase3/",
         publication_mode="local_smoke",
     )
@@ -1017,6 +1133,8 @@ def _root(participant_id: str) -> bytes:
 
 __all__ = [
     "PHASE3_LONG_RUN_REPORT_SCHEMA_VERSION",
+    "PHASE3_HISTORICAL_CLAIM_BOUNDARY",
+    "Phase3EvidenceStatus",
     "Phase3ArtifactTargets",
     "Phase3ConsortiumInputs",
     "Phase3LongRunReport",

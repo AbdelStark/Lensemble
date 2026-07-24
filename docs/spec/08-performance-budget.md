@@ -246,7 +246,8 @@ out of v1.0 scope per [conventions §12](conventions.md#12-milestones-and-stages
 - **Compute-bound terms** (grow ~linearly with parameters and ~quadratically with token count `N`):
   encoder forward/backward, optimizer state, activation memory. These are absorbed by intra-participant
   parallelism (FSDP2 / tensor / context — [RFC-0001 §4](../rfcs/RFC-0001-architecture.md)); this is the
-  standard distributed stack and the only place it applies. It is the inner loop, not the contribution.
+  standard distributed stack and the only place it applies. It is inner-loop
+  infrastructure rather than a project-specific mechanism.
 - **Communication-bound terms** (grow ~linearly with the federated parameter count): the per-round
   $\Delta_c$ payload (§4). This is the term DiLoCo's every-$H$-steps schedule and int8 quantization
   exist to contain. As the model scales, the federation stays communication-bound on the outer loop, so
@@ -256,8 +257,8 @@ out of v1.0 scope per [conventions §12](conventions.md#12-milestones-and-stages
   Procrustes diagnostic (§5.2). The probe forward scales with the encoder, and `d` scales the SVD cost
   modestly.
 
-The scaling story is intentionally bounded for v1.0: the v1.0 hardening milestone ([conventions §12](conventions.md#12-milestones-and-stages)) covers
-ViT-L, Fork A fallback, and proof-ready guarantees, not the 1.2B own-pretrain. Stage E scaling is
+The scaling target is intentionally bounded for v1.0: the v1.0 hardening milestone ([conventions §12](conventions.md#12-milestones-and-stages)) covers
+ViT-L, Fork A fallback, and deterministic/provenance disciplines, not the 1.2B own-pretrain. Stage E scaling is
 captured as future work, not an implementable v1.0 issue.
 
 OPEN QUESTION: the communication budget at 1.2B scale and the $H$ value that balances it against drift.

@@ -1,0 +1,75 @@
+name: Feature or RFC proposal
+description: Propose a scoped capability, contract change, experiment, or design decision.
+title: "[Proposal]: "
+labels:
+  - "type:feature"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Start from the current specification, roadmaps, and issue state. Proposals
+        should identify a concrete problem, preserve documented non-claims, and
+        define independently verifiable acceptance criteria.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues, RFCs, and roadmaps for overlapping work.
+          required: true
+        - label: I separated this proposal from unrelated changes.
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and evidence
+      description: What concrete limitation exists, who encounters it, and what evidence shows it matters?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Describe the smallest coherent change that addresses the problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List observable, reproducible conditions that would close the issue.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and non-goals
+      description: State what the proposal includes and explicitly does not claim or implement.
+    validations:
+      required: true
+
+  - type: textarea
+    id: contracts
+    attributes:
+      label: Contracts and compatibility
+      description: Identify affected public APIs, schemas, RFCs, INV-* invariants, configs, or migration requirements.
+
+  - type: textarea
+    id: trust
+    attributes:
+      label: Trust, privacy, and evidence impact
+      description: Describe changes to residency, privacy, aggregation, provenance, supply-chain, or public claim boundaries.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Explain viable alternatives and why this proposal is preferable.

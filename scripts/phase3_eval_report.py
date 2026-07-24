@@ -195,6 +195,24 @@ def _local_only_control_input(
 
 def _completed_controls(args: argparse.Namespace) -> list[Phase3CompletedControlInput]:
     controls: list[Phase3CompletedControlInput] = []
+    if args.anchored_report is not None:
+        if args.anchored_revision is None or args.anchored_run_manifest is None:
+            raise SystemExit(
+                "--anchored-report requires --anchored-revision and "
+                "--anchored-run-manifest"
+            )
+        controls.append(
+            _federated_control_input(
+                control_role="anchored-federation",
+                report_path=args.anchored_report,
+                revision=args.anchored_revision,
+                run_manifest_path=args.anchored_run_manifest,
+                note=(
+                    "Anchored-federation (lambda_anc=0.01) control; the producer "
+                    "extracts its round-0 gauge values from the immutable report."
+                ),
+            )
+        )
     if args.naive_report is not None:
         if args.naive_revision is None or args.naive_run_manifest is None:
             raise SystemExit(

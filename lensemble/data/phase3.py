@@ -22,6 +22,7 @@ from lensemble.config.consortium import (
     Phase3ConsortiumManifest,
     Phase3ObservationContract,
     Phase3ParticipantDeclaration,
+    Phase3ProbeHashContract,
     Phase3PublicProbe,
     validate_consortium_manifest,
 )
@@ -81,6 +82,7 @@ class Phase3ProbeGovernance(BaseModel):
 
     probe_id: str = Field(min_length=1)
     version: int = Field(ge=1)
+    hash_contract: Phase3ProbeHashContract = "legacy-unscoped"
     content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     artifact_uri: str = Field(min_length=1)
     curator: str = Field(min_length=1)
@@ -211,6 +213,13 @@ def validate_phase3_dataset_registry(
             registry.probe_governance.version,
             f"== public_probe.version ({registry.public_probe.version})",
             "govern the same public probe version declared in the registry",
+        )
+    if registry.probe_governance.hash_contract != registry.public_probe.hash_contract:
+        raise _fail(
+            "probe_governance.hash_contract",
+            registry.probe_governance.hash_contract,
+            f"== public_probe.hash_contract ({registry.public_probe.hash_contract})",
+            "declare whether the digest binds the full probe or only its pre-target source",
         )
     if registry.probe_governance.content_hash != registry.public_probe.content_hash:
         raise _fail(
@@ -600,6 +609,7 @@ def phase3_registry_from_consortium_manifest(
         probe_governance=Phase3ProbeGovernance(
             probe_id=manifest.public_probe.probe_id,
             version=manifest.public_probe.version,
+            hash_contract=manifest.public_probe.hash_contract,
             content_hash=manifest.public_probe.content_hash,
             artifact_uri=(
                 f"artifact://phase3/public-probes/{manifest.public_probe.probe_id}"
@@ -607,11 +617,11 @@ def phase3_registry_from_consortium_manifest(
             ),
             curator="phase3-consortium-operators",
             versioning_policy=(
-                "Probe bytes are immutable for one run_id; any probe change requires "
-                "a new version, new content hash, and model-card update."
+                "Probe bytes are immutable for one run_id; any probe/source change requires "
+                "a new version, a scope-labelled digest, and model-card update."
             ),
             allowed_update_process=(
-                "Submit a registry update PR that changes probe_id/version/hash, "
+                "Submit a registry update PR that changes probe_id/version/hash contract/digest, "
                 "regenerates this registry, reruns participant and coordinator "
                 "preflights, and states the claim-boundary impact."
             ),

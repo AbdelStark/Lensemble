@@ -14,9 +14,10 @@
 This drives the operational Phase 3 stack — the networked ``Phase3CoordinatorService`` plus one
 sovereign ``Phase3ParticipantAgent`` per mounted participant-local data ref — for ``--num-rounds``
 closed federated rounds and emits REAL residency-safe per-round JEPA metrics
-(``val_pred``/``val_sigreg``/``effective_rank``/``frame_drift_deg``) measured off the committed global
-checkpoints and a disjoint held-out eval split. No raw participant trajectory ever leaves a participant
-boundary; only pseudo-gradients and residency-safe metadata cross.
+(``val_pred``/``val_sigreg``/``effective_rank``/``latent_std_mean``/``latent_rms``/
+``frame_drift_deg``) measured off the committed global checkpoints and a disjoint held-out eval split.
+No raw participant trajectory ever leaves a participant boundary; only pseudo-gradients and
+residency-safe metadata cross.
 
 The metric/orchestration LIBRARY is :func:`lensemble.federation.run_phase3_consortium`; this script only
 loads each silo's residency-safe metadata, builds the agreed manifest + dataset/probe registry from the
@@ -101,8 +102,9 @@ _CLAIM_BOUNDARY = (
 # Eval-planner budget is deferred to #245; the per-round JEPA metrics here are representation metrics, not
 # downstream task-success planning.
 _EVAL_BUDGET = (
-    "Per-round JEPA representation metrics only (val_pred/val_sigreg/effective_rank/frame_drift_deg); "
-    "downstream planner/task-success eval budget deferred to #245."
+    "Per-round JEPA representation metrics only "
+    "(val_pred/val_sigreg/effective_rank/latent_std_mean/latent_rms/frame_drift_deg); downstream "
+    "planner/task-success eval budget deferred to #245."
 )
 
 # The honest scope of the --local-only control (issue #244): the no-aggregation baseline that quantifies
@@ -223,18 +225,26 @@ def _args(argv: list[str] | None) -> argparse.Namespace:
         help="Frame-anchor variant (RFC-0002 §4): landmark (Variant A) or rotational (Variant B).",
     )
     parser.add_argument("--target-stop-gradient", action="store_true")
-    # #263: the DiLoCo outer step θ_{t+1} = θ_t − outer_lr · Nesterov_momentum(mean_c Δ_c). The
+    # #263: Δ_c is local-minus-global, so the DiLoCo-equivalent outer step adds its Nesterov displacement:
+    # θ_{t+1} = θ_t + outer_lr · Nesterov_momentum(mean_c Δ_c). The
     # FederationConfig schema defaults (outer_lr=0.7, momentum=0.9) are aggressive — they amplify a
     # partially-aligned averaged delta at the global level each round, compounding the gauge collapse.
     # The conservative real-run defaults below stop the outer step from fighting the M1 alignment fixes.
     parser.add_argument("--outer-lr", type=float, default=0.5)
     parser.add_argument("--outer-momentum", type=float, default=0.0)
-    # #262: the LIVE Layer-3 Procrustes backstop. Default ON for the real anchored-federation run — the
-    # coordinator reconstructs each participant's encoder from its released delta, measures f_c(P) on the
-    # pinned probe, and aligns each over-threshold participant's encoder terminal frame + predictor I/O to
-    # the shared round-0 reference before the outer step (RFC-0002 §5).
+    # #262: the coordinator-side Layer-3 Procrustes backstop is a PLAINTEXT research harness. It requires
+    # individually visible raw deltas and therefore cannot be combined with DP, quantization, or a
+    # secure-sum backend. The target secure path performs participant-specific alignment before those
+    # release transforms (INV-ALIGN-BEFORE-RELEASE). Keep the launcher default off.
     parser.add_argument(
-        "--backstop", dest="backstop", action="store_true", default=True
+        "--backstop",
+        dest="backstop",
+        action="store_true",
+        default=False,
+        help=(
+            "Enable the plaintext coordinator-side alignment harness; requires "
+            "--no-privacy and --secure-agg-backend simulated."
+        ),
     )
     parser.add_argument("--no-backstop", dest="backstop", action="store_false")
     # 2-phase Fork-A (#259 MVP M3): warm-start the round-0 global from a committed checkpoint (an HF model
@@ -560,6 +570,7 @@ def _build_manifest(
     probe = Phase3PublicProbe(
         probe_id=f"{args.consortium_id}-public-probe",
         version=1,
+        hash_contract="public-probe-v2",
         content_hash=public_probe_hash,
     )
     capabilities = Phase3ParticipantCapabilities(
@@ -868,7 +879,7 @@ def _real_run(
         eval_budget=_EVAL_BUDGET,
         enable_backstop=bool(
             args.backstop
-        ),  # #262: live Procrustes backstop (default on)
+        ),  # #262: explicit plaintext Procrustes research harness
         warm_start=warm_start,  # 2-phase Fork-A: warm-start θ_0/φ_0 from a committed checkpoint
         claim_boundary=_CLAIM_BOUNDARY,
     )
@@ -994,6 +1005,10 @@ def _local_only_run(
                 "effective_rank": (
                     None if metrics is None else float(metrics.effective_rank)
                 ),
+                "latent_std_mean": (
+                    None if metrics is None else float(metrics.latent_std_mean)
+                ),
+                "latent_rms": None if metrics is None else float(metrics.latent_rms),
             }
         )
 

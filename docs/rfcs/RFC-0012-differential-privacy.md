@@ -14,10 +14,29 @@
 | **Requires** | [RFC-0003](RFC-0003-federated-protocol.md) (the round that releases `Δ_c`), [RFC-0011](RFC-0011-secure-aggregation.md) (the sum the noise protects) |
 | **Defers to** | [RFC-0013](RFC-0013-coordinator-runtime.md) (round state machine / churn semantics) |
 
+> **Implementation status (2026-07-24 — claim-grade release and cumulative enforcement blocked).**
+> `Participant.local_round()` does apply the configured clip-then-noise mechanism before constructing
+> the released `PseudoGradient`, and the stateful RDP/PRV accountant implementations have direct tests.
+> That Gaussian draw is currently deterministic from
+> `(config.determinism.root_seed, round_index, participant_id)`. The coordinator receives the same config,
+> and the root seed is recorded in the run manifests, so an observer with that seed and the matching
+> runtime can reconstruct and subtract the noise. This is deterministic mechanism/test plumbing, not a
+> claim-grade DP release against the coordinator or a manifest reader. Claim-grade DP requires
+> participant-secret CSPRNG entropy that is never exposed in shared config, messages, reports, or
+> manifests.
+>
+> Separately, the Phase 3 service does not retain either accountant across rounds. After each successful
+> coordinator commit, `build_phase3_aggregation_privacy_report()` constructs a fresh accountant, checks
+> and consumes exactly one step, and reports `rounds_accounted=1`,
+> `status=deterministic_replay_only`, and `effective_dp=false`. It does not perform a cumulative
+> pre-release `would_exceed` check and cannot stop a multi-round run at its configured total budget.
+> Historical Phase 3 `DP-accounted rounds` and `ε≈5.30` values are therefore one-round reporting
+> snapshots, not a composed ten-round epsilon or evidence of run-budget enforcement.
+
 ## Summary
 
-This RFC specifies the differential-privacy (DP) mechanism applied per-participant to each released
-pseudo-gradient `Δ_c`, and the `(ε,δ)` accountant that bounds the cumulative privacy loss over the
+This RFC specifies the intended differential-privacy (DP) contract around each participant's
+already-aligned pseudo-gradient `Δ'_c`, and the `(ε,δ)` accountant that must bound cumulative privacy loss over the
 planned number of federated rounds. The mechanism is the Gaussian mechanism on a clipped update: clip
 `Δ_c` to L2 norm `C_clip` (`INV-DP-BOUND`), then add isotropic Gaussian noise `N(0, σ² C_clip² I)`. The
 clip-then-noise *operations and their ordering* are pinned at the protocol level in
@@ -31,19 +50,20 @@ not per-example DP-SGD inside the inner loop. One participant's entire `H`-step 
 contribution. This RFC states that scope and its honest limits plainly, because the unit determines what
 the released `(ε,δ)` actually protects.
 
-The accountant lives behind `lensemble.privacy.accountant` as a swappable interface so a reference
+The accountant contract lives behind `lensemble.privacy.accountant` as a swappable interface so a reference
 implementation (RDP or PRV; the [conventions document](../spec/conventions.md) names `opacus` or a vendored accountant,
 [conventions §11](../spec/conventions.md#11-external-dependencies)) can be replaced without touching the
-mechanism or the round. The mechanism lives in `lensemble.privacy.dp`. Both are invoked from
+mechanism or the round. The mechanism lives in `lensemble.privacy.dp` and is invoked from
 `Participant.local_round` before the `PseudoGradient`
 ([03 §6](../spec/03-data-model.md#6-pseudogradient--the-one-private-object-that-does-cross-the-boundary))
-leaves the participant boundary.
+leaves the participant boundary. The persistent-accountant invocation required by this RFC is not yet
+integrated into that release path.
 
 ## Motivation
 
-Secure aggregation ([RFC-0011](RFC-0011-secure-aggregation.md)) hides every individual `Δ_c` from the
-coordinator, but it protects only against an honest-but-curious aggregator observing the *transcript*; it
-does not bound what the *revealed sum* `Σ_c Δ_c`, or the released global model
+The intended secure-aggregation protocol ([RFC-0011](RFC-0011-secure-aggregation.md)) hides every
+individual `Δ_c` from the coordinator, but it protects only against an honest-but-curious aggregator
+observing the *transcript*; it does not bound what the *revealed sum* `Σ_c Δ_c`, or the released global model
 `(θ_{t+1}, φ_{t+1})`, leaks about any one participant's sovereign data. An individual `H`-step update,
 and to a lesser degree the aggregate, can memorize and re-expose training trajectories. The federation
 must therefore add a calibrated-noise guarantee on top of the residency boundary (`INV-RESIDENCY`,
@@ -76,12 +96,13 @@ Two facts shape the design:
   budget query before release, `PrivacyBudgetExceeded` when the budget is spent, swappable backend.
 - Specify how `σ` is calibrated to a target `(ε,δ)` given the round count, and how the budget is consumed
   per round.
-- Define the determinism contract for clipping (a pure function) and the seeded, manifest-recorded noise
-  draw, consistent with `INV-AGG-DETERMINISM` on the downstream sum.
+- Separate deterministic, seeded replay for tests from participant-secret CSPRNG entropy for claim-grade
+  DP, while preserving `INV-AGG-DETERMINISM` on the downstream sum once a released update is fixed.
 - Enumerate the DP failure modes with the error raised and the system response, using the
   [conventions §6](../spec/conventions.md#6-error-taxonomy) taxonomy.
 - State the interaction with secure aggregation (noise added per-participant *before* masking) and with
-  int8 quantization (quantization applied after noising).
+  int8 quantization (quantization applied after noising), while enforcing that participant-specific
+  alignment/re-difference occurs before all three (`INV-ALIGN-BEFORE-RELEASE`).
 - Record the joint-calibration and privacy-unit-under-churn open questions with owner and resolution
   path.
 
@@ -105,27 +126,36 @@ Two facts shape the design:
 
 ### 1. The mechanism
 
-For participant `c` in round `t`, after forming `Δ_c = (θ_c^local, φ_c^local) − (θ_t, φ_t)`
-([RFC-0003 §3](RFC-0003-federated-protocol.md#3-the-pseudogradient-contract)) and before the
-`PseudoGradient` leaves the boundary, apply two operations in this order:
+For participant `c` in round `t`, first form the raw local full weights and apply any required
+participant-specific Procrustes transform, then re-difference
+`Δ'_c = W'_c − W_t` (`Δ'_c = Δ_c` when the backstop does not fire;
+[RFC-0002 §5](RFC-0002-gauge-and-aggregation.md#5-layer-3--procrustes-re-alignment-at-aggregation-backstop)).
+Before the `PseudoGradient` leaves the boundary, apply two operations to `Δ'_c` in this order:
 
 1. **Clip** to a fixed L2 bound:
 
-   $$\Delta_c \leftarrow \Delta_c \cdot \min\!\left(1,\; \frac{C_{\text{clip}}}{\lVert\Delta_c\rVert_2}\right).$$
+   $$\Delta'_c \leftarrow \Delta'_c \cdot \min\!\left(1,\; \frac{C_{\text{clip}}}{\lVert\Delta'_c\rVert_2}\right).$$
 
-   After clipping, $\lVert\Delta_c\rVert_2 \le C_{\text{clip}}$ holds exactly. This is **`INV-DP-BOUND`**,
+   After clipping, $\lVert\Delta'_c\rVert_2 \le C_{\text{clip}}$ holds exactly. This is **`INV-DP-BOUND`**,
    enforced in `lensemble.privacy.dp` and asserted on the post-clip norm. The bound is the per-record
    sensitivity that makes the noise calibration sound: with the participant-round as the unit, adding or
    removing one participant changes the summed update by at most `C_clip` in L2 norm.
 
 2. **Noise** with the isotropic Gaussian mechanism:
 
-   $$\Delta_c \leftarrow \Delta_c + \xi,\qquad \xi \sim N\!\left(0,\; \sigma^2 C_{\text{clip}}^2 I\right),$$
+   $$\Delta'_c \leftarrow \Delta'_c + \xi,\qquad \xi \sim N\!\left(0,\; \sigma^2 C_{\text{clip}}^2 I\right),$$
 
    where `σ` is the noise multiplier calibrated to a target `(ε,δ)` over the planned round count (§3).
-   The noised vector becomes `PseudoGradient.delta`; its `l2_norm` field records the **post-clip,
-   pre-noise** norm (`≤ C_clip`), which is the quantity `INV-DP-BOUND` constrains. (Recording the
-   post-noise norm would leak the noise draw and is not done.)
+   The noised vector becomes `PseudoGradient.delta`. In the live implementation,
+   `PseudoGradient.l2_norm` records the released **post-noise** norm and may exceed `C_clip`; the bounded
+   post-clip, pre-noise norm is checked internally before release.
+
+This is `INV-ALIGN-BEFORE-RELEASE`. A backstop that consults raw local weights after the Gaussian
+mechanism would be an additional data-dependent access not represented by this mechanism contract; it
+must not be smuggled in as generic post-processing. A deterministic common function of only an already
+DP-released vector retains DP by post-processing, but it is not the required full-weight alignment and
+cannot recover participant-specific information after a secure sum. Optional quantization remains
+downstream of noise.
 
 The mechanism signature:
 
@@ -157,9 +187,9 @@ def add_gaussian_noise(
 ) -> Tensor:
     """Add N(0, (noise_multiplier * clip_norm)^2 I) using a seeded generator.
 
-    `generator` is derived from the run root seed and (round_index, participant_id) so the draw is
-    recorded in the RunManifest (RFC-0009) and is reproducible for that participant; it is NOT shared
-    across participants (independent noise per participant is required for the privacy analysis).
+    The live replay path derives `generator` from the shared run root seed and
+    (round_index, participant_id). A claim-grade path must instead supply participant-secret CSPRNG
+    entropy that is not recorded in a cross-boundary artifact.
     """
     ...
 
@@ -170,20 +200,27 @@ def privatize(delta: Tensor, cfg: DPConfig, generator: torch.Generator) -> tuple
 ```
 
 `clip_delta` is a pure function and is deterministic. `add_gaussian_noise` is deterministic *given its
-seeded `generator`*; the seed derivation (root seed, round, participant) is recorded in the
-`RunManifest` ([RFC-0009 §RunManifest](RFC-0009-configuration-reproducibility.md), [conventions §9](../spec/conventions.md#9-determinism-dtype-device)),
-so a run is reproducible without the noise being predictable to an adversary who does not hold the seed.
+`generator`*. In the live path, `Participant.local_round()` derives that generator with the public
+`derive` function from the shared `config.determinism.root_seed`, round index, and participant id. The
+coordinator is constructed from the same config; generic `RunManifest` artifacts record `root_seed` and
+the fully resolved config, and the Phase 3 run manifest records `run_shape.root_seed`
+([RFC-0009 §RunManifest](RFC-0009-configuration-reproducibility.md),
+[conventions §9](../spec/conventions.md#9-determinism-dtype-device)). The draw is therefore replayable by
+the coordinator and later manifest readers. Because they can subtract it from the released delta, the
+current deterministic draw provides no DP protection against those observers.
 
-`RISK:` In Stage C (real boundary) the per-participant noise generator MUST be seeded from a source the
-coordinator cannot predict, or a curious coordinator that learns the seed could subtract the noise.
-Resolution plan: in v0.3 the noise seed is drawn from a participant-local CSPRNG and is NOT placed in any
-cross-boundary message; only its derivation *policy* (not the seed value) is recorded for the Stage-B
-in-process simulation where reproducibility is wanted and there is no real adversary. Owner @AbdelStark;
-resolve in [RFC-0013](RFC-0013-coordinator-runtime.md), Stage C.
+**Required entropy boundary.** A claim-grade run MUST draw Gaussian noise from participant-secret CSPRNG
+entropy that the coordinator cannot derive and that is not placed in shared config, a cross-boundary
+message, a report, or a manifest. Reproducible seed injection remains useful for mechanism tests and
+non-private replay runs, but those runs MUST be labeled non-private. A public artifact may record the
+entropy-source policy and mechanism parameters, never the secret entropy. This integration is a blocker
+alongside persistent accounting; its runtime owner is
+[RFC-0013](RFC-0013-coordinator-runtime.md).
 
 ### 2. The privacy unit (scope)
 
-The unit of privacy is one **participant's contribution to one round**. Formally, two federated runs are
+Under the required entropy and accounting integration, the unit of privacy is one **participant's
+contribution to one round**. Formally, two federated runs are
 neighbors if they differ in the presence/absence of one participant's `Δ_c` in one round. The released
 `(ε,δ)` then bounds, for that neighboring relation, how distinguishable the released artifacts (the
 revealed sum, the committed global model) are with vs. without that contribution.
@@ -192,8 +229,8 @@ This is **update-level DP**, and what it protects is correspondingly coarse and 
 leakage of *the participant's round contribution as a whole*, not of any single training example, frame,
 or episode within it — example-level DP would require per-example clipping inside the inner loop
 (rejected, `Alternatives Considered`). Over `T` rounds a participant present in all rounds contributes
-`T` times; the accountant composes the per-round mechanism over those releases (§3), and both the
-per-round `(ε,δ)` and the composed total are reported. It does **not** by itself protect against a
+`T` times; the accountant must compose the per-round mechanism over those releases (§3), and both the
+per-round `(ε,δ)` and the composed total must be reported. It does **not** by itself protect against a
 participant that under-reports its unit (pools many users into one contribution): honest accounting of
 what a unit *contains* is a Phase-1 trust assumption
 ([06 §1](../spec/06-security.md#1-threat-model)) that Phase 2
@@ -201,9 +238,12 @@ what a unit *contains* is a Phase-1 trust assumption
 
 ### 3. The accountant
 
-The accountant tracks cumulative privacy loss across rounds and calibrates / checks `σ` against a target
-`(ε,δ)`. It is abstracted behind an interface so the reference backend (RDP via `opacus`, or a vendored
-PRV accountant; [conventions §11](../spec/conventions.md#11-external-dependencies)) is swappable.
+The accountant contract is stateful: it tracks cumulative privacy loss across rounds and calibrates /
+checks `σ` against a target `(ε,δ)`. It is abstracted behind an interface so the reference backend (RDP
+via `opacus`, or a vendored PRV accountant;
+[conventions §11](../spec/conventions.md#11-external-dependencies)) is swappable. The implementations
+support this composition, but the live Phase 3 service currently discards that state after one
+post-commit report step.
 
 ```python
 # lensemble/privacy/accountant.py
@@ -241,7 +281,7 @@ and `PRVAccountant` (privacy-loss-distribution / PRV — tighter, the preferred 
 satisfy the `Accountant` protocol; the active backend is selected by config and recorded in the
 `RunManifest`.
 
-**Budget lifecycle per round.** Before a participant releases its `PseudoGradient`, the runtime queries
+**Required budget lifecycle per round.** Before a participant releases its `PseudoGradient`, the runtime MUST query
 `would_exceed`. If accounting for this round would push the cumulative `ε` past `target_epsilon` at
 `target_delta`, the round refuses to release and raises `PrivacyBudgetExceeded`; training stops
 (fail-closed — [04 §5.5 Privacy](../spec/04-error-model.md#55-privacy-lensembleprivacy)). Otherwise the
@@ -254,10 +294,14 @@ exceeded even if the round later aborts (a failed round does not consume budget)
 - **Clipping** is a pure, deterministic function (`clip_delta`), computed in fp32 over the flat delta
   ([conventions §9](../spec/conventions.md#9-determinism-dtype-device)). It runs on CUDA or the CPU fallback;
   the CPU path is exercised by CI on tiny fixtures.
-- **Noise** is a seeded Gaussian draw (§1); the seed derivation is recorded in the `RunManifest`. The
-  draw is reproducible given the seed and is therefore replayable in tests and in the Stage-B simulation.
-- **Aggregation interaction (`INV-AGG-DETERMINISM`).** The DP transform happens entirely *before* the
-  delta enters the secure-aggregation / outer-step path. The bitwise-determinism contract of the outer
+- **Noise** is a Gaussian draw supplied through an explicit generator (§1). The current
+  shared-root-seed draw and its derivation are recorded for reproducibility and are therefore suitable
+  only for tests and explicitly
+  non-private replay evidence. Claim-grade mode requires participant-secret CSPRNG entropy (§1); outer
+  aggregation remains deterministic with respect to the already released, fixed noised deltas.
+- **Aggregation interaction (`INV-AGG-DETERMINISM`).** Participant-specific alignment happens before
+  the DP transform; the DP transform then happens entirely *before* the delta enters the
+  secure-aggregation / outer-step path. The bitwise-determinism contract of the outer
   step ([RFC-0003 §7](RFC-0003-federated-protocol.md#7-determinism-concurrency-error-propagation)) is a
   property of summing the *already-privatized* deltas in a fixed order; DP adds no nondeterminism to that
   path, because the noise is part of the (fixed, recorded) input `Δ_c`, not part of the reduction.
@@ -272,8 +316,10 @@ exceeded even if the round later aborts (a failed round does not consume budget)
   enforces `INV-DP-BOUND`. Internal.
 - `lensemble.privacy.accountant` — the `Accountant` protocol and the `RDPAccountant` / `PRVAccountant`
   reference backends; the active backend is config-selected. Internal.
-- `lensemble.federation.participant` — calls `privatize` on `Δ_c` and queries the accountant before
-  release, as part of `Participant.local_round`'s egress path
+- `lensemble.federation.participant` — target owner of the full-weight alignment/re-difference, followed
+  by `privatize` on `Δ'_c`. It must also own or receive a persistent accountant, query it before
+  release, and source noise from participant-secret CSPRNG entropy. Those responsibilities remain
+  integration blockers
   ([RFC-0013](RFC-0013-coordinator-runtime.md)).
 
 No public-API symbol is added by this RFC; DP is configured via the `privacy` config group
@@ -282,13 +328,20 @@ metrics ([05 §2.4](../spec/05-observability.md#24-privacy-metrics-dp)).
 
 ### 6. Interaction with secure aggregation and quantization
 
-- **Secure aggregation.** DP noise is added **per-participant, before** the secure-aggregation mask
+- **Gauge-order precondition.** The input to clipping is the already-aligned displacement $\Delta'_c$.
+  Alignment is participant-side (or inside a declared trusted/MPC boundary) and precedes clipping,
+  noise, quantization, encoding, and masking (`INV-ALIGN-BEFORE-RELEASE`). A coordinator that receives
+  only a secure sum cannot apply distinct participant rotations afterward.
+- **Secure aggregation.** Under the completed target integration, DP noise is added **per-participant,
+  before** the secure-aggregation mask
   ([RFC-0003 §5](RFC-0003-federated-protocol.md#5-secure-aggregation-requirement),
   [RFC-0011 §DP Interaction](RFC-0011-secure-aggregation.md)). The two are complementary: masking hides
   the individual `Δ_c` from the aggregator's *view*; DP bounds what the *revealed sum* and the released
   model leak. With both, the aggregator sees only `Σ_c (clip+noise)(Δ_c)`. Independent noise per
   participant means the summed noise is `N(0, C·σ²C_clip²I)`, which is the basis for the central-DP
-  accounting on the aggregate when distributed-DP composition is used.
+  accounting on the aggregate when distributed-DP composition is used. The current runtime has neither
+  coordinator-hidden noise entropy nor secure aggregation on its commit path, so it does not realize
+  this composition.
 - **Quantization order.** Optional int8 pseudo-gradient quantization
   ([RFC-0003 §6](RFC-0003-federated-protocol.md#6-heterogeneity--fault-tolerance)) is applied to the
   *already clipped-and-noised* delta, before masking. Quantization adds a bounded, tested round-trip
@@ -298,8 +351,9 @@ metrics ([05 §2.4](../spec/05-observability.md#24-privacy-metrics-dp)).
 
 ### 7. Failure modes
 
-Every DP failure mode uses the [conventions §6](../spec/conventions.md#6-error-taxonomy) taxonomy. The privacy errors are
-fail-closed: the federation never degrades silently past a privacy budget.
+Every DP failure mode uses the [conventions §6](../spec/conventions.md#6-error-taxonomy) taxonomy. The
+table states required integrated behavior. Config validation and clip-bound checks are live; cumulative
+budget failure is not yet wired into the federation runtime.
 
 | Trigger | Detection | Error | System response |
 |---|---|---|---|
@@ -308,10 +362,12 @@ fail-closed: the federation never degrades silently past a privacy budget.
 | `clip_norm <= 0` or `noise_multiplier < 0` in config | `DPConfig` validation at config load | `ConfigError` | reject the run before any round (validate-at-boundary) |
 | `calibrate_sigma` infeasible (target `ε` too small for the round count) | accountant calibration | `ConfigError` | reject the run; remediation: raise `ε`, raise `δ`, lower round count, or accept more noise |
 | `enabled=False` (no noise) on a run claiming privacy | manifest check | none at runtime; the `RunManifest` records `dp.enabled=False` | the run is reported as **non-private**; no `(ε,δ)` is claimed (an honesty guard, not an error) |
-| Noise generator unseeded / unrecorded | manifest validation | `ConfigError` | reject; the seed derivation must be recorded for reproducibility ([RFC-0009](RFC-0009-configuration-reproducibility.md)) |
+| Claim-grade mode uses coordinator-known or manifest-recorded noise entropy | privacy preflight | `ConfigError` | reject the claim-grade run or label an explicit deterministic replay mode non-private; record only the entropy-source policy |
+| Participant CSPRNG unavailable in claim-grade mode | privacy preflight | `ConfigError` | reject before release; never fall back to the shared root seed |
 
-`PrivacyBudgetExceeded` is never caught-and-ignored; its `.remediation` states the path (increase budget,
-reduce rounds, or accept the stop). It carries the spent `ε`, the target `(ε,δ)`, and the round index.
+Under the required integration, `PrivacyBudgetExceeded` is never caught-and-ignored; its `.remediation`
+states the path (increase budget, reduce rounds, or accept the stop). It carries the spent `ε`, the
+target `(ε,δ)`, and the round index.
 
 ## Alternatives Considered
 
@@ -365,24 +421,29 @@ reduce rounds, or accept the stop). It carries the spent `ε`, the target `(ε,�
   clearly-stated point ([06 §Differential Privacy](../spec/06-security.md)).
 - **The privacy unit relies on honest reporting of its contents** (the §2 / Phase-1 trust assumption);
   Phase 2 attestation ([RFC-0006](RFC-0006-verifiable-contribution.md)) reduces but does not eliminate it.
-- **Accounting is over a *planned* round count.** `σ` is calibrated to `num_rounds`; running longer
-  genuinely spends the budget and stops training (fail-closed). Extending requires re-calibration with a
-  fresh budget — an honest cost, not a bug.
+- **Accounting is over a *planned* round count.** In the intended lifecycle, `σ` is calibrated to
+  `num_rounds`; running longer spends the budget and stops training. The current service lacks that
+  cumulative stop, so a target run budget must not be claimed from its per-round reports.
+- **Claim-grade entropy conflicts with bitwise replay of the noise draw.** Secret CSPRNG entropy cannot
+  be published while remaining secret from the coordinator. Tests may inject deterministic seeds, but
+  public claim evidence must reproduce mechanism parameters and accounting rather than the secret draw
+  itself.
 
 ## Migration / Rollout
 
 DP rolls out along the staged plan ([00 §8](../spec/00-overview.md#8-v10-scope-boundary),
 [conventions §12](../spec/conventions.md#12-milestones-and-stages)):
 
-- **v0.2 / Stage B — simulated federation, one cluster.** The mechanism and the accountant run in-process
-  on the `C`-participant simulation ([RFC-0013](RFC-0013-coordinator-runtime.md)). Start with a
-  conservative target `(ε,δ)` (small `ε`, `δ < 1/C`) and the development RDP backend; report with the PRV
-  backend. The joint `(σ, λ_sig, λ_anc, C_clip)` calibration sweep is run here as a Stage-B experiment —
-  this is where the utility/privacy/gauge trade-off is characterized, not assumed. The `dp/*` metrics
-  ([05 §2.4](../spec/05-observability.md#24-privacy-metrics-dp)) make the spent budget and clip fraction
-  observable per round.
+- **v0.2 / Stage B — simulated federation, one cluster.** The clip/noise mechanism and stateful
+  accountant primitives run in-process and have direct tests. The runtime noise is deterministically
+  replayable from the shared, manifest-recorded root seed, so it is mechanism plumbing rather than a DP
+  guarantee. The current Phase 3 reporting seam also constructs a fresh accountant after each committed
+  round, so its `epsilon_spent` is a one-round value and its `rounds_accounted` is always one.
+  Participant-secret entropy, persistent state, pre-release checking, and cumulative reporting remain
+  to be integrated before this stage satisfies the RFC.
 - **v0.3 / Stage C — two real sovereign nodes.** The same mechanism runs over the real boundary with the
-  noise seed drawn from a participant-local CSPRNG (the §1 `RISK`), real secure aggregation
+  noise seed drawn from a participant-local CSPRNG (the §1 required entropy boundary), real secure
+  aggregation
   ([RFC-0011](RFC-0011-secure-aggregation.md)), and the budget enforced as a hard stop. The privacy unit
   under participant churn (a participant present in a subset of rounds) is finalized here (Open Questions).
 
@@ -398,25 +459,38 @@ CPU-runnable tests on tiny synthetic deltas (no large downloads; cf.
 [07 §ML-Specific Tests](../spec/07-testing-strategy.md)). Each test names the property and the invariant
 it guards.
 
+The mechanism tests use deterministic seed injection, and the accountant tests validate composition and
+simulate check-before-release / consume-after-success in the test harness. They do not demonstrate a
+secret entropy boundary, nor do they exercise the accounting lifecycle through
+`Participant.local_round()` or `Phase3CoordinatorService`. Claim-grade gates still require an entropy
+separation test and a multi-round integration test that exhausts a budget before release.
+
 - **Clip-bound invariant (`INV-DP-BOUND`).** For adversarial input deltas with norms both above and below
   `C_clip`, assert the post-clip norm satisfies `‖Δ_c‖ ≤ C_clip` (within fp32 tolerance). Property test
   (`hypothesis`) over random delta shapes and clip norms. A norm below `C_clip` is unchanged; a norm
   above is scaled to exactly `C_clip`.
 - **Clip determinism.** `clip_delta` returns bitwise-identical output on repeated calls with the same
   input; it is a pure function of `(delta, clip_norm)`.
-- **Noise calibration.** For a fixed `σ` and `C_clip`, draw many noise vectors with a seeded generator
-  and assert the empirical per-coordinate variance is `σ²C_clip²` within a tolerance; assert the draw is
-  reproducible from the recorded seed and *differs* across distinct (round, participant) seeds.
+- **Noise calibration (mechanism test only).** For a fixed `σ` and `C_clip`, draw many noise vectors
+  with a seeded generator and assert the empirical per-coordinate variance is `σ²C_clip²` within a
+  tolerance; assert the draw is reproducible from the injected test seed and *differs* across distinct
+  (round, participant) seeds.
+- **Claim-grade entropy separation (missing integration gate).** In claim-grade mode, assert the
+  coordinator config, messages, reports, and manifests contain no participant noise seed or derivable
+  entropy; assert deterministic replay mode is labeled non-private and cannot satisfy a privacy gate.
 - **Accountant correctness vs. a reference.** For a known `(σ, num_rounds, sample_rate)`, assert
   `calibrate_sigma` and `spent` match a reference computation (an independent RDP/PRV calculation) within
   tolerance; assert PRV reports `ε` no larger than RDP for the same composition (tightness ordering).
-- **Budget exhaustion raises `PrivacyBudgetExceeded`.** Configure a budget that the planned round count
-  must exceed; assert `would_exceed` returns `True` at the right round and that the runtime raises
-  `PrivacyBudgetExceeded` and stops, *without* consuming budget for the refused round.
+- **Budget exhaustion raises `PrivacyBudgetExceeded` (accountant harness).** Configure a budget that the
+  planned round count must exceed; assert `would_exceed` returns `True` at the right round and that the
+  simulated lifecycle raises `PrivacyBudgetExceeded` without consuming budget for the refused round.
 - **Check-before / consume-after ordering.** Simulate a round that aborts after the privacy check but
   before success; assert `step` was not called (budget not consumed by a failed round).
 - **Config validation.** `DPConfig` with `clip_norm ≤ 0` or `noise_multiplier < 0` raises `ConfigError`
   at load; `calibrate_sigma` with an infeasible target raises `ConfigError`.
+- **Alignment-order preflight (`INV-ALIGN-BEFORE-RELEASE`).** Assert a coordinator-side
+  participant-specific backstop rejects DP-enabled or already-clipped updates, while a participant-local
+  aligned displacement is clipped/noised normally.
 - **Determinism-path non-interference (`INV-AGG-DETERMINISM`).** Privatize fixed deltas with recorded
   seeds, then run the outer step twice; assert the privatized-then-aggregated result is bitwise-identical
   (DP adds no nondeterminism to the reduction; cf.
@@ -427,9 +501,11 @@ it guards.
 - **Non-private honesty guard.** With `enabled=False`, assert the delta is unchanged and the `RunManifest`
   records the run as non-private (no `(ε,δ)` is claimed).
 
-The DP rungs of the ablation ladder (private vs. non-private federated runs at fixed `(ε,δ)`) are
-realized as small-config integration tests per [07 §Ablation Ladder](../spec/07-testing-strategy.md) and
-[RFC-0005 §6](RFC-0005-evaluation.md).
+The DP-mechanism rungs of the ablation ladder (clip/noise configured vs. disabled at fixed parameters)
+are realized as small-config integration tests per
+[07 §Ablation Ladder](../spec/07-testing-strategy.md) and
+[RFC-0005 §6](RFC-0005-evaluation.md). Runs that use deterministic replay entropy measure the mechanism's
+utility effect; they are not private-vs-non-private claim evidence.
 
 ## Open Questions
 
@@ -468,9 +544,9 @@ the single backend once its calibration cost is acceptable, or keep RDP as the d
 - [RFC-0008 — Model, Objective & Numerical Contracts](RFC-0008-model-objective-numerics.md) (the compact
   predictor whose small delta is noise-sensitive; the SIGReg statistic).
 - [RFC-0009 — Configuration, Run Manifest & Reproducibility](RFC-0009-configuration-reproducibility.md)
-  (the `privacy` config group, the recorded noise seed derivation, the `RunManifest`).
-- [RFC-0013 — Coordinator & Participant Runtime](RFC-0013-coordinator-runtime.md) (where `privatize` and
-  the budget check are invoked; churn semantics; the Stage-C noise-seed source).
+  (the `privacy` config group, the recorded entropy-source policy, the `RunManifest`).
+- [RFC-0013 — Coordinator & Participant Runtime](RFC-0013-coordinator-runtime.md) (where `privatize` is
+  invoked and the persistent budget check must be integrated; churn semantics; the Stage-C noise-seed source).
 - [RFC-0006 — Verifiable Contribution](RFC-0006-verifiable-contribution.md) (the Phase-2 attestation that
   reduces the honest-reporting trust assumption on the privacy unit).
 - [03 — Data Model](../spec/03-data-model.md#6-pseudogradient--the-one-private-object-that-does-cross-the-boundary)

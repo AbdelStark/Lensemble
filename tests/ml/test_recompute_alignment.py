@@ -269,6 +269,23 @@ def test_probe_pin_mismatch_raises(tmp_path: Path) -> None:
         recompute_alignment_claim(ckpt_dir, probe_path)
 
 
+def test_tampered_probe_targets_raise_before_recomputation(tmp_path: Path) -> None:
+    ckpt_dir, probe_path = _honest_setup(tmp_path)
+    tensors: dict[str, Tensor] = {}
+    with safe_open(str(probe_path), framework="pt") as f:  # type: ignore[no-untyped-call]
+        meta = dict(f.metadata() or {})
+        for key in ("points", "landmark_idx", "landmark_targets"):
+            tensors[key] = f.get_tensor(key)
+    tensors["landmark_targets"] = tensors["landmark_targets"].clone()
+    tensors["landmark_targets"][0, 0, 0] += 1.0
+    save_file(tensors, str(probe_path), metadata=meta)
+
+    with pytest.raises(ProbeError, match="stored content_hash"):
+        recompute_alignment(ckpt_dir, probe_path)
+    with pytest.raises(ProbeError, match="stored content_hash"):
+        recompute_alignment_claim(ckpt_dir, probe_path)
+
+
 # --- fail-closed: a tampered checkpoint raises CheckpointIntegrityError ---
 
 

@@ -175,9 +175,11 @@ def _federated_smoke_cfg(
             aggregation_backend="simulated",
         ),
         privacy=PrivacyConfig(
-            enabled=True,
+            # The coordinator-side Layer-3 backstop exercised below is an explicitly
+            # plaintext research harness: alignment must precede any release transform.
+            enabled=False,
             clip_norm=0.05,
-            noise_multiplier=0.01,
+            noise_multiplier=0.0,
             epsilon=8.0,
             delta=1e-5,
         ),
@@ -204,7 +206,7 @@ def _write_federated_smoke_probe(path: Path, cfg: LensembleConfig) -> None:
             points=points,
             landmark_idx=landmark_idx,
             landmark_targets=targets,
-            content_hash=probe_content_hash(points, landmark_idx),
+            content_hash=probe_content_hash(points, landmark_idx, targets),
             probe_version=1,
         ),
         path,
@@ -307,7 +309,7 @@ def _real_dynamic_anchor(encoder: nn.Module, train_windows: list) -> AnchorTerm:
         points=points,
         landmark_idx=landmark_idx,
         landmark_targets=targets,
-        content_hash=probe_content_hash(points, landmark_idx),
+        content_hash=probe_content_hash(points, landmark_idx, targets),
         probe_version=1,
     )
     return FrameAnchor(
@@ -364,7 +366,7 @@ def _write_real_dynamic_probe(path: Path, cfg: LensembleConfig) -> None:
             points=points,
             landmark_idx=landmark_idx,
             landmark_targets=targets,
-            content_hash=probe_content_hash(points, landmark_idx),
+            content_hash=probe_content_hash(points, landmark_idx, targets),
             probe_version=1,
         ),
         path,
@@ -538,7 +540,7 @@ def test_dynamic_env_non_iid_federated_smoke_uses_default_synthetic_hooks(
             )
             assert update.delta.numel() > 0
             assert torch.isfinite(update.delta).all()
-            assert update.clipped is True
+            assert update.clipped is False
             assert len(update.dataset_root) == 32
             roots.add(update.dataset_root)
             transport.submit_update(

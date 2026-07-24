@@ -8,7 +8,10 @@ from pathlib import Path
 import pytest
 
 from lensemble.errors import ConfigError, SchemaVersionMismatch
-from lensemble.eval.phase2_bundle import parse_phase2_evidence_bundle
+from lensemble.eval.phase2_bundle import (
+    PHASE2_EVIDENCE_BUNDLE_SCHEMA_VERSION,
+    parse_phase2_evidence_bundle,
+)
 
 
 def test_checked_in_phase2_evidence_bundle_is_schema_valid() -> None:
@@ -18,6 +21,8 @@ def test_checked_in_phase2_evidence_bundle_is_schema_valid() -> None:
     bundle = parse_phase2_evidence_bundle(json.loads(bundle_path.read_text()))
 
     assert bundle.raw_data_in_report is False
+    assert bundle.evidence_status == "historical_pre_outer_update_fix"
+    assert "#335" in bundle.superseded_reason
     assert all(check.exists for check in bundle.artifact_checks)
     assert bundle.training.final_global_hash == (
         "8f1494fd9e57b7496daf96e379a3de1457a435080b81b9e0ea1d20a52f4827c4"
@@ -33,6 +38,8 @@ def test_checked_in_phase2_evidence_bundle_is_schema_valid() -> None:
         "fork-a",
     )
     assert model_card_path.read_text() == bundle.model_card_markdown
+    assert "Historical Evidence Status" in bundle.model_card_markdown
+    assert "do not validate the corrected runtime" in bundle.model_card_markdown
     assert "Does not claim paper-scale" in bundle.model_card_markdown
 
 
@@ -47,4 +54,6 @@ def test_phase2_evidence_bundle_rejects_missing_artifact_check() -> None:
 
 def test_parse_phase2_evidence_bundle_rejects_future_schema() -> None:
     with pytest.raises(SchemaVersionMismatch):
-        parse_phase2_evidence_bundle({"schema_version": 2})
+        parse_phase2_evidence_bundle(
+            {"schema_version": PHASE2_EVIDENCE_BUNDLE_SCHEMA_VERSION + 1}
+        )

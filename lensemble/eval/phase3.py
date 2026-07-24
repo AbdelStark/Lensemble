@@ -21,9 +21,16 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from lensemble.artifacts.hashing import sha256_file
 from lensemble.errors import ConfigError, LensembleErrorCode, SchemaVersionMismatch
 
-PHASE3_EVAL_REPORT_SCHEMA_VERSION = 1
+PHASE3_EVAL_REPORT_SCHEMA_VERSION = 2
 
 Phase3ControlRole = Literal[
+    "anchored-federation",
+    "local-only",
+    "naive-fedavg",
+    "fork-a-frozen-encoder",
+]
+Phase3MetricRole = Literal[
+    "consortium-runtime-smoke",
     "anchored-federation",
     "local-only",
     "naive-fedavg",
@@ -43,6 +50,17 @@ Phase3ControlGaugeMetric = Literal[
 ]
 Phase3EvalStatus = Literal["completed", "blocked"]
 Phase3PlannerName = Literal["icem", "cem", "mppi", "not_applicable"]
+Phase3EvalEvidenceStatus = Literal[
+    "current",
+    "historical_pre_correctness_fix",
+]
+
+_HISTORICAL_EVIDENCE_NOTICE = (
+    "Historical evidence status: these training and gauge rows predate the "
+    "outer-update direction correction and the public-probe-v2 target-binding "
+    "contract. They are retained for audit history only and do not validate the "
+    "corrected runtime; rerun tracking is recorded in GitHub issue #335."
+)
 
 _REQUIRED_CONTROLS: tuple[Phase3ControlRole, ...] = (
     "anchored-federation",
@@ -72,6 +90,9 @@ class Phase3LongRunRoundEvidence(BaseModel):
     model_config = ConfigDict(frozen=True, extra="ignore")
 
     aggregation_backend_status: str = Field(min_length=1)
+    secure_sum_consumed: bool = False
+    dp_accounting_status: str = Field(default="legacy_unclassified", min_length=1)
+    effective_dp: bool = False
     dp_epsilon_spent: float | None = Field(default=None, ge=0.0)
 
 
@@ -92,6 +113,8 @@ class Phase3LongRunEvidence(BaseModel):
     generated_at: datetime
     consortium_id: str = Field(min_length=1)
     run_id: str = Field(min_length=1)
+    evidence_status: Phase3EvalEvidenceStatus = "current"
+    superseded_reason: str | None = Field(default=None, min_length=1)
     config_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     final_global_model_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     closed_rounds: int = Field(ge=0)
@@ -111,6 +134,16 @@ class Phase3LongRunEvidence(BaseModel):
         """Declared participant count, falling back to parsed participant rows."""
 
         return int(self.run_shape.get("participant_count", len(self.participants)))
+
+    @model_validator(mode="before")
+    @classmethod
+    def _classify_legacy_evidence(cls, raw: Any) -> Any:
+        if not isinstance(raw, dict) or raw.get("schema_version") != 1:
+            return raw
+        migrated = dict(raw)
+        migrated.setdefault("evidence_status", "historical_pre_correctness_fix")
+        migrated.setdefault("superseded_reason", _HISTORICAL_EVIDENCE_NOTICE)
+        return migrated
 
 
 class Phase3PlannerBudget(BaseModel):
@@ -229,7 +262,7 @@ class Phase3EvalMetricRow(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     row_id: str = Field(pattern=r"^[a-z0-9][a-z0-9_.-]*$")
-    control_role: Phase3ControlRole
+    control_role: Phase3MetricRole
     task_env_id: str = Field(min_length=1)
     metric: Phase3MetricName
     value: float
@@ -277,6 +310,8 @@ class Phase3EvalReport(BaseModel):
 
     schema_version: int
     generated_at: datetime
+    evidence_status: Phase3EvalEvidenceStatus = "current"
+    superseded_reason: str | None = Field(default=None, min_length=1)
     source_artifacts: tuple[Phase3SourceArtifactRef, ...] = Field(min_length=1)
     eval_plan: Phase3EvalPlan
     metric_rows: tuple[Phase3EvalMetricRow, ...]
@@ -284,9 +319,49 @@ class Phase3EvalReport(BaseModel):
     model_card_eval_text: str = Field(min_length=1)
     claim_boundary: str = Field(min_length=1)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_v1_secure_sum_metric(cls, raw: Any) -> Any:
+        """Normalize legacy secure-sum rows to optimizer-consumption semantics."""
+
+        if not isinstance(raw, dict) or raw.get("schema_version") != 1:
+            return raw
+        migrated = dict(raw)
+        migrated.setdefault("evidence_status", "historical_pre_correctness_fix")
+        migrated.setdefault("superseded_reason", _HISTORICAL_EVIDENCE_NOTICE)
+        legacy_text = str(migrated.get("model_card_eval_text", "")).strip()
+        if "Historical evidence status:" not in legacy_text:
+            migrated["model_card_eval_text"] = (
+                f"{_HISTORICAL_EVIDENCE_NOTICE} {legacy_text}"
+            )
+        legacy_boundary = str(migrated.get("claim_boundary", "")).strip()
+        if "retained for audit history only" not in legacy_boundary:
+            migrated["claim_boundary"] = (
+                f"{_HISTORICAL_EVIDENCE_NOTICE} Historical claim boundary: "
+                f"{legacy_boundary}"
+            )
+        rows = migrated.get("metric_rows")
+        if isinstance(rows, (list, tuple)):
+            migrated_rows: list[Any] = []
+            for row in rows:
+                if not isinstance(row, dict) or row.get("metric") != (
+                    "secure_sum_round_rate"
+                ):
+                    migrated_rows.append(row)
+                    continue
+                migrated_row = dict(row)
+                migrated_row["value"] = 0.0
+                migrated_row["notes"] = (
+                    "legacy schema-v1 secure_sum status represented a "
+                    "post-commit cross-check; no optimizer-consumed secure sum"
+                )
+                migrated_rows.append(migrated_row)
+            migrated["metric_rows"] = migrated_rows
+        return migrated
+
     @model_validator(mode="after")
     def _cross_check(self) -> "Phase3EvalReport":
-        if self.schema_version != PHASE3_EVAL_REPORT_SCHEMA_VERSION:
+        if not 1 <= self.schema_version <= PHASE3_EVAL_REPORT_SCHEMA_VERSION:
             raise SchemaVersionMismatch(
                 f"phase3 eval report schema_version {self.schema_version!r} exceeds "
                 f"reader max {PHASE3_EVAL_REPORT_SCHEMA_VERSION}",
@@ -329,6 +404,25 @@ class Phase3EvalReport(BaseModel):
                 "Phase 3 eval claim boundary must reject paper-scale performance claims",
                 code=LensembleErrorCode.CONFIG_INVALID,
                 remediation="keep model-card text conservative until task-scale evidence exists",
+            )
+        if self.evidence_status == "historical_pre_correctness_fix":
+            if self.superseded_reason is None:
+                raise ConfigError(
+                    "historical Phase 3 eval evidence requires superseded_reason",
+                    code=LensembleErrorCode.CONFIG_INVALID,
+                    remediation="record why the evidence no longer validates the live runtime",
+                )
+            if "Historical evidence status:" not in self.model_card_eval_text:
+                raise ConfigError(
+                    "historical Phase 3 eval evidence requires a model-card notice",
+                    code=LensembleErrorCode.CONFIG_INVALID,
+                    remediation="surface the correctness-fix invalidation in the generated report",
+                )
+        elif self.superseded_reason is not None:
+            raise ConfigError(
+                "current Phase 3 eval evidence cannot declare superseded_reason",
+                code=LensembleErrorCode.CONFIG_INVALID,
+                remediation="mark superseded evidence historical or remove the reason",
             )
         return self
 
@@ -436,7 +530,10 @@ def build_phase3_eval_report(
         if row.control_role not in completed_roles
     ]
     model_card_text = _model_card_eval_text(
-        blocked_controls, completed_controls=completed
+        blocked_controls,
+        completed_controls=completed,
+        evidence_status=long_run.evidence_status,
+        closed_rounds=long_run.closed_rounds,
     )
     control_artifacts = tuple(
         Phase3SourceArtifactRef(
@@ -451,6 +548,8 @@ def build_phase3_eval_report(
     return Phase3EvalReport(
         schema_version=PHASE3_EVAL_REPORT_SCHEMA_VERSION,
         generated_at=generated,
+        evidence_status=long_run.evidence_status,
+        superseded_reason=long_run.superseded_reason,
         source_artifacts=(
             Phase3SourceArtifactRef(
                 label="Phase 3 long-run orchestration report",
@@ -475,18 +574,21 @@ def build_phase3_eval_report(
                     ),
                     goal_policy=(
                         "not applicable; lifecycle metrics evaluate round closure, "
-                        "participant release, secure aggregation, and DP accounting"
+                        "participant release, post-commit aggregation cross-checks, "
+                        "and one-round DP mechanism-accounting snapshots"
                     ),
                     seeds=(long_run.root_seed,),
                     metrics=tuple(row.metric for row in metric_rows),
                     planner_budget=planner_budget,
                     expected_outcomes=(
                         "all declared participant agents submit every assigned round",
-                        "every closed round consumes secure-sum reporting and DP accounting",
+                        "every closed round reports its optimizer-input source, any "
+                        "post-commit sum cross-check, and DP snapshot status",
                     ),
                     falsifying_outcomes=(
                         "any missing participant update without an explicit dropout row",
-                        "any closed round without secure aggregation or DP accounting status",
+                        "any cross-check mislabeled as an optimizer-consumed secure sum",
+                        "any deterministic replay row mislabeled as effective DP",
                     ),
                 ),
                 Phase3EvalTaskPlan(
@@ -542,10 +644,17 @@ def build_phase3_eval_report(
         blocked_controls=tuple(blocked_controls),
         model_card_eval_text=model_card_text,
         claim_boundary=(
-            "This Phase 3 eval report supports consortium-runtime engineering evidence "
+            (
+                f"{_HISTORICAL_EVIDENCE_NOTICE} Historical claim boundary: "
+                if long_run.evidence_status == "historical_pre_correctness_fix"
+                else ""
+            )
+            + "This Phase 3 eval report supports consortium-runtime engineering evidence "
             "from a local tiny-model run and explicit blockers for public task-scale "
-            "controls. It does not claim paper-scale LeWorldModel performance or SO-100 "
-            "robotics task success."
+            "controls. Post-commit sum cross-checks are not counted as secure "
+            "aggregation, and deterministic-noise epsilon rows are one-round "
+            "mechanism snapshots rather than effective DP. It does not claim "
+            "paper-scale LeWorldModel performance or SO-100 robotics task success."
         ),
     )
 
@@ -577,7 +686,9 @@ def _metric_rows(
     target_updates = max(int(report.target_rounds) * participant_count, 1)
     total_submitted = sum(p.submitted_rounds for p in report.participants)
     secure_sum_rounds = sum(
-        1 for row in report.rounds if row.aggregation_backend_status == "secure_sum"
+        1
+        for row in report.rounds
+        if row.aggregation_backend_status == "secure_sum" and row.secure_sum_consumed
     )
     dp_accounted_rounds = sum(
         1 for row in report.rounds if row.dp_epsilon_spent is not None
@@ -596,18 +707,18 @@ def _metric_rows(
         (
             "secure_sum_round_rate",
             float(secure_sum_rounds) / float(closed),
-            "closed rounds whose aggregation report used secure_sum status",
+            "closed rounds whose optimizer consumed a secure sum; post-commit cross-checks do not count",
         ),
         (
             "dp_accounted_round_rate",
             float(dp_accounted_rounds) / float(closed),
-            "closed rounds with non-null DP epsilon accounting",
+            "closed rounds with a one-round mechanism-accounting epsilon snapshot; not cumulative or effective DP",
         ),
     )
     return [
         Phase3EvalMetricRow(
-            row_id=f"anchored-federation.{metric.replace('_', '-')}",
-            control_role="anchored-federation",
+            row_id=f"consortium-runtime-smoke.{metric.replace('_', '-')}",
+            control_role="consortium-runtime-smoke",
             task_env_id=_LOCAL_SMOKE_ENV_ID,
             metric=metric,
             value=value,
@@ -632,13 +743,6 @@ def _reject_duplicate_completed_controls(
             "Phase 3 completed controls must declare each control role at most once",
             code=LensembleErrorCode.CONFIG_INVALID,
             remediation="pass one Phase3CompletedControlInput per control role",
-        )
-    if "anchored-federation" in roles:
-        raise ConfigError(
-            "anchored-federation is already a completed metric row from the long-run "
-            "report and must not be passed as a completed control input",
-            code=LensembleErrorCode.CONFIG_INVALID,
-            remediation="only pass the previously-blocked controls as completed inputs",
         )
 
 
@@ -683,6 +787,18 @@ def _blocked_controls(
     )
     return [
         Phase3BlockedControlRow(
+            control_role="anchored-federation",
+            task_env_id=_TASK_SCALE_BLOCKER_ENV_ID,
+            planner_budget=planner_budget,
+            blocker_source="GitHub issue #228 Phase 3 eval acceptance",
+            reason=(
+                "No immutable anchored-federation gauge report was supplied; the "
+                "consortium lifecycle smoke is operational evidence, not an "
+                "anchored matched-control substitute."
+            ),
+            required_match=required_match,
+        ),
+        Phase3BlockedControlRow(
             control_role="local-only",
             task_env_id=_TASK_SCALE_BLOCKER_ENV_ID,
             planner_budget=planner_budget,
@@ -722,34 +838,35 @@ def _model_card_eval_text(
     blocked_controls: list[Phase3BlockedControlRow],
     *,
     completed_controls: Sequence[Phase3CompletedControlInput] = (),
+    evidence_status: Phase3EvalEvidenceStatus = "current",
+    closed_rounds: int = 0,
 ) -> str:
     intro = (
         "Phase 3 evaluation evidence covers the local deterministic "
-        "consortium-runtime smoke (participant-agent updates, ten closed rounds, "
-        "secure-sum reporting, and DP accounting) plus four real matched control "
-        "runs published on HF Jobs (DP-off, latent_dim=256, 6 rounds, "
-        "window_steps=4, simulated secure-agg, four participants phase3-so100-a..d, "
-        "held-out silo4)."
+        f"consortium-runtime smoke (participant-agent updates, {closed_rounds} "
+        "closed rounds, "
+        "post-commit sum cross-check reporting, and one-round deterministic "
+        "mechanism-accounting snapshots). Matched gauge controls are included only "
+        "when their immutable reports and run manifests are supplied to the producer."
     )
-    gauge_finding = (
-        "Gauge finding: the frame anchor reduces inter-participant latent "
-        "frame-drift at aggregation (anchored round-0 48.97 deg vs naive-FedAvg "
-        "180 deg); Fork-A's frozen encoder is the 0 deg safe-degrade baseline; and "
-        "local-only silos train healthily (effective_rank ~120) but diverge "
-        "maximally (180 deg) - the divergence federation is designed to close."
-    )
+    gauge_finding = _bound_gauge_finding(completed_controls)
     limitation = (
-        "Honest limitation: at the default outer-step (outer_lr=0.7) with a "
-        "random-init warm-start (real V-JEPA weights remain unvendored, #96), the "
-        "federated global representation collapses over rounds (effective_rank -> "
-        "1), so the clean anchored-vs-naive contrast is the round-0 measurement; "
-        "sustained non-collapsing federated training is a documented follow-up. "
-        "This report is consortium-engineering and training evidence, NOT a "
-        "cryptographic proof of honest participant computation."
+        (
+            "Historical limitation: at the old default outer step "
+            "(outer_lr=0.7), the federated global representation collapsed over "
+            "rounds (effective_rank -> 1). That trajectory also predates the "
+            "outer-update correction, so it is failure-analysis history rather "
+            "than a clean anchored-vs-naive result."
+        )
+        if evidence_status == "historical_pre_correctness_fix"
+        else (
+            "This operational report makes no representation-quality claim "
+            "without separately hash-bound gauge controls."
+        )
     )
     task_scale = (
-        "Public task-scale SO-100 downstream evaluation remains blocked until the "
-        "Phase 3 checkpoint and held-out eval data are published."
+        "Closed-loop task-scale SO-100 evaluation remains unrun; the published "
+        "recorded splits cannot apply arbitrary planner actions to a live environment."
     )
     if blocked_controls:
         blocked = ", ".join(row.control_role for row in blocked_controls)
@@ -764,17 +881,60 @@ def _model_card_eval_text(
             "These are representation-gauge controls and must not be described as "
             "completed robotics performance comparisons."
         )
-    return " ".join((intro, gauge_finding, limitation, task_scale, controls_line))
+    parts = (intro, gauge_finding, limitation, task_scale, controls_line)
+    if evidence_status == "historical_pre_correctness_fix":
+        parts = (_HISTORICAL_EVIDENCE_NOTICE, *parts)
+    return " ".join(parts)
+
+
+def _bound_gauge_finding(
+    completed_controls: Sequence[Phase3CompletedControlInput],
+) -> str:
+    by_role = {control.control_role: control for control in completed_controls}
+
+    def value(
+        role: Phase3ControlRole, metric: Phase3ControlGaugeMetric
+    ) -> float | None:
+        control = by_role.get(role)
+        if control is None:
+            return None
+        return next(
+            (gauge.value for gauge in control.gauges if gauge.metric == metric),
+            None,
+        )
+
+    anchored_drift = value("anchored-federation", "latent_frame_drift_deg")
+    naive_drift = value("naive-fedavg", "latent_frame_drift_deg")
+    fork_drift = value("fork-a-frozen-encoder", "latent_frame_drift_deg")
+    local_drift = value("local-only", "latent_frame_drift_deg")
+    local_rank = value("local-only", "effective_rank")
+    values = (anchored_drift, naive_drift, fork_drift, local_drift, local_rank)
+    if any(item is None for item in values):
+        return (
+            "Gauge finding is blocked until anchored, naive-FedAvg, Fork-A, and "
+            "local-only source reports are all hash-bound; no numeric gauge "
+            "comparison is inferred from the lifecycle smoke."
+        )
+    assert all(item is not None for item in values)
+    return (
+        "Hash-bound historical gauge finding: anchored round-0 frame drift "
+        f"{anchored_drift:.6g} deg versus naive-FedAvg {naive_drift:.6g} deg; "
+        f"Fork-A {fork_drift:.6g} deg; local-only drift {local_drift:.6g} deg "
+        f"with mean effective rank {local_rank:.6g}. These representation metrics "
+        "are not robotics task-performance results."
+    )
 
 
 __all__ = [
     "PHASE3_EVAL_REPORT_SCHEMA_VERSION",
+    "Phase3EvalEvidenceStatus",
     "Phase3BlockedControlRow",
     "Phase3CompletedControlInput",
     "Phase3ControlGaugeMetric",
     "Phase3ControlGaugeValue",
     "Phase3ControlRole",
     "Phase3EvalMetricRow",
+    "Phase3MetricRole",
     "Phase3EvalPlan",
     "Phase3EvalReport",
     "Phase3EvalTaskPlan",

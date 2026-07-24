@@ -10,16 +10,21 @@ from typing import Any
 
 import pytest
 
+from lensemble.config.consortium import load_consortium_manifest
+from lensemble.data.phase3 import load_phase3_dataset_registry
 from lensemble.errors import ConfigError, SchemaVersionMismatch
+from lensemble.eval import build_phase3_eval_report, write_phase3_eval_report
 from lensemble.federation import (
     PHASE3_EVIDENCE_BUNDLE_SCHEMA_VERSION,
     Phase3EvidenceBundle,
+    build_phase3_observability_report,
     load_phase3_evidence_bundle,
     local_artifact_check,
     parse_phase3_evidence_bundle,
     run_phase3_long_run_smoke,
     validate_phase3_bundle_residency,
     write_phase3_long_run_report,
+    write_phase3_observability_report,
 )
 
 
@@ -32,7 +37,7 @@ def test_checked_in_phase3_evidence_bundle_and_model_card_are_consistent() -> No
     assert bundle.schema_version == PHASE3_EVIDENCE_BUNDLE_SCHEMA_VERSION
     assert bundle.raw_data_in_report is False
     assert all(check.exists for check in bundle.artifact_checks)
-    assert bundle.publication.status == "published"
+    assert bundle.publication.status == "historical"
     assert (
         bundle.publication.model_repo_revision
         == "828e210cba4870b2be4ab573a5f0dd4ee30bae29"
@@ -41,18 +46,24 @@ def test_checked_in_phase3_evidence_bundle_and_model_card_are_consistent() -> No
         bundle.publication.dataset_repo_revision
         == "15f71911432b300dfdf41c998e27492e8c986be4"
     )
-    assert bundle.publication.blockers == ()
-    assert bundle.manifest.consortium_id == "lensemble-phase3-consortium"
-    assert bundle.manifest.run_id == "phase3-consortium-v1"
-    assert bundle.training.run_id == "phase3-consortium-v1"
+    assert bundle.publication.blockers
+    assert bundle.publication.dataset_bound_to_training is False
+    assert bundle.manifest.consortium_id == "lensemble-phase3-long-run-smoke"
+    assert bundle.manifest.run_id == "phase3-long-run-smoke-v1"
+    assert bundle.manifest.public_probe_hash_contract == "legacy-unscoped"
+    assert bundle.dataset_registry.public_probe_hash_contract == "legacy-unscoped"
+    assert bundle.training.run_id == "phase3-long-run-smoke-v1"
     assert bundle.training.closed_rounds == 10
     assert bundle.training.completed_target is True
     assert (
         bundle.training.final_global_model_hash
-        == "bb31c0922de639cb9220c4cc5fc35d79aec719eb6fcedb09159bdff8cfb8fd43"
+        == "ed3081ee514af142a226443f113a37c24d7d5872bfb707f11abe10893a0ad50d"
     )
-    assert bundle.privacy_aggregation.secure_sum_rounds == 10
+    assert bundle.privacy_aggregation.secure_sum_rounds == 0
+    assert bundle.privacy_aggregation.post_commit_cross_check_rounds == 10
+    assert bundle.privacy_aggregation.legacy_reported_secure_sum_rounds == 0
     assert bundle.privacy_aggregation.dp_accounted_rounds == 10
+    assert bundle.privacy_aggregation.effective_dp_rounds == 0
     assert bundle.observability.dropout_decision_count == 1
     assert set(bundle.eval_controls.completed_controls) == {
         "anchored-federation",
@@ -62,6 +73,10 @@ def test_checked_in_phase3_evidence_bundle_and_model_card_are_consistent() -> No
     }
     assert bundle.eval_controls.blocked_controls == ()
     assert model_card_path.read_text() == bundle.model_card_markdown
+    assert bundle.training.evidence_status == "historical_pre_correctness_fix"
+    assert "## Historical Evidence Status" in bundle.model_card_markdown
+    assert "do not validate the corrected runtime" in bundle.model_card_markdown
+    assert "placeholder synthetic smoke data" in bundle.model_card_markdown
     assert "does not include a provenance ledger" in bundle.model_card_markdown
     assert (
         "does not cryptographically prove honest participant computation"
@@ -79,6 +94,25 @@ def test_checked_in_phase3_evidence_bundle_and_model_card_are_consistent() -> No
         _artifact_sha(bundle, "checkpoint-weights")
         == bundle.training.checkpoint_weights_sha256
     )
+
+
+def test_checked_in_phase3_run_contracts_are_standalone_historical_records() -> None:
+    manifest = load_consortium_manifest(
+        Path("docs/evidence/phase3_long_run_smoke_manifest.json")
+    )
+    registry = load_phase3_dataset_registry(
+        Path("docs/evidence/phase3_long_run_smoke_dataset_registry.json")
+    )
+
+    assert manifest.public_probe.hash_contract == "legacy-unscoped"
+    assert "Historical pre-correctness-fix" in manifest.claim_boundary
+    assert "optimizer consumed plaintext participant deltas" in manifest.claim_boundary
+    assert "neither effective nor cumulative DP" in manifest.claim_boundary
+    assert "does not validate the corrected runtime" in manifest.claim_boundary
+    assert registry.public_probe.hash_contract == "legacy-unscoped"
+    assert "Historical pre-correctness-fix" in registry.claim_boundary
+    assert "not a current operational-training contract" in registry.claim_boundary
+    assert "#335" in registry.claim_boundary
 
 
 def test_phase3_evidence_bundle_rejects_missing_artifact() -> None:
@@ -147,9 +181,20 @@ def test_phase3_bundle_script_generates_and_validates(tmp_path: Path) -> None:
     manifest = tmp_path / "phase3_long_run_manifest.json"
     registry = tmp_path / "phase3_long_run_dataset_registry.json"
     long_run_report = tmp_path / "phase3_long_run_report.json"
+    eval_report_path = tmp_path / "phase3_eval_report.json"
+    observability_report_path = tmp_path / "phase3_observability_report.json"
     run_dir = tmp_path / "phase3-long-run-smoke"
     long_run = run_phase3_long_run_smoke(run_dir=run_dir, rounds=10)
     write_phase3_long_run_report(long_run, long_run_report)
+    eval_report = build_phase3_eval_report(long_run_report)
+    write_phase3_eval_report(eval_report, eval_report_path)
+    observability_report = build_phase3_observability_report(
+        long_run_report_path=long_run_report,
+        eval_report_path=eval_report_path,
+        run_dir=tmp_path / "phase3-observability-smoke",
+        output_uri="artifact://test/phase3_observability_report.json",
+    )
+    write_phase3_observability_report(observability_report, observability_report_path)
 
     result = subprocess.run(
         [
@@ -157,6 +202,10 @@ def test_phase3_bundle_script_generates_and_validates(tmp_path: Path) -> None:
             "scripts/phase3_bundle.py",
             "--long-run-report",
             str(long_run_report),
+            "--eval-report",
+            str(eval_report_path),
+            "--observability-report",
+            str(observability_report_path),
             "--manifest-output",
             str(manifest),
             "--registry-output",
@@ -184,6 +233,11 @@ def test_phase3_bundle_script_generates_and_validates(tmp_path: Path) -> None:
 
     assert "wrote" in result.stdout
     bundle = load_phase3_evidence_bundle(output)
+    assert bundle.schema_version == PHASE3_EVIDENCE_BUNDLE_SCHEMA_VERSION
+    assert bundle.privacy_aggregation.secure_sum_rounds == 0
+    assert bundle.privacy_aggregation.post_commit_cross_check_rounds == 10
+    assert bundle.privacy_aggregation.dp_accounted_rounds == 10
+    assert bundle.privacy_aggregation.effective_dp_rounds == 0
     assert model_card.read_text() == bundle.model_card_markdown
     assert manifest.exists()
     assert registry.exists()

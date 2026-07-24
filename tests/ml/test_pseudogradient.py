@@ -56,6 +56,13 @@ def test_non_federated_group_is_rejected() -> None:
 
 def test_structural_validation_rejects_bad_fields() -> None:
     good = torch.zeros(8, dtype=torch.float32)
+    with pytest.raises(ValueError, match="flat 1-D"):
+        PseudoGradient(
+            delta=good.reshape(2, 4),
+            l2_norm=0.0,
+            dataset_root=_ROOT,
+            round_index=0,
+        )
     with pytest.raises(ValueError):
         PseudoGradient(
             delta=good.to(torch.float64), l2_norm=0.0, dataset_root=_ROOT, round_index=0

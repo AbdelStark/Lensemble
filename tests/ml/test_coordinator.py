@@ -24,20 +24,27 @@ from __future__ import annotations
 
 import dataclasses
 import gc
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 import torch
+from safetensors import safe_open
+from safetensors.torch import save_file
 
 from lensemble.config import LensembleConfig
 from lensemble.contracts import WMCP_VERSION
 from lensemble.data.probe import PublicProbe, probe_content_hash, save_probe
 from lensemble.errors import (
+    ArtifactError,
+    ConfigError,
     FaultToleranceExceeded,
     LensembleErrorCode,
     NonDeterministicAggregation,
+    ProbeError,
     ResidencyViolation,
+    RoundError,
 )
 from lensemble.federation import (
     Coordinator,
@@ -114,6 +121,7 @@ def _toy_update(
     round_index: int,
     seed: int,
     scale: float = 1e-2,
+    clipped: bool = True,
 ) -> PseudoGradient:
     """A tiny θ⊕φ-sized PseudoGradient built from per-group toy deltas (canonical encoder.*/predictor.*).
 
@@ -134,7 +142,10 @@ def _toy_update(
             t.shape, generator=gen, dtype=torch.float32
         )
     return build_pseudogradient(
-        param_deltas, dataset_root=_ROOT, round_index=round_index, clipped=True
+        param_deltas,
+        dataset_root=_ROOT,
+        round_index=round_index,
+        clipped=clipped,
     )
 
 
@@ -145,11 +156,17 @@ def _stage(
     round_index: int,
     participant_ids: list[str],
     seed_base: int = 100,
+    clipped: bool = True,
 ) -> dict[str, PseudoGradient]:
     """Stage one PseudoGradient per participant for `round_index`; return the staged updates."""
     staged: dict[str, PseudoGradient] = {}
     for i, pid in enumerate(participant_ids):
-        pg = _toy_update(cfg, round_index=round_index, seed=seed_base + i)
+        pg = _toy_update(
+            cfg,
+            round_index=round_index,
+            seed=seed_base + i,
+            clipped=clipped,
+        )
         transport.submit_update(participant_id=pid, round_index=round_index, update=pg)
         staged[pid] = pg
     return staged
@@ -205,6 +222,36 @@ def test_action_head_group_cannot_enter_a_pseudogradient() -> None:
     assert exc.value.tensor_role == "action_head"  # type: ignore[attr-defined]
 
 
+def test_broadcastable_wrong_length_delta_aborts_before_aggregation() -> None:
+    cfg = _cfg()
+    transport = InProcessTransport()
+    coord = Coordinator(cfg, transport=transport)
+    hash_before = coord.global_state_hash()
+    params_before = coord.global_params().clone()
+
+    # A scalar delta is broadcast-compatible with the 2,320-element global under PyTorch addition.
+    # It must be rejected as a malformed manifest length, not silently shift every parameter.
+    for participant_id in ("c0", "c1"):
+        update = PseudoGradient(
+            delta=torch.tensor([0.25]),
+            l2_norm=0.25,
+            dataset_root=_ROOT,
+            round_index=0,
+        )
+        transport.submit_update(
+            participant_id=participant_id,
+            round_index=0,
+            update=update,
+        )
+
+    with pytest.raises(RoundError, match="canonical flat parameter length"):
+        coord.run(1)
+
+    assert coord.round_state() is RoundState.ABORTED
+    assert coord.global_state_hash() == hash_before
+    assert torch.equal(coord.global_params(), params_before)
+
+
 # --- a clean round drives OPEN -> ... -> CLOSED and advances the committed global hash ---
 
 
@@ -228,6 +275,32 @@ def test_run_one_round_commits_and_closes() -> None:
     assert set(rec.dataset_roots) == {"c0", "c1", "c2"}
 
 
+def test_committed_movement_aligns_with_mean_local_minus_global_delta() -> None:
+    base = _cfg()
+    cfg = dataclasses.replace(
+        base,
+        federation=dataclasses.replace(
+            base.federation, outer_lr=0.7, outer_nesterov_momentum=0.0
+        ),
+    )
+    transport = InProcessTransport()
+    coord = Coordinator(cfg, transport=transport)
+    global_before = coord.global_params().clone()
+    staged = _stage(transport, cfg, round_index=0, participant_ids=["c0", "c1", "c2"])
+    mean_delta = torch.stack([update.delta for update in staged.values()]).mean(dim=0)
+
+    coord.run(1)
+
+    committed_movement = coord.global_params() - global_before
+    assert torch.allclose(
+        committed_movement,
+        cfg.federation.outer_lr * mean_delta,
+        rtol=1e-5,
+        atol=1e-7,
+    )
+    assert torch.dot(committed_movement, mean_delta) > 0
+
+
 def test_run_two_rounds_advances_round_index() -> None:
     cfg = _cfg()
     transport = InProcessTransport()
@@ -242,6 +315,45 @@ def test_run_two_rounds_advances_round_index() -> None:
     assert coord.global_state().round_index == 1
     assert len(coord.ledger_records()) == 2
     assert [r.round_index for r in coord.ledger_records()] == [0, 1]
+
+
+def test_round_two_determinism_check_verifies_persistent_momentum_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from lensemble.aggregation import (
+        assert_outer_step_deterministic as real_determinism_check,
+    )
+    from lensemble.federation import coordinator as coordinator_module
+
+    verified_params: dict[int, torch.Tensor] = {}
+
+    def _record_verified_result(
+        compute: Callable[[], torch.Tensor], *, round_index: int
+    ) -> torch.Tensor:
+        result = real_determinism_check(compute, round_index=round_index)
+        verified_params[round_index] = result.clone()
+        return result
+
+    monkeypatch.setattr(
+        coordinator_module,
+        "assert_outer_step_deterministic",
+        _record_verified_result,
+    )
+    cfg = _cfg()
+    transport = InProcessTransport()
+    coord = Coordinator(cfg, transport=transport)
+    _stage(transport, cfg, round_index=0, participant_ids=["c0", "c1"])
+    _stage(
+        transport,
+        cfg,
+        round_index=1,
+        participant_ids=["c0", "c1"],
+        seed_base=200,
+    )
+
+    coord.run(2)
+
+    assert torch.equal(verified_params[1], coord.global_params())
 
 
 # --- determinism: the same contributing set committed twice gives a bitwise-identical (θ_{t+1}, φ_{t+1}) ---
@@ -318,6 +430,48 @@ def test_corrupt_reduction_aborts_with_global_hash_unchanged(
     assert exc.value.code == LensembleErrorCode.AGG_NONDETERMINISTIC
     assert coord.round_state() == RoundState.ABORTED
     assert coord.global_state_hash() == h_before  # no partial commit (hash unchanged)
+
+
+def test_checkpoint_failure_does_not_advance_persistent_optimizer_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = _cfg()
+    transport = InProcessTransport()
+    coord = Coordinator(cfg, transport=transport)
+
+    # Commit one round so the persistent Nesterov velocity is nonzero, then stage round 1.
+    _stage(transport, cfg, round_index=0, participant_ids=["c0", "c1"])
+    assert coord.try_round() is RoundState.CLOSED
+    _stage(
+        transport,
+        cfg,
+        round_index=1,
+        participant_ids=["c0", "c1"],
+        seed_base=300,
+    )
+    prior = coord.global_params().clone()
+    hash_before = coord.global_state_hash()
+    updates = dict(transport.collect_updates(1))
+    preview_before = coord._optimizer.preview_step(prior, updates)  # noqa: SLF001
+
+    def _fail_commit(*args: object, **kwargs: object) -> str:
+        raise ArtifactError(
+            "injected checkpoint write failure",
+            code=LensembleErrorCode.ARTIFACT_INVALID,
+            remediation="retry after restoring the artifact sink",
+        )
+
+    monkeypatch.setattr(coord, "_commit_checkpoint", _fail_commit)
+    with pytest.raises(ArtifactError, match="injected checkpoint write failure"):
+        coord.try_round()
+
+    assert coord.round_state() is RoundState.ABORTED
+    assert coord.global_state_hash() == hash_before
+    assert torch.equal(coord.global_params(), prior)
+    # A failed checkpoint ran only a pure preview: the next preview from the same inputs is identical,
+    # proving the carried momentum did not partially advance.
+    preview_after = coord._optimizer.preview_step(prior, updates)  # noqa: SLF001
+    assert torch.equal(preview_after, preview_before)
 
 
 # --- below-quorum -> FaultToleranceExceeded, round ABORTED, global hash unchanged ---
@@ -436,9 +590,10 @@ class _BackstopCoordinator(Coordinator):
     """A Coordinator that wires the #18/#22 seam so the Layer-3 Procrustes backstop FIRES at ALIGNING.
 
     Overriding BOTH ``_probe_embeddings`` (per-participant ``f_c(P)`` with a known above-threshold drift)
-    AND ``_reference_embeddings`` (the reference frame ``E_ref``) makes ALIGNING conjugate each
-    over-threshold participant's predictor delta by ``Q_c*`` before the outer step. The fold-in is a pure
-    linear pre-step, so the committed round is still bitwise-reproducible (``INV-AGG-DETERMINISM``).
+    AND ``_reference_embeddings`` (the reference frame ``E_ref``) makes ALIGNING transform each
+    over-threshold participant's reconstructed encoder terminal/predictor I/O weights by ``Q_c*``, then
+    re-difference them before the outer step. The committed round remains bitwise-reproducible
+    (``INV-AGG-DETERMINISM``).
     """
 
     _N_PROBE = 64  # k >> d so M = T^T S is well-conditioned
@@ -475,7 +630,13 @@ def test_backstop_fires_round_closes_reproducibly() -> None:
     def _commit_with_backstop() -> tuple[str, torch.Tensor]:
         transport = InProcessTransport()
         coord = _BackstopCoordinator(cfg, transport=transport)
-        _stage(transport, cfg, round_index=0, participant_ids=["c0", "c1"])
+        _stage(
+            transport,
+            cfg,
+            round_index=0,
+            participant_ids=["c0", "c1"],
+            clipped=False,
+        )
         coord.run(1)
         return coord.global_state_hash(), coord.global_params().clone()
 
@@ -490,12 +651,50 @@ def test_backstop_fires_round_closes_reproducibly() -> None:
     # The backstop ACTUALLY fired: the committed θ_{t+1} differs from the plain (un-wired) pass-through.
     transport_p = InProcessTransport()
     coord_p = Coordinator(cfg, transport=transport_p)
-    _stage(transport_p, cfg, round_index=0, participant_ids=["c0", "c1"])
+    _stage(
+        transport_p,
+        cfg,
+        round_index=0,
+        participant_ids=["c0", "c1"],
+        clipped=False,
+    )
     coord_p.run(1)
     assert coord_p.round_state() == RoundState.CLOSED
     assert (
         h_a != coord_p.global_state_hash()
-    )  # the predictor-conjugation moved the committed params
+    )  # the full-weight frame transform moved the committed params
+
+
+@pytest.mark.parametrize(
+    ("clipped", "quantized"),
+    [(True, False), (False, True)],
+)
+def test_backstop_rejects_release_transformed_updates(
+    *, clipped: bool, quantized: bool
+) -> None:
+    """Participant-specific alignment cannot run after the release transforms."""
+    cfg = _cfg()
+    coord = _BackstopCoordinator(cfg, transport=InProcessTransport())
+    updates = {
+        pid: dataclasses.replace(
+            _toy_update(
+                cfg,
+                round_index=0,
+                seed=seed,
+                clipped=clipped,
+            ),
+            quantized=quantized,
+        )
+        for pid, seed in (("c0", 100), ("c1", 101))
+    }
+
+    with pytest.raises(ConfigError, match="INV-ALIGN-BEFORE-RELEASE") as exc:
+        coord._align_updates(  # noqa: SLF001
+            updates,
+            coord._probe_embeddings(0),  # noqa: SLF001
+            coord._reference_embeddings(0),  # noqa: SLF001
+        )
+    assert "before clipping, noise, quantization, and masking" in exc.value.remediation
 
 
 def _rot_in_plane(angle_deg: float, d: int = _D) -> torch.Tensor:
@@ -515,8 +714,8 @@ def _frame_rotated_update(
 
     Added to the round-0 global (whose ``frame_proj`` is the identity), the reconstructed encoder's terminal
     frame becomes ``R_angle`` — so ``f_c(P) = E_ref @ R_angle^T`` drifts ``angle_deg`` from the round-0
-    reference, above the 15-deg threshold. Every other θ/φ param delta is zero, so the live backstop's only
-    effect is the frame conjugation (a clean, controlled live-path probe).
+    reference, above the 15-deg threshold. Every other θ/φ delta is zero, giving a controlled full-weight
+    alignment probe against a nonzero global baseline.
     """
     enc = build_encoder(cfg)
     pred = build_predictor(cfg)
@@ -531,7 +730,7 @@ def _frame_rotated_update(
     for name, t in pred.state_dict().items():
         param_deltas[f"predictor.{name}"] = torch.zeros_like(t, dtype=torch.float32)
     return build_pseudogradient(
-        param_deltas, dataset_root=_ROOT, round_index=round_index, clipped=True
+        param_deltas, dataset_root=_ROOT, round_index=round_index, clipped=False
     )
 
 
@@ -550,17 +749,32 @@ def _pinned_probe_cfg(tmp_path: Path) -> LensembleConfig:
     probe_path = tmp_path / "probe.safetensors"
     save_probe(probe, probe_path)
     data = dataclasses.replace(cfg.data, probe_path=str(probe_path))
-    return dataclasses.replace(cfg, data=data)
+    privacy = dataclasses.replace(
+        cfg.privacy,
+        enabled=False,
+        noise_multiplier=0.0,
+    )
+    federation = dataclasses.replace(
+        cfg.federation,
+        aggregation_backend="simulated",
+        quantize_pseudo_gradient=False,
+    )
+    return dataclasses.replace(
+        cfg,
+        data=data,
+        privacy=privacy,
+        federation=federation,
+    )
 
 
 def test_live_backstop_fires_from_reconstructed_encoders(tmp_path: Path) -> None:
     """#262: the LIVE coordinator (``enable_backstop=True`` + a pinned probe) reconstructs each participant's
-    encoder from its released delta, measures f_c(P) on the probe, and conjugates the over-threshold frames
-    before the outer step — changing the committed θ_{t+1} vs the backstop-off pass-through, reproducibly.
+    encoder from its released delta, measures f_c(P), aligns the full local gauge weights, and
+    re-differences from the current global before the outer step — reproducibly.
     """
     cfg = _pinned_probe_cfg(tmp_path)
 
-    def _commit(enable_backstop: bool) -> str:
+    def _commit(enable_backstop: bool) -> tuple[str, torch.Tensor]:
         transport = InProcessTransport()
         coord = Coordinator(cfg, transport=transport, enable_backstop=enable_backstop)
         # Two participants whose reconstructed encoders carry a 30/40-deg terminal-frame drift (> threshold).
@@ -576,16 +790,24 @@ def test_live_backstop_fires_from_reconstructed_encoders(tmp_path: Path) -> None
         )
         coord.run(1)
         assert coord.round_state() == RoundState.CLOSED
-        return coord.global_state_hash()
+        return (
+            coord.global_state_hash(),
+            coord._theta_weights["frame_proj.weight"].clone(),  # noqa: SLF001
+        )
 
-    h_on_a = _commit(enable_backstop=True)
-    h_on_b = _commit(enable_backstop=True)
-    h_off = _commit(enable_backstop=False)
+    h_on_a, frame_on_a = _commit(enable_backstop=True)
+    h_on_b, frame_on_b = _commit(enable_backstop=True)
+    h_off, frame_off = _commit(enable_backstop=False)
 
     # Bitwise-reproducible despite the per-participant forward passes + Procrustes fold-in.
     assert h_on_a == h_on_b
+    assert torch.equal(frame_on_a, frame_on_b)
+    # Each local frame is a pure rotation of the nonzero global identity frame. Full-weight alignment maps
+    # both back to that frame exactly before re-differencing, so their committed encoder displacement is zero.
+    assert torch.allclose(frame_on_a, torch.eye(_D), atol=1e-5)
     # The live backstop ACTUALLY fired: the committed θ_{t+1} differs from the un-wired pass-through.
     assert h_on_a != h_off
+    assert not torch.allclose(frame_off, torch.eye(_D), atol=1e-5)
 
 
 def test_live_backstop_disabled_without_probe_is_passthrough(tmp_path: Path) -> None:
@@ -601,6 +823,40 @@ def test_live_backstop_disabled_without_probe_is_passthrough(tmp_path: Path) -> 
 
     # With no probe, the enable flag is inert: the committed hash equals the plain pass-through.
     assert _commit(enable_backstop=True) == _commit(enable_backstop=False)
+
+
+@pytest.mark.parametrize(
+    ("privacy_enabled", "quantized", "backend", "setting"),
+    [
+        (True, False, "simulated", "privacy.enabled=True"),
+        (False, True, "simulated", "quantize_pseudo_gradient=True"),
+        (False, False, "masking", "aggregation_backend='masking'"),
+        (False, False, "tee", "aggregation_backend='tee'"),
+    ],
+)
+def test_live_backstop_rejects_incompatible_release_boundary(
+    tmp_path: Path,
+    *,
+    privacy_enabled: bool,
+    quantized: bool,
+    backend: str,
+    setting: str,
+) -> None:
+    cfg = _pinned_probe_cfg(tmp_path)
+    cfg = dataclasses.replace(
+        cfg,
+        privacy=dataclasses.replace(cfg.privacy, enabled=privacy_enabled),
+        federation=dataclasses.replace(
+            cfg.federation,
+            quantize_pseudo_gradient=quantized,
+            aggregation_backend=backend,  # type: ignore[arg-type]
+        ),
+    )
+
+    with pytest.raises(ConfigError, match="INV-ALIGN-BEFORE-RELEASE") as exc:
+        Coordinator(cfg, transport=InProcessTransport(), enable_backstop=True)
+    assert setting in str(exc.value)
+    assert "participant-side" in exc.value.remediation
 
 
 def test_warm_start_loads_checkpoint_weights_into_global() -> None:
@@ -660,7 +916,13 @@ def test_partial_embedding_coverage_realigns_only_the_wired_participant() -> Non
     cfg = _cfg()
     transport = InProcessTransport()
     coord = _PartialEmbeddingCoordinator(cfg, transport=transport)
-    _stage(transport, cfg, round_index=0, participant_ids=["c0", "c1"])
+    _stage(
+        transport,
+        cfg,
+        round_index=0,
+        participant_ids=["c0", "c1"],
+        clipped=False,
+    )
     coord.run(1)
     # The round still CLOSED reproducibly (c0 realigned, c1 passed through unchanged).
     assert coord.round_state() == RoundState.CLOSED
@@ -668,7 +930,13 @@ def test_partial_embedding_coverage_realigns_only_the_wired_participant() -> Non
     # A second run commits the identical hash (the partial backstop is deterministic).
     transport2 = InProcessTransport()
     coord2 = _PartialEmbeddingCoordinator(cfg, transport=transport2)
-    _stage(transport2, cfg, round_index=0, participant_ids=["c0", "c1"])
+    _stage(
+        transport2,
+        cfg,
+        round_index=0,
+        participant_ids=["c0", "c1"],
+        clipped=False,
+    )
     coord2.run(1)
     assert coord.global_state_hash() == coord2.global_state_hash()
 
@@ -713,7 +981,7 @@ def test_probe_hash_resolved_from_pinned_probe_path(tmp_path: Path) -> None:
         points=points,
         landmark_idx=landmark_idx,
         landmark_targets=targets,
-        content_hash=probe_content_hash(points, landmark_idx),
+        content_hash=probe_content_hash(points, landmark_idx, targets),
         probe_version=1,
     )
     probe_file = tmp_path / "probe.safetensors"
@@ -727,6 +995,24 @@ def test_probe_hash_resolved_from_pinned_probe_path(tmp_path: Path) -> None:
     # The broadcast probe_hash equals the pinned probe's content hash (not the placeholder).
     assert coord.global_state().probe_hash == probe.content_hash
     assert coord.global_state().probe_hash != b"\x00" * 32
+
+
+def test_coordinator_rejects_targets_tampered_under_stored_probe_hash(
+    tmp_path: Path,
+) -> None:
+    cfg = _pinned_probe_cfg(tmp_path)
+    probe_file = Path(str(cfg.data.probe_path))
+    tensors: dict[str, torch.Tensor] = {}
+    with safe_open(str(probe_file), framework="pt") as handle:  # type: ignore[no-untyped-call]
+        metadata = dict(handle.metadata() or {})
+        for key in ("points", "landmark_idx", "landmark_targets"):
+            tensors[key] = handle.get_tensor(key)
+    tensors["landmark_targets"] = tensors["landmark_targets"].clone()
+    tensors["landmark_targets"][0, 0, 0] += 1.0
+    save_file(tensors, str(probe_file), metadata=metadata)
+
+    with pytest.raises(ProbeError, match="stored content_hash"):
+        Coordinator(cfg, transport=InProcessTransport())
 
 
 # --- temp-artifacts-dir cleanup (#178: the Coordinator must not leak its mkdtemp dir) ---

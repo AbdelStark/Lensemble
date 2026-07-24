@@ -35,6 +35,8 @@ from lensemble.data import (
 from lensemble.errors import RoundError
 from lensemble.federation import (
     InProcessTransport,
+    LoopbackChannel,
+    NetworkedTransport,
     Phase3CoordinatorService,
     PseudoGradient,
     RoundState,
@@ -125,6 +127,7 @@ def _manifest(*, retry_budget: int = 1) -> Phase3ConsortiumManifest:
     probe = Phase3PublicProbe(
         probe_id="toy-agent-probe",
         version=1,
+        hash_contract="placeholder-unbound",
         content_hash="a" * 64,
     )
     participants = tuple(
@@ -307,6 +310,62 @@ def test_service_completes_three_participant_smoke_with_one_dropout(
         "participant.dropped",
         "round.closed",
     }
+
+
+def test_networked_service_close_round_reuses_precollected_updates(
+    tmp_path: Path,
+) -> None:
+    cfg = _cfg()
+    cfg = dataclasses.replace(
+        cfg,
+        federation=dataclasses.replace(cfg.federation, transport="network"),
+    )
+    base_manifest = _manifest(retry_budget=0)
+    manifest = base_manifest.model_copy(
+        update={
+            "runtime": base_manifest.runtime.model_copy(
+                update={"transport": "network"}
+            ),
+            "participants": tuple(
+                participant.model_copy(
+                    update={
+                        "capabilities": participant.capabilities.model_copy(
+                            update={"network_transport": True}
+                        )
+                    }
+                )
+                for participant in base_manifest.participants
+            ),
+        }
+    )
+    mesh = LoopbackChannel.connected_mesh(manifest.coordinator_id, *_PARTICIPANTS)
+    transport = NetworkedTransport(
+        channel=mesh[manifest.coordinator_id],
+        coordinator_id=manifest.coordinator_id,
+    )
+    service = Phase3CoordinatorService(
+        cfg,
+        manifest=manifest,
+        transport=transport,
+        artifacts_dir=tmp_path / "artifacts",
+        trace_path=tmp_path / "coordinator_trace.jsonl",
+    )
+    _join_all(service)
+    _assign_all(service)
+    for seed, participant_id in enumerate(("agent-a", "agent-b"), start=10):
+        service.submit_update(
+            participant_id=participant_id,
+            update=_toy_update(
+                cfg, participant_id=participant_id, round_index=0, seed=seed
+            ),
+        )
+    service.mark_dropout(participant_id="agent-c", reason="induced_dropout")
+
+    assert service.close_round() is RoundState.CLOSED
+    assert service.coordinator.ledger_records()[-1].participants == (
+        "agent-a",
+        "agent-b",
+    )
 
 
 def test_service_consumes_shared_dataset_probe_registry(tmp_path: Path) -> None:

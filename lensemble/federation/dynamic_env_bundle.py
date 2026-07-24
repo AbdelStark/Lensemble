@@ -33,7 +33,7 @@ from lensemble.federation.phase3_orchestration import (
     load_phase3_long_run_report,
 )
 
-DYNAMIC_ENV_OBSERVABILITY_REPORT_SCHEMA_VERSION = 1
+DYNAMIC_ENV_OBSERVABILITY_REPORT_SCHEMA_VERSION = 2
 DYNAMIC_ENV_BENCHMARK_REPORT_SCHEMA_VERSION = 1
 DYNAMIC_ENV_EVIDENCE_BUNDLE_SCHEMA_VERSION = 1
 
@@ -96,6 +96,9 @@ class DynamicEnvRoundObservability(BaseModel):
     state: Literal["closed"]
     contributing_count: int = Field(ge=1)
     aggregation_backend_status: str = Field(min_length=1)
+    secure_sum_consumed: bool = False
+    dp_accounting_status: str = Field(default="legacy_unclassified", min_length=1)
+    effective_dp: bool = False
     dp_epsilon_spent: float | None = Field(default=None, ge=0.0)
     estimated_update_bytes: int = Field(ge=0)
     global_model_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -116,11 +119,13 @@ class DynamicEnvObservabilityReport(BaseModel):
     source_artifacts: tuple[DynamicEnvSourceArtifactRef, ...] = Field(min_length=1)
     rounds: tuple[DynamicEnvRoundObservability, ...] = Field(min_length=1)
     secure_sum_rounds: int = Field(ge=0)
+    post_commit_cross_check_rounds: int = Field(default=0, ge=0)
     dp_enabled: bool
     dp_accountant: str = Field(min_length=1)
     dp_epsilon: float = Field(gt=0.0)
     dp_delta: float = Field(gt=0.0, lt=1.0)
     dp_accounted_rounds: int = Field(ge=0)
+    effective_dp_rounds: int = Field(default=0, ge=0)
     max_round_epsilon_spent: float = Field(ge=0.0)
     dropout_decisions: tuple[str, ...]
     artifact_kinds_satisfied: tuple[
@@ -133,9 +138,48 @@ class DynamicEnvObservabilityReport(BaseModel):
     claim_boundary: str = Field(min_length=1)
     raw_data_in_report: Literal[False] = False
 
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_v1_privacy_semantics(cls, raw: Any) -> Any:
+        """Normalize legacy secure-sum and deterministic-DP labels in memory."""
+
+        if not isinstance(raw, dict) or raw.get("schema_version") != 1:
+            return raw
+        migrated = dict(raw)
+        migrated["post_commit_cross_check_rounds"] = int(
+            migrated.get("secure_sum_rounds", 0)
+        )
+        migrated["secure_sum_rounds"] = 0
+        migrated.setdefault("effective_dp_rounds", 0)
+        rounds = migrated.get("rounds")
+        if isinstance(rounds, (list, tuple)):
+            migrated_rounds: list[Any] = []
+            for row in rounds:
+                if not isinstance(row, dict):
+                    migrated_rounds.append(row)
+                    continue
+                migrated_row = dict(row)
+                if migrated_row.get("aggregation_backend_status") == "secure_sum":
+                    migrated_row["aggregation_backend_status"] = (
+                        "post_commit_cross_check"
+                    )
+                    migrated_row["secure_sum_consumed"] = False
+                if migrated_row.get("dp_epsilon_spent") is not None:
+                    migrated_row.setdefault(
+                        "dp_accounting_status", "deterministic_replay_only"
+                    )
+                    migrated_row["effective_dp"] = False
+                migrated_rounds.append(migrated_row)
+            migrated["rounds"] = migrated_rounds
+        return migrated
+
     @model_validator(mode="after")
     def _cross_check(self) -> "DynamicEnvObservabilityReport":
-        if self.schema_version != DYNAMIC_ENV_OBSERVABILITY_REPORT_SCHEMA_VERSION:
+        if (
+            not 1
+            <= self.schema_version
+            <= (DYNAMIC_ENV_OBSERVABILITY_REPORT_SCHEMA_VERSION)
+        ):
             raise SchemaVersionMismatch(
                 f"dynamic-env observability schema_version {self.schema_version!r} exceeds reader max "
                 f"{DYNAMIC_ENV_OBSERVABILITY_REPORT_SCHEMA_VERSION}",
@@ -163,9 +207,21 @@ class DynamicEnvObservabilityReport(BaseModel):
                 code=LensembleErrorCode.CONFIG_INVALID,
                 remediation="regenerate observability from the matching long-run report",
             )
+        if self.post_commit_cross_check_rounds > len(self.rounds):
+            raise ConfigError(
+                "dynamic-env post_commit_cross_check_rounds exceeds emitted round count",
+                code=LensembleErrorCode.CONFIG_INVALID,
+                remediation="regenerate observability from the matching long-run report",
+            )
         if self.dp_accounted_rounds > len(self.rounds):
             raise ConfigError(
                 "dynamic-env dp_accounted_rounds exceeds emitted round count",
+                code=LensembleErrorCode.CONFIG_INVALID,
+                remediation="regenerate observability from the matching long-run report",
+            )
+        if self.effective_dp_rounds > len(self.rounds):
+            raise ConfigError(
+                "dynamic-env effective_dp_rounds exceeds emitted round count",
                 code=LensembleErrorCode.CONFIG_INVALID,
                 remediation="regenerate observability from the matching long-run report",
             )
@@ -442,6 +498,9 @@ def build_dynamic_env_observability_report(
             state=row.state,
             contributing_count=row.contributing_count,
             aggregation_backend_status=row.aggregation_backend_status,
+            secure_sum_consumed=row.secure_sum_consumed,
+            dp_accounting_status=row.dp_accounting_status,
+            effective_dp=row.effective_dp,
             dp_epsilon_spent=row.dp_epsilon_spent,
             estimated_update_bytes=int(row.contributing_count) * per_update_numel * 4,
             global_model_hash=row.global_model_hash,
@@ -474,22 +533,33 @@ def build_dynamic_env_observability_report(
         ),
         rounds=rounds,
         secure_sum_rounds=sum(
-            1 for row in rounds if row.aggregation_backend_status == "secure_sum"
+            1
+            for row in rounds
+            if row.aggregation_backend_status == "secure_sum"
+            and row.secure_sum_consumed
+        ),
+        post_commit_cross_check_rounds=sum(
+            1
+            for row in rounds
+            if row.aggregation_backend_status == "post_commit_cross_check"
         ),
         dp_enabled=long_run.run_shape.dp_enabled,
         dp_accountant=long_run.run_shape.dp_accountant,
         dp_epsilon=long_run.run_shape.dp_epsilon,
         dp_delta=long_run.run_shape.dp_delta,
         dp_accounted_rounds=len(epsilons),
+        effective_dp_rounds=sum(1 for row in rounds if row.effective_dp),
         max_round_epsilon_spent=max(epsilons) if epsilons else 0.0,
         dropout_decisions=(
             "no induced dropout in this dynamic-env evidence row; runtime dropout semantics remain covered by the Phase 3 coordinator-service tests",
         ),
         redaction_contract_id="dynamic-env-observability-redaction-v1",
         claim_boundary=(
-            "synthetic control env observability report: DP accounting, secure aggregation status, "
-            "communication byte estimates, and residency-clean artifact hashes for the dynamic-env run. "
-            "This does not claim paper-scale performance."
+            "synthetic control env observability report: DP one-round mechanism snapshots, secure "
+            "aggregation status, communication byte estimates, and residency-clean artifact hashes. "
+            "The optimizer consumed plaintext participant updates; simulated sums are post-commit "
+            "cross-checks, not secure optimizer inputs, and deterministic replay noise is not effective "
+            "DP. This does not claim paper-scale performance."
         ),
     )
     return parse_dynamic_env_observability_report(report.model_dump(mode="json"))
@@ -669,9 +739,11 @@ as skill-vs-identity or latent goal energy are supporting only and gameable.
 
 ## Observability And Privacy
 
-- Secure-sum rounds: {observability.secure_sum_rounds}
-- DP-accounted rounds: {observability.dp_accounted_rounds}
-- Max per-round epsilon spent: {observability.max_round_epsilon_spent}
+- Optimizer-consumed secure-sum rounds: {observability.secure_sum_rounds}
+- Post-commit sum cross-check rounds: {observability.post_commit_cross_check_rounds}
+- One-round DP mechanism-accounting snapshots: {observability.dp_accounted_rounds}
+- Claim-grade effective-DP rounds: {observability.effective_dp_rounds}
+- Max one-round epsilon snapshot: {observability.max_round_epsilon_spent}
 - Redaction contract: `{observability.redaction_contract_id}`
 - Run-manifest hash: `{observability.run_manifest_sha256}`
 

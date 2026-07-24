@@ -66,8 +66,8 @@ def _rot15() -> Tensor:
     return q
 
 
-def _hash(probe: SimpleNamespace) -> str:
-    return probe_content_hash(probe.points, probe.landmark_idx).hex()
+def _hash(probe: SimpleNamespace, targets: Tensor) -> str:
+    return probe_content_hash(probe.points, probe.landmark_idx, targets).hex()
 
 
 def test_landmark_anchor_recovers_identity(
@@ -82,7 +82,10 @@ def test_landmark_anchor_recovers_identity(
     ).tokens.detach()  # t_i = f_ref(p_i), the fixed round-0 targets
 
     anchor = FrameAnchor(
-        synthetic_probe, targets, "landmark", probe_hash=_hash(synthetic_probe)
+        synthetic_probe,
+        targets,
+        "landmark",
+        probe_hash=_hash(synthetic_probe, targets),
     )
 
     # f_theta starts rotated ~15 deg off the round-0 frame -> the anchor penalizes it
@@ -115,7 +118,9 @@ def test_loss_is_zero_dim_fp32(synthetic_probe: SimpleNamespace) -> None:
     targets = f_ref(
         synthetic_probe.points[synthetic_probe.landmark_idx]
     ).tokens.detach()
-    anchor = FrameAnchor(synthetic_probe, targets, probe_hash=_hash(synthetic_probe))
+    anchor = FrameAnchor(
+        synthetic_probe, targets, probe_hash=_hash(synthetic_probe, targets)
+    )
     value = anchor.loss(f_ref)
     assert value.ndim == 0 and value.dtype == torch.float32
 
@@ -127,7 +132,7 @@ def test_loss_accepts_bfloat16_probe_points(synthetic_probe: SimpleNamespace) ->
         landmark_idx=synthetic_probe.landmark_idx,
     )
     targets = f_ref(probe.points[probe.landmark_idx].to(torch.float32)).tokens.detach()
-    anchor = FrameAnchor(probe, targets, probe_hash=_hash(probe))
+    anchor = FrameAnchor(probe, targets, probe_hash=_hash(probe, targets))
 
     value = anchor.loss(f_ref)
 
@@ -139,7 +144,7 @@ def test_k_less_than_d_is_rejected() -> None:
     probe = SimpleNamespace(points=torch.randn(16, _D), landmark_idx=torch.arange(3))
     targets = torch.randn(3, _N, _D)
     with pytest.raises(FrameDriftExceeded) as exc:
-        FrameAnchor(probe, targets, probe_hash=_hash(probe))
+        FrameAnchor(probe, targets, probe_hash=_hash(probe, targets))
     assert exc.value.code == LensembleErrorCode.FRAME_DRIFT_EXCEEDED
 
 
@@ -151,6 +156,31 @@ def test_probe_hash_mismatch_is_rejected(synthetic_probe: SimpleNamespace) -> No
     with pytest.raises(ProbeError) as exc:
         FrameAnchor(synthetic_probe, targets, probe_hash="00" * 32)
     assert exc.value.code == LensembleErrorCode.PROBE_INVALID
+
+
+def test_tampered_stored_targets_are_rejected(
+    synthetic_probe: SimpleNamespace,
+) -> None:
+    f_ref = _RefEncoder().eval()
+    targets = f_ref(
+        synthetic_probe.points[synthetic_probe.landmark_idx]
+    ).tokens.detach()
+    pinned = _hash(synthetic_probe, targets)
+    tampered_targets = targets.clone()
+    tampered_targets[0, 0, 0] += 1.0
+    tampered_probe = SimpleNamespace(
+        points=synthetic_probe.points,
+        landmark_idx=synthetic_probe.landmark_idx,
+        landmark_targets=tampered_targets,
+        content_hash=bytes.fromhex(pinned),
+    )
+
+    with pytest.raises(ProbeError, match="stored content_hash"):
+        FrameAnchor(
+            tampered_probe,
+            tampered_targets,
+            probe_hash=pinned,
+        )
 
 
 # --- Variant B rotational-drift anchor (RFC-0002 4), issue #17 ---
@@ -177,7 +207,10 @@ def test_rotational_anchor_recovers_identity(
     targets = f_ref(landmarks).tokens.detach()
 
     anchor = FrameAnchor(
-        synthetic_probe, targets, "rotational", probe_hash=_hash(synthetic_probe)
+        synthetic_probe,
+        targets,
+        "rotational",
+        probe_hash=_hash(synthetic_probe, targets),
     )
     f_theta = _CorrectedEncoder(f_ref, _rot15())
     initial_loss = float(
@@ -208,7 +241,10 @@ def test_rotational_near_degenerate_raises(synthetic_probe: SimpleNamespace) -> 
         synthetic_probe.points[synthetic_probe.landmark_idx]
     ).tokens.detach()
     anchor = FrameAnchor(
-        synthetic_probe, targets, "rotational", probe_hash=_hash(synthetic_probe)
+        synthetic_probe,
+        targets,
+        "rotational",
+        probe_hash=_hash(synthetic_probe, targets),
     )
     # a rank-deficient encoder output makes M near-degenerate -> raise, never a NaN gradient
     with pytest.raises(DegenerateProcrustes):

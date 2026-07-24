@@ -13,21 +13,25 @@ Section numbers are stable and cited corpus-wide; do not renumber them.
 
 ## 0. Project identity
 
-- Name: Lensemble. One line: "Federated, end-to-end JEPA world models — trained across sovereign data,
-  verifiable by construction."
+- Name: Lensemble. One line: "Research stack for reproducible federated training and evaluation of
+  action-conditioned JEPA world models."
 - Etymology: *l'ensemble* (the whole / together) + the ML *ensemble* (many models acting as one), with
   *lens* (the perception encoder) in front.
 - Thesis: train a single action-conditioned JEPA world model end-to-end (encoder and predictor
   co-trained — "Fork B") across many mutually-distrusting participants; raw data never leaves a
-  boundary; only model deltas cross, aggregated under privacy, with a Phase-2 roadmap to cryptographic
-  proof of contribution.
-- Scientific core (the lead contribution): the latent gauge problem and its fix. The SIGReg-JEPA
+  boundary; only released model deltas and protocol metadata cross. Secure aggregation and effective DP
+  are Stage-C target protections for those deltas, with a Phase-2 roadmap to cryptographic proof of
+  contribution. The current coordinator consumes individual plaintext deltas; its aggregation report is
+  a post-commit equivalence check/fallback and its deterministic one-round replay accounting is not
+  effective or cumulative DP.
+- Scientific core (the lead research question): the latent gauge problem and candidate controls. The SIGReg-JEPA
   objective is invariant under O(d) rotations of the latent space, so independently-updated participants
-  drift into mutually-rotated coordinate frames and naive weight-averaging is meaningless. Lensemble
-  closes the gauge with a shared warm-start plus a light public-probe frame anchor, which also keeps the
-  eventual proof-of-contribution circuit cheap.
-- Verifiable contribution is the Phase-2 differentiator, not Phase-1 scope. Phase 1 ships "proof-ready"
-  so Phase 2 needs no rework.
+  can drift into mutually-rotated coordinate frames and naive weight-averaging can combine incompatible
+  parameterizations. Lensemble implements a shared warm-start, public-probe frame anchor, and diagnostic
+  for testing that behavior. Existing full-model evidence predates the corrected outer step and does not
+  validate the current runtime.
+- Verifiable contribution is deferred beyond the current implementation. Deterministic and hash-bound
+  interfaces may support that work, but they do not constitute a proof or guarantee no-rework integration.
 - Fork B (end-to-end) is the target; Fork A (frozen shared encoder, federate predictor only) is the
   documented safe-degrade fallback.
 
@@ -244,8 +248,14 @@ Referenced by these identifiers corpus-wide. Each is stated, where enforced, in 
   derived from the broadcast seed $s_t$.
 - `INV-AGG-DETERMINISM`: the outer step is a pure, bitwise-reproducible function of (committed deltas,
   round seed, prior global params). No nondeterministic reductions on the aggregation path.
-- `INV-PROBE-PIN`: the probe content hash equals the hash committed in `RoundOpen`; landmark targets
-  derive only from $f_{\text{ref}}$ (round-0 encoder).
+- `INV-PROBE-PIN`: the versioned full probe hash over canonical points, landmark indices, and landmark
+  targets equals both the artifact's stored digest and the hash committed in `RoundOpen`; targets derive
+  only from $f_{\text{ref}}$ (round-0 encoder). A points-only source fingerprint is not this commitment.
+- `INV-ALIGN-BEFORE-RELEASE`: every participant-specific gauge transform is computed from that
+  participant's raw local full weights and the pinned public probe, then re-differenced from the round
+  global **before** clipping, noise, quantization, encoding, and masking. Once a secure-aggregation
+  boundary reveals only $\sum_c\Delta_c$, the coordinator may apply only common functions of that sum;
+  it cannot reconstruct or transform an individual $\Delta_c$.
 - `INV-COMMIT-BINDING`: every released $\Delta_c$ is bound to exactly one dataset Merkle root $R_c$.
 - `INV-CHECKPOINT-HASH`: every committed $(\theta_t,\phi_t)$ artifact's content hash equals the
   `Commitment`/`RoundClose` hash.
@@ -279,7 +289,8 @@ with an explicit integer `schema_version`. Tensors/weights use `safetensors`. Ep
 
 - Compute dtype default bf16 forward; fp32 master weights and loss/statistic accumulation.
 - The aggregation/outer-step path is bitwise-deterministic given its inputs (`INV-AGG-DETERMINISM`,
-  proof-readiness per [RFC-0006](../rfcs/RFC-0006-verifiable-contribution.md)): fixed reduction order,
+  with future proof-integration context in
+  [RFC-0006](../rfcs/RFC-0006-verifiable-contribution.md)): fixed reduction order,
   fp32 with fixed summation order (or fp64), no atomics. A determinism self-check runs each outer step;
   failure raises `NonDeterministicAggregation`.
 - Inner training determinism is best-effort and seed-pinned; full determinism is gated by a config flag
@@ -338,15 +349,15 @@ owner `@AbdelStark`, resolution in [RFC-0006](../rfcs/RFC-0006-verifiable-contri
 | Milestone | Stage | Content |
 |---|---|---|
 | `v0.1` | A | Single-site, warm-started, ViT-L/~300M end-to-end SIGReg + AC predictor on pooled robot data; latent-MPC eval (centralized upper bound). Plus foundational scaffolding: package skeleton, config system, data layer, WMCP contract, model+objective, eval harness, observability, artifact format, error taxonomy, CI, packaging. |
-| `v0.2` | B | Simulated federation on one cluster: DiLoCo outer loop, frame anchor (Layers 1–4), Procrustes backstop, simulated secure aggregation + DP, the frame-drift diagnostic, the full ablation ladder and non-IID/scale sweeps. The scientific core. |
+| `v0.2` | B | Simulated federation on one cluster: DiLoCo outer loop, frame anchor (Layers 1–4), Procrustes backstop, aggregation/DP mechanism plumbing with explicit effectiveness status, the frame-drift diagnostic, the full ablation ladder and non-IID/scale sweeps. The scientific core. |
 | `v0.3` | C | Two real sovereign nodes over a network boundary: real secure aggregation + DP, residency enforcement, fault tolerance/elasticity, contribution ledger. The sovereignty demonstration. |
-| `v1.0` | — | Hardening: frozen public API, complete docs + reproducibility package, release automation, Fork A fallback supported and tested, proof-ready guarantees verified end-to-end. |
+| `v1.0` | — | Hardening: frozen public API, complete docs + reproducibility package, release automation, Fork A fallback supported and tested, and proof-integration seams exercised without claiming a cryptographic proof or no-rework guarantee. |
 
 Out of the v1.0 scope (tracked as future work, not filed as implementable issues): Stage D (the actual
-STARK/TEE verifiable layer — Phase 2) beyond the proof-ready disciplines, and Stage E (own
-foundation-scale federated video pretraining). The proof-ready engineering disciplines (deterministic
-aggregation, hash commitments, Merkle roots, pinned probe, public recomputation) are in scope for
-v0.1–v1.0.
+STARK/TEE verifiable layer — Phase 2) beyond the proof-oriented disciplines, and Stage E (own
+foundation-scale federated video pretraining). The proof-oriented engineering interfaces
+(deterministic aggregation, hash commitments, Merkle roots, pinned probe, public recomputation) are in
+scope for v0.1–v1.0; they do not establish honest computation.
 
 ---
 

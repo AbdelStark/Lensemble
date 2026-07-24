@@ -13,10 +13,11 @@
 | **Area** | gauge |
 | **Requires** | RFC-0001 (architecture), RFC-0008 (model & objective), RFC-0004 (probe & provenance) |
 
-> This RFC is the scientific core of Lensemble. It states the one problem that makes federated
-> end-to-end JEPA genuinely hard, proves why the standard model-merging fix does not apply, and
-> specifies the solution: a shared warm-start plus a light public-probe frame anchor. The same
-> construction keeps the eventual proof-of-contribution circuit cheap (RFC-0006).
+> This RFC is the scientific core of Lensemble. It formalizes the latent-frame ambiguity introduced by
+> federated joint JEPA training, explains why permutation-only model-merging is insufficient, and
+> specifies candidate controls: a shared warm-start, a public-probe frame anchor, and bounded
+> fallbacks. Their corrected full-model effectiveness remains an empirical question. The construction's
+> near-linear aggregation is also a design input to the deferred proof research in RFC-0006.
 
 ## Summary
 
@@ -28,17 +29,19 @@ representation. This is the **latent gauge** problem: a JEPA-specific obstructio
 supervised federation do not face, because a fixed output basis (vocabulary, class labels) pins their
 frame for free.
 
-Lensemble closes the gauge with four additive layers: (1) a **shared sketch matrix** for objective
+The design addresses the gauge with four additive layers: (1) a **shared sketch matrix** for objective
 consistency; (2) a **shared warm-start plus a public-probe frame anchor** that pins the frame at
 $t{=}0$ and holds it during fine-tuning — the gauge fix; (3) a **Procrustes re-alignment backstop**
-at aggregation; (4) **function-space distillation** as a heterogeneity/instability fallback. The
+before participant release; (4) **function-space distillation** as a heterogeneity/instability fallback. The
 layers are additive and constitute the ablation ladder of [RFC-0005 §6](RFC-0005-evaluation.md). The
-anchored frame keeps the outer step a near-linear weighted average, which is the property that makes
-aggregation cheap to prove in Phase 2 ([RFC-0006 §3](RFC-0006-verifiable-contribution.md)).
+anchored frame is intended to keep the outer step a near-linear weighted average, which may simplify a
+future proof circuit; no such proof is implemented
+([RFC-0006 §3](RFC-0006-verifiable-contribution.md)).
 
 This RFC owns the `lensemble.gauge` subsystem (`anchor.py`, `procrustes.py`, `drift.py`) and the
 public functions `frame_drift` and `procrustes_align` ([conventions §5](../spec/conventions.md#5-public-api-surface)). It enforces invariants
-`INV-WARMSTART-T0`, `INV-SKETCH-CONSISTENCY`, and `INV-PROBE-PIN`, and raises `GaugeError`
+`INV-WARMSTART-T0`, `INV-SKETCH-CONSISTENCY`, `INV-PROBE-PIN`, and
+`INV-ALIGN-BEFORE-RELEASE`, and raises `GaugeError`
 (`FrameDriftExceeded`, `DegenerateProcrustes`) on the failure modes enumerated below.
 
 ## Motivation
@@ -50,15 +53,15 @@ matrices are comparable and `FedAvg` / DiLoCo outer-averaging behaves.
 
 End-to-end JEPA has **no fixed output basis**. The prediction target is another embedding produced by
 the same network, and the regularizer's target — an isotropic Gaussian — is itself basis-free.
-Nothing pins the frame. Co-training the encoder (Fork B, the lead contribution per [conventions §0](../spec/conventions.md#0-project-identity)) is exactly
-the regime that opens the gauge; freezing the encoder (Fork A) dissolves it but forfeits the
-end-to-end novelty.
+Nothing pins the frame. Co-training the encoder (Fork B, the lead research question per
+[conventions §0](../spec/conventions.md#0-project-identity)) is exactly the regime that opens the
+gauge; freezing the encoder (Fork A) removes that moving-encoder question.
 
-Without a gauge fix, the project's central claim — that federation closes the centralized–local gap
-without moving data — is untestable, because the aggregation step that is supposed to deliver that
-gain is meaningless. The frame-drift diagnostic of this RFC (defined below) is also a standalone
-contribution: to our knowledge it is the first measurement of latent frame-drift under federated
-self-supervision.
+Without gauge control, a centralized/local/federated comparison can confound representation quality
+with frame incompatibility. The frame-drift diagnostic below separates those effects and makes the
+gauge hypothesis testable. Existing full-model diagnostic artifacts predate the corrected outer-update
+direction and target-bound probe contract; they are historical audit evidence, not validation of the
+corrected runtime. [Issue #335](https://github.com/AbdelStark/Lensemble/issues/335) tracks the rerun.
 
 ## Goals
 
@@ -73,7 +76,8 @@ self-supervision.
 - Define the frame-drift diagnostic precisely enough that the headline figure is reproducible from
   committed weights and the public probe alone (emission contract in
   [RFC-0015](RFC-0015-observability-diagnostics.md)).
-- Enforce `INV-WARMSTART-T0`, `INV-SKETCH-CONSISTENCY`, `INV-PROBE-PIN` and name the errors that fire.
+- Enforce `INV-WARMSTART-T0`, `INV-SKETCH-CONSISTENCY`, `INV-PROBE-PIN`, and
+  `INV-ALIGN-BEFORE-RELEASE`, and name the errors that fire.
 
 ## Non-Goals
 
@@ -86,7 +90,8 @@ self-supervision.
 - The public probe construction, sizing, licensing, and content-hash pin are owned by
   [RFC-0004 §3](RFC-0004-data-provenance.md); this RFC consumes a pinned probe and its landmark targets.
 - The proof system, STARK circuit, and TEE attestation are [RFC-0006](RFC-0006-verifiable-contribution.md)
-  (Phase 2, deferred); this RFC only guarantees the public-recomputability property the proof layer relies on.
+  (Phase 2, deferred). This RFC specifies a deterministic public diagnostic over committed global
+  artifacts; it neither proves participant-local alignment nor guarantees future proof integration.
 - Choosing the production value of $\lambda_{\text{anc}}$ and the drift threshold is a Stage-B empirical
   task (Open Questions), not a normative default of this RFC.
 
@@ -259,14 +264,30 @@ class FrameAnchor:
 
 ### 5. Layer 3 — Procrustes re-alignment at aggregation (backstop)
 
-Immediately before each outer step, recompute the hard alignment $Q_c^\star$ on $\mathcal{P}$ for each
-participant and fold it into the encoder's terminal linear map (and conjugate the predictor I/O,
-$g_\phi \mapsto Q_c^\star g_\phi Q_c^{\star\top}$) before averaging. With Layer 2 active this should
-rarely bind; it fires only when the measured drift exceeds a configured threshold (Open Question
-below). **Verifiability bonus:** alignment is a deterministic function of *public-probe data +
-committed weights*, so it is publicly recomputable — anyone can recompute and check it, and it needs
-**no** ZK proof ([RFC-0006 §3](RFC-0006-verifiable-contribution.md)). This is realized by
-`recompute_alignment` in [RFC-0006](RFC-0006-verifiable-contribution.md).
+Immediately before participant egress, recompute the hard alignment $Q_c^\star$ on $\mathcal{P}$ for
+each participant and fold it into that participant's raw local encoder terminal and predictor I/O
+weights. Re-difference the aligned full weights from the round global, then clip, noise, optionally
+quantize, encode, and mask that aligned displacement. With Layer 2 active this should rarely bind; it
+fires only when measured drift exceeds a configured threshold (Open Question below).
+
+This ordering is an information-flow requirement, not an implementation preference:
+**`INV-ALIGN-BEFORE-RELEASE`**. $Q_c^\star$ and the full-weight transform are participant-specific and
+require $W_c^{\mathrm{local}}$ (or an individually visible raw $\Delta_c$). A genuine secure-aggregation
+boundary reveals only $\sum_c\Delta_c$; no coordinator can recover the individual $Q_c^\star$ or apply
+distinct affine transforms after that sum. The production seams are therefore:
+
+1. perform the transform participant-side before clipping/noise/quantization/masking; or
+2. perform the same order inside a trusted/MPC/TEE boundary that can see individual raw local weights
+   and emits only final masked/aligned releases or their sum.
+
+The current coordinator-side implementation is only a plaintext research harness: it may operate on
+raw, individually keyed deltas with DP and quantization disabled and the simulated backend selected. It
+must fail closed for release-transformed updates or a secure-sum backend. It is not the Stage-C path.
+
+`recompute_alignment` in [RFC-0006](RFC-0006-verifiable-contribution.md) remains a useful public
+diagnostic over a **committed global model** and the public probe. It does not verify that each
+participant applied its pre-release backstop. Verifying that participant-local action requires an
+attestation/proof, or execution inside the trusted/MPC boundary; the secure sum alone is insufficient.
 
 Procrustes closed form (the same map used by Variant B and by the diagnostic):
 
@@ -289,8 +310,39 @@ def procrustes_align(source: Tensor, target: Tensor) -> tuple[Tensor, float]:
     """
 ```
 
-The fold-in is a pure linear operation applied to the participant's released delta *before* it enters
-the deterministic outer reduction; it does not read any private state and is recomputable by a verifier.
+The transform uses row-space latents and PyTorch `Linear` semantics
+$y = xW^\top + b$. Since `procrustes_align(source, target)` returns $Q_c^\star$ satisfying
+$f_c(\mathcal{P})Q_c^\star \approx E_{\mathrm{ref}}$, the aligned encoder must emit the local latent
+right-multiplied by $Q_c^\star$. For every gauge-bearing parameter, use the raw local full weight
+(equivalently reconstruct it from the round global and the raw pre-release displacement):
+
+$$
+W_c^{\mathrm{local}} = W_t^{\mathrm{global}} + \Delta_c.
+$$
+
+Then apply the row/column-correct transforms:
+
+$$
+\begin{aligned}
+W_{\mathrm{enc}}' &= Q_c^{\star\top} W_{\mathrm{enc}}^{\mathrm{local}}, \\
+W_{\mathrm{in}}'  &= W_{\mathrm{in}}^{\mathrm{local}} Q_c^\star, \\
+W_{\mathrm{out}}' &= Q_c^{\star\top} W_{\mathrm{out}}^{\mathrm{local}}, \\
+b_{\mathrm{out}}' &= Q_c^{\star\top} b_{\mathrm{out}}^{\mathrm{local}}.
+\end{aligned}
+$$
+
+Finally, form the aligned displacement that will enter the release pipeline:
+
+$$
+\Delta_c' = W_c' - W_t^{\mathrm{global}}.
+$$
+
+This reconstruct-transform-re-difference is affine in $\Delta_c$ for a fixed nonzero global model;
+rotating $\Delta_c$ alone omits the transformed-global term and is incorrect. It also does not commute
+with nonlinear clipping, participant-specific noise, lossy quantization, or a sum-only aggregation
+boundary. Non-gauge deltas pass through byte-identically. The probe and reference are public, but the
+raw local weights are participant state; their use does not make the participant-specific transform
+publicly recomputable.
 
 ### 6. Layer 4 — function-space distillation (fallback / heterogeneity)
 
@@ -330,6 +382,12 @@ harness is part of the Testing Strategy below.
 
 ### 8. The training algorithm (per outer round, preserved verbatim)
 
+The pseudocode preserves the normative Stage-C protocol. The current coordinator commits from
+individual plaintext deltas; its simulated/TEE aggregation result is a post-commit equivalence check,
+and deterministic replay noise with fresh one-round accounting is neither effective nor cumulative DP.
+Those runtime limitations do not change the gauge algorithm, but steps 2–3 are not yet the live privacy
+path.
+
 ```
 Given: global θ, φ; participants c = 1..C; public probe P, landmark targets {t_i};
        sketch seed s_t (→ projection matrix A); inner horizon H.
@@ -337,26 +395,35 @@ Given: global θ, φ; participants c = 1..C; public probe P, landmark targets {t
 2. Each participant c, in parallel (inner FSDP/TP):
      for H steps:  minimize  L_pred + λ_sig·SIGReg_A(f) + λ_anc·L_anchor(f; P, t_i)
                    on local data via AdamW.   # raw data never leaves (INV-RESIDENCY)
-     form pseudo-gradient Δ_c = (θ_c, φ_c) − (θ, φ)
-     DP: clip ‖Δ_c‖, add Gaussian noise               # RFC-0012 (INV-DP-BOUND)
-3. Secure-aggregate Σ_c Δ_c  (individual Δ_c hidden).  # RFC-0011
-4. (Backstop) Procrustes-align participants on P if drift exceeds threshold.  # Layer 3
-5. Outer Nesterov step:  (θ, φ) ← (θ, φ) − η_out · OuterOpt( mean_c Δ_c )     # INV-AGG-DETERMINISM
-6. Hash-commit θ^{global}_{t+1}.                        # RFC-0010 (INV-CHECKPOINT-HASH)
+     compute Q_c* on P and, if drift exceeds threshold:
+       transform raw local full weights; Δ'_c = W'_c − W_global  # Layer 3
+     otherwise Δ'_c = (θ_c, φ_c) − (θ, φ)
+     DP: clip ‖Δ'_c‖, add participant-secret Gaussian noise      # RFC-0012
+     optionally quantize; encode and mask                         # RFC-0011
+3. Secure-aggregate Σ_c released(Δ'_c)  (individual updates hidden).
+4. Outer Nesterov step on the revealed mean.                      # INV-AGG-DETERMINISM
+5. Hash-commit θ^{global}_{t+1}.                                  # RFC-0010
 ```
 
-Step ordering is load-bearing for verifiability: DP (step 2) precedes secure aggregation (step 3), and
-the Procrustes backstop (step 4) and outer step (step 5) operate only on public-probe data and the
-revealed sum, so the entire aggregation path is a deterministic, publicly recomputable function
-(`INV-AGG-DETERMINISM`, [RFC-0003 §7](RFC-0003-federated-protocol.md#7-determinism-concurrency-error-propagation)).
+Here $\Delta_c=\text{local}-\text{global}$ is a displacement and is therefore added. This is
+algebraically equivalent to DiLoCo's outer-gradient convention
+$G_c=\text{global}-\text{local}=-\Delta_c$ with a subtractive optimizer step.
+
+In the target protocol, step ordering is load-bearing:
+**participant-specific alignment → re-difference → clip → noise → optional quantization → encode/mask
+→ secure sum → common outer step**. After the secure-sum boundary only a common function of the
+revealed sum is possible. The outer reduction remains deterministic and publicly recomputable from its
+committed inputs (`INV-AGG-DETERMINISM`), but the participant-specific pre-release transform is not
+proven merely because its probe inputs are public (`INV-ALIGN-BEFORE-RELEASE`,
+[RFC-0003 §7](RFC-0003-federated-protocol.md#7-determinism-concurrency-error-propagation)).
 
 ### 9. The frame-drift diagnostic (the headline measurement)
 
-The headline empirical artifact is the **frame-drift diagnostic**: the inter-participant Procrustes
-residual (or mean rotation angle) on $\mathcal{P}$ over training. Naive `FedAvg` visibly diverges
-(frames rotate apart); the anchored design holds it pinned. This is itself novel — to our knowledge the
-first measurement of latent frame-drift under federated JEPA — and stands as a contribution
-independently of the planning result. The full evaluation protocol is
+The primary gauge diagnostic is the inter-participant Procrustes residual (or mean rotation angle) on
+$\mathcal{P}$ over training. A claim-grade run compares naive `FedAvg` with anchored federation under
+the same corrected protocol and reports the diagnostic alongside a downstream metric. Checked-in
+full-model values predate the outer-update and probe-contract corrections, so they do not establish
+that the anchored design controls drift in the corrected runtime. The full evaluation protocol is
 [RFC-0005 §2](RFC-0005-evaluation.md); the per-round, per-pair emission schema is
 [RFC-0015](RFC-0015-observability-diagnostics.md).
 
@@ -392,6 +459,7 @@ def frame_drift(embeddings: Mapping[str, Tensor]) -> FrameDriftReport:
 | Sketch seed mismatch | A participant uses an $A$ from the wrong seed | Seed comparison at participant ingress | `GaugeError` | Reject the participant's round contribution; remediation "reconstruct A from the RoundOpen seed (INV-SKETCH-CONSISTENCY)" |
 | Warm-start mismatch at $t{=}0$ | Participant's encoder hash $\neq$ pinned warm-start | Hash comparison at round-0 admission | `GaugeError` | Refuse admission to round 0; remediation "reload the pinned warm-start (INV-WARMSTART-T0)" |
 | Probe hash mismatch | Probe content $\neq$ `RoundOpen` probe hash | Hash recompute in `anchor.py` loader | `ProbeError` | Fail-closed; refuse to build targets; remediation "re-pin the probe (RFC-0004 §3, INV-PROBE-PIN)" |
+| Participant-specific alignment requested after clip/noise/quantization or at a sum-only coordinator | Release-transform metadata or backend preflight violates `INV-ALIGN-BEFORE-RELEASE` | `ConfigError` | Fail closed; disable the plaintext coordinator harness or move alignment participant-side before all release transforms / into a trusted MPC boundary |
 | Nondeterministic alignment reduction | Atomics / unordered reduction on the alignment path | Determinism self-check on the outer step | `NonDeterministicAggregation` (`AggregationError`) | Never swallowed ([conventions §6](../spec/conventions.md#6-error-taxonomy)); abort and recompute with fixed reduction order ([RFC-0003 §7](RFC-0003-federated-protocol.md#7-determinism-concurrency-error-propagation)) |
 
 Error-handling rules ([conventions §6](../spec/conventions.md#6-error-taxonomy)): never a bare `except`; `NonDeterministicAggregation` is never swallowed;
@@ -403,10 +471,12 @@ all gauge errors carry `.code` (a `LensembleErrorCode`) and a `.remediation` str
 - The anchor loss and SIGReg statistics are computed on each participant's inner-parallel workers and
   reduced *within* the participant's trust domain (RFC-0008); only the resulting $\Delta_c$ crosses a
   boundary.
-- The Layer-3 backstop, the outer step, and `frame_drift` run on the aggregation path and MUST be
-  bitwise-deterministic given their inputs (`INV-AGG-DETERMINISM`): fixed reduction order, fp32 (or
-  fp64 when configured) accumulation, no atomics. A determinism self-check runs each outer step and
-  raises `NonDeterministicAggregation` on divergence ([conventions §9](../spec/conventions.md#9-determinism-dtype-device)).
+- The Layer-3 backstop runs at each participant before release (or inside its declared trusted/MPC
+  boundary). The revealed outer step and committed-model `frame_drift` diagnostic run on the aggregation
+  path. Each MUST be deterministic given its inputs: participant-side alignment is bound to its release,
+  while the outer reduction satisfies `INV-AGG-DETERMINISM` via fixed order, fp32/fp64 accumulation,
+  and no atomics. A determinism self-check runs each outer step and raises
+  `NonDeterministicAggregation` on divergence ([conventions §9](../spec/conventions.md#9-determinism-dtype-device)).
 - bf16 forward, fp32 accumulation per [conventions §9](../spec/conventions.md#9-determinism-dtype-device); the Procrustes SVD and the diagnostic upcast to fp32/fp64
   before the decomposition so the public recomputation matches the coordinator bit-for-bit.
 - Device: CUDA primary; the small CI configs run the differentiable SVD and Procrustes on CPU
@@ -441,8 +511,9 @@ all gauge errors carry `.code` (a `LensembleErrorCode`) and a `.remediation` str
 - **Fork A (freeze the encoder, federate only the predictor).** *What:* keep the warm-started encoder
   frozen; the frozen shared encoder *is* a shared frame, so the gauge dissolves and Layers 2–4 are
   unnecessary. *Why considered:* it is the clean, safe degrade ([RFC-0001 §5](RFC-0001-architecture.md#5-training-topology-two-level),
-  this RFC's fallback below). *Why not the lead:* it sacrifices the end-to-end (Fork B) novelty that is
-  the project's core claim ([conventions §0](../spec/conventions.md#0-project-identity)). Documented and tested as the fallback, not the default.
+  this RFC's fallback below). *Why not the lead:* it removes the moving-encoder gauge question that
+  motivates Fork B ([conventions §0](../spec/conventions.md#0-project-identity)). Documented and tested
+  as the fallback, not the default.
 
 ## Drawbacks
 
@@ -472,7 +543,7 @@ The four layers are **additive** and are introduced in order; they constitute th
 1. Layer 1 (shared sketch) ships with the objective in `v0.1` (Stage A, centralized) — it is needed for
    objective consistency even single-site and is cheap.
 2. Layer 2 Variant A (landmark anchor) is the default for `v0.2` (Stage B) simulated federation; the
-   warm-start guarantee (`INV-WARMSTART-T0`) is live from round 0.
+   warm-start invariant (`INV-WARMSTART-T0`) is enforced from round 0.
 3. Layer 3 (Procrustes backstop) is wired in `v0.2` but configured off-by-default (fires only above the
    drift threshold), so its contribution is measurable as a ladder rung.
 4. Layer 4 (function-space distillation) and Layer 2 Variant B are opt-in rungs, enabled only if the
@@ -489,8 +560,8 @@ If Fork-B gauge control proves unstable at foundation scale, freeze the warm-sta
 federate only the predictor (Fork A, the V-JEPA-2-AC structure;
 [RFC-0001 §5](RFC-0001-architecture.md#5-training-topology-two-level)). The frozen shared encoder *is* a shared frame, so the gauge
 problem dissolves and Layers 2–4 become unnecessary (Layer 1 still applies to any SIGReg on the
-predictor side, if used). This sacrifices the end-to-end novelty but preserves the sovereignty story
-and is the documented safe degrade. Fork A must be supported and tested by `v1.0` ([conventions §12](../spec/conventions.md#12-milestones-and-stages)).
+predictor side, if used). This no longer tests the moving-encoder gauge question and is the documented
+safe degrade. Fork A must be supported and tested by `v1.0` ([conventions §12](../spec/conventions.md#12-milestones-and-stages)).
 
 ## Testing Strategy
 

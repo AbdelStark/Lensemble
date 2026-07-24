@@ -7,9 +7,10 @@ builds the consortium manifest bound to the immutable ``hf://`` dataset refs, an
 dataset/probe registry so every participant is ``published`` (zero placeholders) with its real window and
 episode counts. The registry is validated against the manifest before either is written.
 
-The public-probe content hash depends only on ``(seed, probe_points, num_frames, image_size)`` — not on
-the model weights — so the launcher (`deploy/hfjobs/train_phase3_consortium.py`, same seed ``20260608``)
-reproduces the identical pin at run time.
+The pre-target probe-source fingerprint depends only on
+``(seed, probe_points, num_frames, image_size)`` — not on model weights. It is explicitly
+``probe-source-v1`` and must not be confused with the runtime ``public-probe-v2`` content hash, which
+also binds landmark targets derived from the round-0 reference encoder.
 """
 
 from __future__ import annotations
@@ -42,7 +43,11 @@ from lensemble.data.phase3 import (
     validate_phase3_registry_against_manifest,
     write_phase3_dataset_registry,
 )
-from lensemble.data.probe import probe_content_hash
+from lensemble.data.probe import (
+    PROBE_SOURCE_HASH_ALGORITHM,
+    PROBE_SOURCE_HASH_VERSION,
+    probe_source_hash,
+)
 
 # --- the pinned run identity + shape (shared with deploy/hfjobs/train_phase3_consortium.py) --------- #
 _CONSORTIUM_ID = "lensemble-phase3-consortium"
@@ -86,14 +91,20 @@ def _public_probe() -> tuple[Phase3PublicProbe, dict[str, Any]]:
         _PROBE_POINTS, _NUM_FRAMES, 3, _IMAGE_SIZE, _IMAGE_SIZE, generator=gen
     )
     landmark_idx = torch.arange(_PROBE_POINTS)
-    content_hash = probe_content_hash(points, landmark_idx).hex()
+    source_hash = probe_source_hash(points, landmark_idx).hex()
     pin = Phase3PublicProbe(
-        probe_id=f"{_CONSORTIUM_ID}-public-probe", version=1, content_hash=content_hash
+        probe_id=f"{_CONSORTIUM_ID}-public-probe",
+        version=1,
+        hash_contract="probe-source-v1",
+        content_hash=source_hash,
     )
     spec = {
         "probe_id": pin.probe_id,
         "version": pin.version,
-        "content_hash": content_hash,
+        "hash_contract": pin.hash_contract,
+        "source_hash": source_hash,
+        "source_hash_algorithm": PROBE_SOURCE_HASH_ALGORITHM,
+        "source_hash_version": PROBE_SOURCE_HASH_VERSION,
         "probe_points": _PROBE_POINTS,
         "num_frames": _NUM_FRAMES,
         "image_size": _IMAGE_SIZE,
@@ -101,7 +112,7 @@ def _public_probe() -> tuple[Phase3PublicProbe, dict[str, Any]]:
         "reproduction": (
             "points = torch.randn(probe_points, num_frames, 3, image_size, image_size, "
             "generator=torch.Generator().manual_seed(seed)); "
-            "content_hash = probe_content_hash(points, torch.arange(probe_points)).hex()"
+            "source_hash = probe_source_hash(points, torch.arange(probe_points)).hex()"
         ),
     }
     return pin, spec

@@ -27,9 +27,11 @@ from lensemble.config import (
     Phase3RuntimePolicy,
 )
 from lensemble.contracts import WMCP_VERSION
-from lensemble.errors import SecureAggregationError
+from lensemble.errors import SchemaVersionMismatch, SecureAggregationError
 from lensemble.federation import (
+    PHASE3_AGGREGATION_PRIVACY_REPORT_SCHEMA_VERSION,
     InProcessTransport,
+    Phase3AggregationPrivacyReport,
     Phase3CoordinatorService,
     PseudoGradient,
     RoundState,
@@ -128,6 +130,7 @@ def _manifest(
     probe = Phase3PublicProbe(
         probe_id="toy-agent-probe",
         version=1,
+        hash_contract="placeholder-unbound",
         content_hash="a" * 64,
     )
     participants = tuple(
@@ -249,7 +252,9 @@ def _service(tmp_path: Path) -> Phase3CoordinatorService:
     )
 
 
-def test_service_records_secure_aggregation_and_dp_report(tmp_path: Path) -> None:
+def test_service_records_post_commit_cross_check_and_dp_snapshot(
+    tmp_path: Path,
+) -> None:
     service = _service(tmp_path)
     cfg = _cfg()
     for participant_id in _PARTICIPANTS:
@@ -266,13 +271,76 @@ def test_service_records_secure_aggregation_and_dp_report(tmp_path: Path) -> Non
 
     report = service.aggregation_privacy_report()
     assert report is not None
-    assert report.secure_aggregation.secure_sum_consumed is True
+    assert report.schema_version == PHASE3_AGGREGATION_PRIVACY_REPORT_SCHEMA_VERSION
+    assert report.secure_aggregation.backend_status == "post_commit_cross_check"
+    assert report.secure_aggregation.secure_sum_consumed is False
     assert report.secure_aggregation.fallback_used is False
     assert report.secure_aggregation.contributing_count == 2
-    assert report.dp_accounting.status == "accounted"
-    assert report.dp_accounting.effective_dp is True
+    assert report.dp_accounting.status == "deterministic_replay_only"
+    assert report.dp_accounting.effective_dp is False
+    assert report.dp_accounting.rounds_accounted == 1
     assert report.dp_accounting.epsilon_spent is not None
+    assert "optimizer consumed plaintext" in report.claim_boundary
     assert service.report().aggregation_privacy_report == report
+
+
+def test_tee_backend_is_also_a_post_commit_cross_check() -> None:
+    cfg = _cfg(backend="tee")
+    report = build_phase3_aggregation_privacy_report(
+        cfg, _manifest(backend="tee"), _updates(cfg, count=3), round_index=0
+    )
+
+    assert report.secure_aggregation.backend == "tee"
+    assert report.secure_aggregation.backend_status == "post_commit_cross_check"
+    assert report.secure_aggregation.secure_sum_consumed is False
+    assert report.secure_aggregation.fallback_used is False
+
+
+def test_alignment_report_hash_is_explicitly_pre_alignment() -> None:
+    cfg = _cfg()
+    report = build_phase3_aggregation_privacy_report(
+        cfg,
+        _manifest(),
+        _updates(cfg, count=3),
+        round_index=0,
+        coordinator_side_alignment=True,
+    )
+
+    assert "pre-alignment released-update mean" in report.claim_boundary
+    assert "not optimizer-input equivalence evidence" in report.claim_boundary
+
+
+def test_schema_v1_privacy_report_parses_with_conservative_semantics() -> None:
+    cfg = _cfg()
+    current = build_phase3_aggregation_privacy_report(
+        cfg, _manifest(), _updates(cfg, count=3), round_index=0
+    )
+    raw = current.model_dump(mode="json")
+    raw["schema_version"] = 1
+    raw["secure_aggregation"]["backend_status"] = "secure_sum"
+    raw["secure_aggregation"]["secure_sum_consumed"] = True
+    raw["dp_accounting"]["status"] = "accounted"
+    raw["dp_accounting"]["effective_dp"] = True
+
+    parsed = Phase3AggregationPrivacyReport.model_validate(raw)
+
+    assert parsed.schema_version == 1
+    assert parsed.secure_aggregation.backend_status == "post_commit_cross_check"
+    assert parsed.secure_aggregation.secure_sum_consumed is False
+    assert parsed.dp_accounting.status == "deterministic_replay_only"
+    assert parsed.dp_accounting.effective_dp is False
+
+
+def test_privacy_report_rejects_future_schema() -> None:
+    cfg = _cfg()
+    current = build_phase3_aggregation_privacy_report(
+        cfg, _manifest(), _updates(cfg, count=3), round_index=0
+    )
+    raw = current.model_dump(mode="json")
+    raw["schema_version"] = PHASE3_AGGREGATION_PRIVACY_REPORT_SCHEMA_VERSION + 1
+
+    with pytest.raises(SchemaVersionMismatch):
+        Phase3AggregationPrivacyReport.model_validate(raw)
 
 
 def test_masking_backend_records_explicit_fallback_without_secure_sum() -> None:

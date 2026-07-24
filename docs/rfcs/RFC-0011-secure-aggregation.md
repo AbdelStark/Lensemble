@@ -14,9 +14,24 @@
 | **Requires** | [RFC-0003](RFC-0003-federated-protocol.md) (the round that invokes this), [RFC-0012](RFC-0012-differential-privacy.md) (the noise added before masking), [RFC-0013](RFC-0013-coordinator-runtime.md) (the round state machine that drives dropout recovery) |
 | **Defers to** | [RFC-0013](RFC-0013-coordinator-runtime.md) (transport, key-exchange channel, state-machine handling of `SecureAggregationError`) |
 
+> **Implementation status (2026-07-24 — end-to-end integration blocked).** The pairwise-mask
+> primitive, fixed-point simulated-sum harness, and software-simulated TEE backend have direct tests.
+> They are not yet the input path used by the live coordinator. `Phase3CoordinatorService` accepts and
+> stores an unmasked per-participant `PseudoGradient.delta`; `Coordinator.try_round()` consumes those
+> plaintext deltas and commits the outer step before `build_phase3_aggregation_privacy_report()` runs.
+> The simulated/TEE sum produced by that report is therefore a post-commit equivalence cross-check, not
+> the update consumed by `OuterOptimizer`. Current reports emit
+> `backend_status=post_commit_cross_check` and `secure_sum_consumed=false`; schema-v1
+> `secure_sum`/`true` rows are normalized to that conservative meaning by the current reader without
+> rewriting the historical artifact. The masking selection records an explicit fallback. Until the
+> coordinator consumes only a backend-produced sum,
+> this RFC's individual-update-confidentiality guarantee is an intended contract, not current runtime
+> behavior. Historical Phase 3 `secure_sum` rows are primitive/cross-check evidence under this boundary.
+
 ## Summary
 
-This RFC specifies how the coordinator obtains the sum `Σ_c Δ_c` of participant pseudo-gradients while
+This RFC specifies the intended protocol by which the coordinator obtains the sum `Σ_c Δ_c` of
+participant pseudo-gradients while
 learning **nothing about any individual** `Δ_c`. It owns the cryptographic *mechanics* of the
 secure-aggregate step (step 5 of the round in
 [RFC-0003 §2](RFC-0003-federated-protocol.md#2-round-structure-diloco-outer-loop)); the round
@@ -24,8 +39,9 @@ secure-aggregate step (step 5 of the round in
 (dropout robustness, determinism preservation) — lives in
 [RFC-0003 §5](RFC-0003-federated-protocol.md#5-secure-aggregation-requirement).
 
-Two backends are specified, both supported and config-selectable. The default is a **pairwise-mask
-protocol** (Bonawitz-style): each ordered participant pair agrees a shared seed, derives a
+Two backend contracts are specified, and their implementations are testable and config-selectable.
+Coordinator integration remains blocked as stated above. The default protocol design is a
+**pairwise-mask protocol** (Bonawitz-style): each ordered participant pair agrees a shared seed, derives a
 pseudo-random mask vector that is added by one party and subtracted by the other, so masks cancel
 exactly in the sum while each individual masked update is computationally hiding. Self-masks plus
 threshold (Shamir) secret sharing of every mask seed make the round **dropout-robust**: it completes if
@@ -33,8 +49,9 @@ at least a configured threshold `t_agg` of participants survive. The alternative
 **TEE-attested aggregator** that receives plaintext `Δ_c` inside an attested enclave and emits only the
 sum. The masking backend introduces **no nondeterminism** into the revealed sum (masks cancel exactly
 over the integer field, then the deterministic outer step runs unchanged,
-`INV-AGG-DETERMINISM`). DP noise ([RFC-0012](RFC-0012-differential-privacy.md)) is added **per
-participant before masking**; int8 quantization
+`INV-AGG-DETERMINISM`). Participant-specific gauge alignment and re-difference happen first
+(`INV-ALIGN-BEFORE-RELEASE`); DP noise ([RFC-0012](RFC-0012-differential-privacy.md)) is then added
+**per participant before masking**; int8 quantization
 ([RFC-0003 §6](RFC-0003-federated-protocol.md#6-heterogeneity--fault-tolerance)) is **orthogonal** and
 applied before masking.
 
@@ -78,7 +95,8 @@ sum over the *surviving* set deterministically, or fail closed with `SecureAggre
   `SecureAggregationError`.
 - State the security property precisely (the aggregator's view is computationally indistinguishable from
   learning only `Σ_c Δ_c` and the participant set) and its honest assumptions (the collusion bound).
-- Pin the interaction with DP (noise before masking, per participant), with the deterministic outer step
+- Pin the interaction with gauge correction (participant-specific alignment before every release
+  transform), with DP (noise before masking, per participant), with the deterministic outer step
   (masks cancel exactly; no nondeterminism in the revealed sum, `INV-AGG-DETERMINISM`), and with int8
   quantization (orthogonal; applied before masking).
 - Specify a TEE-attested aggregator as a second supported, config-selectable backend, with its distinct
@@ -91,7 +109,8 @@ sum over the *surviving* set deterministically, or fail closed with `SecureAggre
 - The federated round lifecycle, the `PseudoGradient` contract, and the outer Nesterov step. Owned by
   [RFC-0003](RFC-0003-federated-protocol.md).
 - The differential-privacy mechanism, the `(ε,δ)` accountant, and joint calibration. Owned by
-  [RFC-0012](RFC-0012-differential-privacy.md); this RFC only fixes the *ordering* (noise before mask).
+  [RFC-0012](RFC-0012-differential-privacy.md); this RFC fixes the downstream ordering
+  (aligned re-difference before clip/noise, then noise before mask).
 - The transport (gRPC vs HTTP/REST), the key-exchange channel, and the state-machine handling of a
   raised `SecureAggregationError` (retry vs abort). Owned by
   [RFC-0013](RFC-0013-coordinator-runtime.md).
@@ -107,9 +126,12 @@ sum over the *surviving* set deterministically, or fail closed with `SecureAggre
 ## Proposed Design
 
 The aggregation subsystem lives in `lensemble.aggregation` (`secure_agg.py`, `masking.py`,
-[conventions §1](../spec/conventions.md#1-repository-and-package-layout)). It exposes a backend-agnostic aggregator interface; the round
-([RFC-0003 §2](RFC-0003-federated-protocol.md#2-round-structure-diloco-outer-loop)) calls it after the
-per-participant privatize step and before the outer step.
+[conventions §1](../spec/conventions.md#1-repository-and-package-layout)). It exposes a backend-agnostic
+aggregator interface. Under the intended round contract
+([RFC-0003 §2](RFC-0003-federated-protocol.md#2-round-structure-diloco-outer-loop)), each participant
+MUST complete any participant-specific full-weight alignment and re-difference before privacy,
+quantization, encoding, and masking. The coordinator then MUST call the aggregator and use its sum as
+the only input to the outer step. The current service does not yet make that call on the commit path.
 
 ### 1. The contract: what the aggregator computes
 
@@ -175,12 +197,12 @@ sides). Participant `c` **adds** `m_{c,c'}` for every `c' > c` and **subtracts**
 `c' < c`. Each participant also draws a self-mask `b_c ∈ [0, modulus)^dim` from a private seed `r_c` and
 adds it.
 
-**Masked update.** Encode the privatized pseudo-gradient to the integer field, add masks, take the sum
-modulo `modulus`:
+**Masked update.** Encode the aligned, privatized pseudo-gradient $\Delta'_c$ to the integer field, add
+masks, take the sum modulo `modulus`:
 
 ```
-encode(Δ_c)[i] = round(Δ_c[i] * scale) mod modulus
-masked_c       = ( encode(Δ_c) + b_c + Σ_{c' > c} m_{c,c'} − Σ_{c' < c} m_{c,c'} ) mod modulus
+encode(Δ'_c)[i] = round(Δ'_c[i] * scale) mod modulus
+masked_c        = ( encode(Δ'_c) + b_c + Σ_{c' > c} m_{c,c'} − Σ_{c' < c} m_{c,c'} ) mod modulus
 ```
 
 `masked_c` is the `MaskedUpdate.masked` field. Because the field is modular and `b_c`, `m_{c,c'}` are
@@ -194,8 +216,8 @@ reconstructs `b_c` for every *surviving* participant and the *pairwise* seeds fo
 participant:
 
 ```
-Σ_{c∈S} encode(Δ_c) = ( Σ_{c∈S} masked_c − Σ_{c∈S} b_c − Σ_{dropped d, c∈S} (±m_{c,d}) ) mod modulus
-Σ_{c∈S} Δ_c         = lift_signed( Σ_{c∈S} encode(Δ_c) ) / scale     # fp32, recentred from [0,modulus)
+Σ_{c∈S} encode(Δ'_c) = ( Σ_{c∈S} masked_c − Σ_{c∈S} b_c − Σ_{dropped d, c∈S} (±m_{c,d}) ) mod modulus
+Σ_{c∈S} Δ'_c         = lift_signed( Σ_{c∈S} encode(Δ'_c) ) / scale   # fp32, recentred from [0,modulus)
 ```
 
 `lift_signed` maps the modular residue back to a signed integer in `(−modulus/2, modulus/2]` before
@@ -304,10 +326,12 @@ The backend is a config choice under the `federation`/`aggregation` group
 
 ```text
 participant c:                                          aggregator:
-  Δ_c (post inner loop)
-  clip ‖Δ_c‖ ≤ C_clip                  (RFC-0012)
+  raw local W_c; compute Q_c* on public probe
+  if drift > τ: transform W_c; Δ'_c = W'_c − W_t        (RFC-0002)
+  else: Δ'_c = W_c − W_t                  ────────────── INV-ALIGN-BEFORE-RELEASE
+  clip ‖Δ'_c‖ ≤ C_clip                 (RFC-0012)
   add N(0, σ²C_clip²I)                 (RFC-0012)   ─── DP noise added BEFORE masking
-  [optional] int8 quantize Δ_c         (RFC-0003 §6) ─ orthogonal to masking
+  [optional] int8 quantize Δ'_c        (RFC-0003 §6)
   encode to int field (scale, modulus) (§3)
   add self-mask b_c + pairwise masks   (§2)
   ── MaskedUpdate ───────────────────────────────────►  Σ_c masked_c  (mod modulus)
@@ -317,14 +341,21 @@ participant c:                                          aggregator:
                                                           ── plaintext sum ──► outer Nesterov step
 ```
 
-The ordering is normative: **DP noise → (optional) int8 quantize → integer encode → mask**. Noise before
-masking means the revealed sum already carries the summed Gaussian noise, so DP and secure aggregation
-compose ([RFC-0012](RFC-0012-differential-privacy.md), [06 §4](../spec/06-security.md#4-secure-aggregation-guarantee-inv-agg-determinism-interaction)). Quantization
-before encoding means masks operate on the already-quantized vector, keeping quantization orthogonal to
-the gauge ([RFC-0003 §6](RFC-0003-federated-protocol.md#6-heterogeneity--fault-tolerance)); its
-round-trip L2 error is bounded and tested (Testing Strategy).
+The ordering is normative: **participant-specific full-weight alignment → re-difference → clip → noise
+→ optional int8 quantize → integer encode → mask**. Noise before masking means the revealed sum already
+carries the summed Gaussian noise, so DP and secure aggregation compose
+([RFC-0012](RFC-0012-differential-privacy.md),
+[06 §4](../spec/06-security.md#4-secure-aggregation-guarantee-inv-agg-determinism-interaction)).
+Quantization before encoding means masks operate on the final quantized vector; it is downstream of and
+does not commute with gauge correction. Once masking reveals only a sum, the aggregator cannot apply a
+different $Q_c^\star$ to each participant. A TEE/MPC backend that owns the alignment must see raw local
+weights inside its boundary and execute this same order before emitting only the sum.
 
 ### 7. Invariants enforced
+
+These are invariants of the intended integrated protocol. Backend-level tests exercise them within the
+aggregation boundary; they do not establish that the current coordinator path satisfies
+individual-update confidentiality.
 
 - `INV-AGG-DETERMINISM` ([conventions §7](../spec/conventions.md#7-named-invariants)). The revealed sum is a pure,
   order-independent function of the surviving set and the committed masked updates: masks cancel over an
@@ -333,6 +364,10 @@ round-trip L2 error is bounded and tested (Testing Strategy).
   masking layer adds **no** nondeterministic reduction. Enforced by the per-outer-step determinism
   self-check in `lensemble.aggregation`; a failure raises `NonDeterministicAggregation` and the round
   aborts and recomputes. Never swallowed.
+- `INV-ALIGN-BEFORE-RELEASE` ([conventions §7](../spec/conventions.md#7-named-invariants)). The
+  `SecureAggregator` accepts only already-aligned final releases. Its sum-only interface cannot
+  reconstruct participant-specific raw weights, embeddings, or rotations, so no post-sum Procrustes
+  backstop is permitted.
 - `INV-COMMIT-BINDING` ([conventions §7](../spec/conventions.md#7-named-invariants)). The `dataset_root` travels in the clear on
   each `MaskedUpdate`; secure aggregation does not hide it (the binding must remain auditable). A masked
   update bound to no root or the wrong root is rejected at ingress with `CommitmentMismatch`
@@ -410,7 +445,9 @@ never caught-and-ignored, never downgraded to a warning ([04 §error-handling ru
 - **Inherited collusion bound.** An aggregator colluding with `C-1` participants can isolate the
   remaining participant's update — the standard single-server secure-aggregation bound. Lensemble
   inherits it; Phase 1 does not remove it ([06 §4 assumptions](../spec/06-security.md#4-secure-aggregation-guarantee-inv-agg-determinism-interaction)). DP
-  ([RFC-0012](RFC-0012-differential-privacy.md)) is the residual protection in that worst case.
+  is residual protection in that worst case only under RFC-0012's participant-secret entropy and
+  accounting contract; the current deterministic replay noise is not
+  ([RFC-0012](RFC-0012-differential-privacy.md)).
 - **TEE backend relies on hardware trust.** Enclave attestation depends on a vendor root of trust and is
   exposed to side-channel and microarchitectural attacks; it is a pragmatic proxy, not a cryptographic
   guarantee.
@@ -423,12 +460,11 @@ never caught-and-ignored, never downgraded to a warning ([04 §error-handling ru
 Staged along [conventions §12](../spec/conventions.md#12-milestones-and-stages) and the protocol rollout
 ([RFC-0003 §Migration](RFC-0003-federated-protocol.md#migration--rollout)):
 
-- **v0.2 / Stage B — simulated, single-process.** The full masking protocol runs in-process: `C`
-  simulated participants derive and exchange masks and Shamir shares within one process; the aggregator
-  reconstructs the sum and the determinism self-check runs each round. This validates exact cancellation,
-  dropout recovery below/above `t_agg`, and the no-individual-leak property without any network. The
-  simulated aggregation is the negative/positive controls' substrate for the ablation ladder
-  ([RFC-0005 §6](RFC-0005-evaluation.md#6-ablation-ladder-the-core-experiment)).
+- **v0.2 / Stage B — simulated, single-process.** Direct tests exercise pairwise-mask construction,
+  Shamir recovery, fixed-point summation, threshold failures, and deterministic cancellation. The
+  separate simulated-sum harness has no cryptographic masking. These tests validate the primitives, but
+  the live coordinator still commits from its collected unmasked deltas; Stage-B end-to-end secure
+  aggregation is therefore incomplete.
 - **v0.3 / Stage C — real multi-party over a network boundary.** Real key agreement and share
   distribution over the transport ([RFC-0013](RFC-0013-coordinator-runtime.md)); the masked-update wire
   format becomes the on-the-wire `Update` message
@@ -445,6 +481,11 @@ reproducible ([RFC-0009](RFC-0009-configuration-reproducibility.md)).
 
 CPU-runnable tests on tiny synthetic fixtures (no large downloads;
 [07 §8 CI gates](../spec/07-testing-strategy.md#8-ci-gates)):
+
+The current suite validates the aggregation primitives, software TEE boundary, threshold behavior, and
+Phase 3 post-commit equivalence report. It does **not** validate that the committed model was derived
+from a secure sum. The missing integration gate must fail if `Coordinator.try_round()` can access an
+individual unmasked delta and must bind the committed outer step to the backend-produced sum.
 
 - **Mask cancellation correctness.** For random `Δ_c` (small `C`, small `dim`), assert the reconstructed
   `Σ_c Δ_c` equals the plaintext `Σ_c Δ_c` to exact integer equality after decode (the integer field
@@ -465,6 +506,9 @@ CPU-runnable tests on tiny synthetic fixtures (no large downloads;
 - **No-wrap / modulus sizing.** Assert the no-wrap assertion fires when `C * round(C_clip * scale)` would
   exceed `modulus/2` (raising `AggregationError`), and that a correctly sized modulus makes `lift_signed`
   exact for adversarial sign patterns.
+- **Alignment-before-release ordering.** Assert a participant-specific transform is accepted only before
+  clip/noise/quantization/masking, and that selecting a coordinator-side backstop with a sum-only backend
+  fails at configuration preflight (`INV-ALIGN-BEFORE-RELEASE`).
 - **DP-then-mask ordering.** Assert noise is applied to `Δ_c` before encoding/masking and that the
   revealed sum carries the summed noise (compose with [RFC-0012 §Testing](RFC-0012-differential-privacy.md#testing-strategy)).
 - **int8 quantization interaction.** Quantize/dequantize `Δ_c` before masking; assert the L2 round-trip

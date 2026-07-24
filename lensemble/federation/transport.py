@@ -26,7 +26,11 @@ from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from safetensors.torch import save as st_save
 
-from lensemble.errors import CheckpointIntegrityError, LensembleErrorCode
+from lensemble.errors import (
+    CheckpointIntegrityError,
+    LensembleErrorCode,
+    RoundError,
+)
 
 if TYPE_CHECKING:
     from torch import Tensor
@@ -44,6 +48,36 @@ def weights_content_hash(weights: Mapping[str, "Tensor"]) -> str:
     """
     contiguous = {k: v.detach().cpu().contiguous() for k, v in weights.items()}
     return hashlib.sha256(st_save(contiguous)).hexdigest()
+
+
+def _validate_submission_round(*, round_index: int, update: "PseudoGradient") -> None:
+    """Reject an operation envelope that disagrees with its update's bound round."""
+    if round_index != update.round_index:
+        raise RoundError(
+            f"submit_update round_index {round_index} != update.round_index "
+            f"{update.round_index}; refusing to retarget a released delta",
+            code=LensembleErrorCode.ROUND_FAILED,
+            remediation="submit the update only to the round it was produced for",
+        )
+
+
+def _clone_update(update: "PseudoGradient") -> "PseudoGradient":
+    """Return a validated snapshot whose mutable tensor storage is caller-independent."""
+    from lensemble.federation.pseudogradient import PseudoGradient
+
+    return PseudoGradient(
+        delta=update.delta.detach().clone(),
+        l2_norm=update.l2_norm,
+        dataset_root=update.dataset_root,
+        round_index=update.round_index,
+        clipped=update.clipped,
+        quantized=update.quantized,
+    )
+
+
+def _clone_weights(weights: Mapping[str, "Tensor"]) -> dict[str, "Tensor"]:
+    """Snapshot a state dict so fetch callers cannot mutate the committed store by alias."""
+    return {name: tensor.detach().clone() for name, tensor in weights.items()}
 
 
 @runtime_checkable
@@ -138,7 +172,7 @@ class InProcessTransport:
             err.expected_hash = ref.content_hash  # type: ignore[attr-defined]
             err.got_hash = actual  # type: ignore[attr-defined]
             raise err
-        return dict(stored)
+        return _clone_weights(stored)
 
     def submit_update(
         self,
@@ -147,13 +181,19 @@ class InProcessTransport:
         round_index: int,
         update: "PseudoGradient",
     ) -> None:
-        self._updates.setdefault(round_index, {})[participant_id] = update
+        _validate_submission_round(round_index=round_index, update=update)
+        self._updates.setdefault(round_index, {})[participant_id] = _clone_update(
+            update
+        )
 
     def broadcast_round_open(self, global_state: "GlobalState") -> None:
         self._committed = global_state
 
     def collect_updates(self, round_index: int) -> Mapping[str, "PseudoGradient"]:
-        return dict(self._updates.get(round_index, {}))
+        return {
+            participant_id: _clone_update(update)
+            for participant_id, update in self._updates.get(round_index, {}).items()
+        }
 
     # --- test/seed helper (not part of the Transport Protocol) ---
     def commit(
@@ -171,8 +211,10 @@ class InProcessTransport:
         ref's recomputed hash) is the seam a tamper test exploits.
         """
         self._committed = global_state
-        self._weights[global_state.theta_ref.content_hash] = dict(theta_weights)
-        self._weights[global_state.phi_ref.content_hash] = dict(phi_weights)
+        self._weights[global_state.theta_ref.content_hash] = _clone_weights(
+            theta_weights
+        )
+        self._weights[global_state.phi_ref.content_hash] = _clone_weights(phi_weights)
 
     def corrupt_stored_weights(
         self, content_hash: str, weights: Mapping[str, "Tensor"]
@@ -182,4 +224,4 @@ class InProcessTransport:
         Leaves the ``ParamRef.content_hash`` unchanged while the stored bytes change, so the next
         ``fetch_params`` recomputes a different hash and fails closed (``CheckpointIntegrityError``).
         """
-        self._weights[content_hash] = dict(weights)
+        self._weights[content_hash] = _clone_weights(weights)

@@ -100,7 +100,7 @@ or config change before progress.
 | `DegenerateProcrustes` | `PROCRUSTES_DEGENERATE` | The Procrustes SVD has near-zero / near-tied singular values past the condition tolerance | `min_singular_value`, `condition_number`, `tol` | backstop |
 | `SecureAggregationError` | `SECURE_AGG_FAILED` | Mask reconstruction fails or surviving participants fall below the secure-agg threshold | `round`, `present`, `threshold`, `cause` | retry |
 | `NonDeterministicAggregation` | `AGG_NONDETERMINISTIC` | The per-step determinism self-check detects a non-bitwise-reproducible outer step | `round`, `expected_hash`, `got_hash` | fail-closed |
-| `PrivacyBudgetExceeded` | `DP_BUDGET_EXCEEDED` | The accountant reports cumulative `(ε,δ)` has reached/exceeded the configured budget | `epsilon_spent`, `epsilon_budget`, `delta`, `round` | operator |
+| `PrivacyBudgetExceeded` | `DP_BUDGET_EXCEEDED` | Target path: the persistent accountant reports cumulative `(ε,δ)` has reached/exceeded the configured budget; current replay reporting does not raise this as a cumulative guard | `epsilon_spent`, `epsilon_budget`, `delta`, `round` | operator |
 | `CommitmentMismatch` | `COMMITMENT_MISMATCH` | A released `Δ_c` is bound to no root, the wrong root, or a root that does not match the committed `R_c` | `participant_id`, `expected_root`, `got_root`, `round` | fail-closed |
 | `MerkleVerificationError` | `MERKLE_VERIFY_FAILED` | A Merkle root or inclusion proof does not verify against the recomputed tree | `expected_root`, `got_root`, `leaf_index` | fail-closed |
 | `SchemaVersionMismatch` | `SCHEMA_VERSION_MISMATCH` | An on-disk `schema_version` is unknown or newer than the reader supports | `field`, `file_schema_version`, `reader_max_version` | operator |
@@ -230,6 +230,10 @@ taxonomy in [01 — Architecture](01-architecture.md).
 
 ### 5.4 Aggregation (`lensemble.aggregation`)
 
+The secure-aggregation failure lifecycle below is the normative masked-sum contract. The current
+coordinator consumes plaintext participant updates; post-commit simulated/TEE equivalence checks and
+the masking fallback cannot provide, or fail closed on, individual-update confidentiality.
+
 - **Secure-aggregation dropout below threshold.** *Trigger:* participants vanish mid-round so that the
   surviving set cannot reconstruct the masked sum, or pairwise-mask reconstruction otherwise fails
   ([RFC-0003 §5](../rfcs/RFC-0003-federated-protocol.md#5-secure-aggregation-requirement),
@@ -251,6 +255,10 @@ taxonomy in [01 — Architecture](01-architecture.md).
   readiness) and is never swallowed.
 
 ### 5.5 Privacy (`lensemble.privacy`)
+
+The budget-exhaustion lifecycle below is the target persistent, pre-release accountant contract. The
+current Phase-3 report constructs a fresh accountant after commit, accounts one round, and discards it;
+its replay-noise status is non-effective and it cannot enforce a cumulative hard stop.
 
 - **DP budget exhausted.** *Trigger:* the `(ε,δ)` accountant
   ([RFC-0012](../rfcs/RFC-0012-differential-privacy.md)) reports cumulative spend has reached the

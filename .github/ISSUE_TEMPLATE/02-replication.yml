@@ -1,0 +1,88 @@
+name: Replication or result correction
+description: Report a failed reproduction, benchmark discrepancy, or public claim correction.
+title: "[Replication]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Research disagreements and negative results are welcome. Keep conclusions
+        bounded by the evidence, identify exact revisions and artifacts, and do
+        not upload private participant data or credentials.
+
+        If the discrepancy exposes a security boundary failure, follow the
+        [security reporting policy](https://github.com/AbdelStark/Lensemble/security/policy)
+        instead.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues and the relevant roadmap or RFC for this result.
+          required: true
+        - label: This report contains no raw participant data, credentials, or private artifacts.
+          required: true
+        - label: This is not a suspected security vulnerability.
+          required: true
+
+  - type: input
+    id: claim
+    attributes:
+      label: Result or claim under review
+      description: Link the README section, model card, evidence file, issue, RFC, or paper claim.
+      placeholder: "docs/evidence/... or https://github.com/AbdelStark/Lensemble/..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: bindings
+    attributes:
+      label: Revision and artifact bindings
+      description: Identify the code SHA, config, seeds, dataset/probe revision, checkpoint, and artifact hashes used.
+      placeholder: |
+        Code SHA:
+        Config:
+        Seeds:
+        Dataset/probe revision:
+        Checkpoint and artifact hashes:
+    validations:
+      required: true
+
+  - type: textarea
+    id: protocol
+    attributes:
+      label: Reproduction protocol
+      description: Give exact public-safe commands and any deviations from the documented protocol.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed result
+      description: Report the raw metrics, uncertainty, failures, and controls you observed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: comparison
+    attributes:
+      label: Expected or published result
+      description: State the comparison value and acceptance threshold, with a link to its source.
+    validations:
+      required: true
+
+  - type: textarea
+    id: interpretation
+    attributes:
+      label: Claim impact
+      description: Explain the narrowest public claim that the evidence supports or contradicts.
+    validations:
+      required: true
+
+  - type: textarea
+    id: materials
+    attributes:
+      label: Public reproduction materials
+      description: Link public logs, scripts, or regenerated artifacts. Do not attach restricted data.

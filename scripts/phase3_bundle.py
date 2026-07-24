@@ -33,7 +33,6 @@ from lensemble.federation.phase3_bundle import (
 )
 
 _MODEL_REPO_ID = "abdelstark/lensemble-phase3-consortium-checkpoint"
-_DATASET_REPO_ID = "abdelstark/lensemble-phase3-consortium-data"
 _REMOTE_MODEL_ARTIFACTS: tuple[tuple[Phase3ArtifactKind, str, str], ...] = (
     ("model-card", "Phase 3 model card", "README.md"),
     (
@@ -109,12 +108,12 @@ def _args() -> argparse.Namespace:
     parser.add_argument(
         "--manifest-output",
         type=Path,
-        default=Path("docs/evidence/phase3_long_run_manifest.json"),
+        default=Path("docs/evidence/phase3_long_run_smoke_manifest.json"),
     )
     parser.add_argument(
         "--registry-output",
         type=Path,
-        default=Path("docs/evidence/phase3_long_run_dataset_registry.json"),
+        default=Path("docs/evidence/phase3_long_run_smoke_dataset_registry.json"),
     )
     parser.add_argument(
         "--run-manifest",
@@ -147,7 +146,7 @@ def _args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--publication-status",
-        choices=("local_smoke", "published", "blocked"),
+        choices=("local_smoke", "published", "blocked", "historical"),
         default="local_smoke",
     )
     parser.add_argument("--model-revision", default="local-smoke")

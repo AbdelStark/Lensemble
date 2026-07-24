@@ -2,8 +2,9 @@
 
 Validates `docs/evidence/phase3_consortium_run_report.json` — the per-round report the headline anchored
 run pushed to the checkpoint repo — against the Phase 3 long-run schema: ten closed rounds at non-toy
-model size, a real `hf_jobs_release` publication, and per-round secure-aggregation + DP accounting plus
-the four real learning metrics. No raw trajectory may appear in the report.
+model size, a real `hf_jobs_release` publication, and per-round post-commit aggregation cross-check +
+one-round DP-accounting snapshot fields plus the four real learning metrics. No raw trajectory may
+appear in the report.
 """
 
 from __future__ import annotations
@@ -39,8 +40,11 @@ def test_real_run_rounds_carry_metrics_and_accounting() -> None:
     assert len(report.rounds) == 10
     for round_summary in report.rounds:
         assert round_summary.state == "closed"
-        # Secure-aggregation status + DP (ε) accounting recorded per round.
-        assert round_summary.aggregation_backend_status == "secure_sum"
+        # The legacy labels parse conservatively: these were post-commit cross-checks, not optimizer input.
+        assert round_summary.aggregation_backend_status == "post_commit_cross_check"
+        assert round_summary.secure_sum_consumed is False
+        assert round_summary.dp_accounting_status == "deterministic_replay_only"
+        assert round_summary.effective_dp is False
         assert round_summary.dp_epsilon_spent is not None
         # All four real learning metrics present.
         assert round_summary.val_pred is not None

@@ -1,14 +1,16 @@
 """Residency-safe per-round JEPA learning metrics.
 
-The federated HF Jobs launchers (the claim-MVP ``train_federated_lewm.py`` and the Phase 3 consortium
-``train_phase3_consortium.py``) both report the same four scalars per closed round so their reports are
-directly comparable:
+The Phase 3 consortium launcher (``train_phase3_consortium.py``) reports these held-out scale and
+geometry diagnostics per closed round:
 
-- ``val_pred`` — held-out next-latent prediction MSE (does the world model *learn* to predict?).
-- ``val_sigreg`` — the SIGReg anti-collapse statistic on held-out embeddings.
+- ``latent_std_mean`` — mean population standard deviation across latent coordinates on held-out tokens.
+- ``latent_rms`` — root mean square over every held-out latent value (the uncentered absolute scale).
 - ``effective_rank`` — ``exp(entropy of the embedding-covariance eigenspectrum)``; ``~1-3`` means the
   representation has collapsed, a healthy run keeps a large fraction of ``d`` (RFC-0005 §4).
 - ``frame_drift_deg`` — the inter-participant latent gauge rotation on the public probe (RFC-0002).
+
+They are reported alongside the prediction/objective diagnostics ``val_pred`` (held-out next-latent
+prediction MSE) and ``val_sigreg`` (the SIGReg anti-collapse statistic on held-out embeddings).
 
 Every function consumes committed checkpoints, the public probe, and *pseudo-gradient deltas* only —
 never raw participant trajectories — so the scalars are safe to emit into a published report.
@@ -41,6 +43,8 @@ __all__ = [
     "effective_rank",
     "evaluate_jepa_windows",
     "frame_drift_deg_from_updates",
+    "latent_rms",
+    "latent_std_mean",
     "load_checkpoint_groups",
     "load_round_models",
     "mean_frame_drift_deg",
@@ -54,6 +58,53 @@ class JepaWindowMetrics:
     val_pred: float
     val_sigreg: float
     effective_rank: float
+    latent_std_mean: float
+    latent_rms: float
+
+
+def _flatten_latent_vectors(embeddings: torch.Tensor) -> torch.Tensor:
+    """Return finite fp32 latent vectors with every leading axis flattened."""
+
+    if embeddings.ndim < 2 or embeddings.shape[-1] < 1:
+        raise ValueError(
+            "latent scale metrics require embeddings shaped (..., latent_dim) "
+            "with latent_dim >= 1"
+        )
+    x = embeddings.detach().reshape(-1, embeddings.shape[-1]).to(torch.float32)
+    if x.shape[0] < 2:
+        raise ValueError(
+            f"latent scale metrics require at least two latent vectors, got {x.shape[0]}"
+        )
+    if not bool(torch.isfinite(x).all()):
+        raise ValueError("latent scale metrics require finite embeddings")
+    return x
+
+
+def latent_std_mean(embeddings: torch.Tensor) -> float:
+    """Mean per-coordinate population standard deviation of held-out latent vectors.
+
+    Every leading axis is flattened into the sample axis and the final axis is treated as
+    ``latent_dim``. For the resulting ``(n, d)`` fp32 matrix this returns
+    ``mean_j(sqrt(mean_i((x_ij - mean_i(x_ij))**2)))`` (population standard deviation,
+    correction ``0``). The statistic is translation-invariant and scales linearly with latent
+    magnitude, so it exposes magnitude collapse that normalized eigenspectrum metrics cannot see.
+    """
+
+    x = _flatten_latent_vectors(embeddings)
+    return float(x.std(dim=0, unbiased=False).mean())
+
+
+def latent_rms(embeddings: torch.Tensor) -> float:
+    """Uncentered root mean square over every held-out latent value.
+
+    Every leading axis is flattened into the sample axis and the final axis is treated as
+    ``latent_dim``. For the resulting ``(n, d)`` fp32 matrix this returns
+    ``sqrt(mean_ij(x_ij**2))``. Unlike :func:`latent_std_mean`, it includes any shared latent
+    offset and therefore records the representation's absolute, uncentered scale.
+    """
+
+    x = _flatten_latent_vectors(embeddings)
+    return float(x.square().mean().sqrt())
 
 
 def effective_rank(embeddings: torch.Tensor) -> float:
@@ -111,7 +162,7 @@ def evaluate_jepa_windows(
     windows: Sequence[Window],
     max_windows: int,
 ) -> JepaWindowMetrics | None:
-    """Compute ``val_pred``/``val_sigreg``/``effective_rank`` over up to ``max_windows`` held-out windows.
+    """Compute prediction, anti-collapse, geometry, and scale metrics on held-out windows.
 
     Returns ``None`` when no usable window is available (so the caller can record absent metrics rather
     than a misleading zero).
@@ -145,10 +196,13 @@ def evaluate_jepa_windows(
             remaining -= 1
     if not pred_losses or not embeddings:
         return None
+    heldout_embeddings = torch.cat(embeddings, dim=0)
     return JepaWindowMetrics(
         val_pred=sum(pred_losses) / len(pred_losses),
         val_sigreg=sum(sigreg_losses) / len(sigreg_losses),
-        effective_rank=effective_rank(torch.cat(embeddings, dim=0)),
+        effective_rank=effective_rank(heldout_embeddings),
+        latent_std_mean=latent_std_mean(heldout_embeddings),
+        latent_rms=latent_rms(heldout_embeddings),
     )
 
 

@@ -53,7 +53,10 @@ def test_phase3_observability_report_links_metrics_and_dropout(
     assert dropout_round.communication.update_count == 3
     assert dropout_round.communication.estimated_update_bytes > 0
     assert dropout_round.retry_count == 0
-    assert dropout_round.aggregation_backend_status == "secure_sum"
+    assert dropout_round.aggregation_backend_status == "post_commit_cross_check"
+    assert dropout_round.secure_sum_consumed is False
+    assert dropout_round.dp_accounting_status == "deterministic_replay_only"
+    assert dropout_round.effective_dp is False
     assert dropout_round.dp_epsilon_spent is not None
 
     eval_links = [row for row in report.metric_links if row.metric_source == "eval"]
@@ -183,3 +186,9 @@ def test_checked_in_phase3_observability_report_is_schema_valid() -> None:
 
     assert len(report.dropout_decisions) == 1
     assert report.dropout_decisions[0].outcome == "closed"
+    assert all(
+        row.aggregation_backend_status == "post_commit_cross_check"
+        for row in report.rounds
+    )
+    assert all(not row.secure_sum_consumed for row in report.rounds)
+    assert all(not row.effective_dp for row in report.rounds)

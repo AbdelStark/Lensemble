@@ -149,10 +149,32 @@ def test_demo_card_repeats_the_claim_boundary() -> None:
         "production browser training",
         "paper-scale TwoRooms or PushT benchmark parity",
         "cryptographic proof of honest computation",
-        "absent in this demo path",
+        "no secure aggregation or differential privacy in this demo path",
         "surrogate-swipe-dot",
     ):
         assert needle in text, needle
+
+
+def test_demo_card_states_the_exact_training_and_privacy_boundary() -> None:
+    text = CARD.read_text(encoding="utf-8")
+    for needle in (
+        "federated adapter continuation on a frozen checkpoint",
+        "12,512-parameter",
+        "(0.069%) residual adapter",
+        "system-composed probe is the headline",
+        "`scripts/lewm_probe_check.py` is only an offline math cross-check",
+        "5 independent seeds",
+        "worst case **+5.4%**",
+        "Raw rollouts, labels, actions, intermediate activations, and latents remain",
+        "hash-pinned, weight-bearing ONNX graphs",
+        "clipped adapter deltas and derived summaries",
+        "single local coordinator",
+        "sees each individual delta",
+        "no secure aggregation or differential privacy in this demo path",
+        "full-model or browser world-model training",
+    ):
+        assert needle in text, needle
+    assert "certified" not in text.casefold()
 
 
 def test_demo_card_links_every_gate_artifact() -> None:

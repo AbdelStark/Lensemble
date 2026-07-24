@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass
+from statistics import median
 from typing import TypedDict
 
 import pytest
@@ -287,17 +288,25 @@ def test_participant_horizon_sweep_runs_across_points_with_finite_drift() -> Non
 
 def test_longer_inner_horizon_drifts_more_for_naive() -> None:
     # RFC-0002 §2.1 / RFC-0005 §7: a longer inner horizon H rotates the per-silo frames further apart
-    # before the outer step, so the NAIVE rung's inter-silo drift grows with H. We assert the directional
-    # claim with a margin (seeded, deterministic), comparing a short vs a long H at fixed C.
+    # before the outer step, so the NAIVE rung's inter-silo drift grows with H. Check the direction over
+    # several deterministic seeds rather than tuning the gate to one trajectory.
     cfg = _base_cfg()
-    result = participant_horizon_sweep(
-        cfg, counts=[2], horizons=[8, 48], num_rounds=3, seed=5
+    margins: list[float] = []
+    for seed in (1, 5, 7):
+        result = participant_horizon_sweep(
+            cfg, counts=[2], horizons=[8, 48], num_rounds=3, seed=seed
+        )
+        short_h = result[(2, 8)]["naive-fedavg"].frame_drift_angle_deg
+        long_h = result[(2, 48)]["naive-fedavg"].frame_drift_angle_deg
+        margins.append(long_h - short_h)
+
+    assert min(margins) > 1.0, (
+        "a longer inner horizon must increase naive frame drift for every seeded "
+        f"trajectory; observed margins={margins} (RFC-0002 §2.1)"
     )
-    short_h = result[(2, 8)]["naive-fedavg"].frame_drift_angle_deg
-    long_h = result[(2, 48)]["naive-fedavg"].frame_drift_angle_deg
-    assert long_h > short_h + 3.0, (
-        f"a longer inner horizon should rotate frames further apart: H=8 -> {short_h:.3f} deg, "
-        f"H=48 -> {long_h:.3f} deg (RFC-0002 §2.1)"
+    assert median(margins) > 5.0, (
+        "the multi-seed median drift increase should remain material; "
+        f"observed margins={margins} (RFC-0005 §7)"
     )
 
 

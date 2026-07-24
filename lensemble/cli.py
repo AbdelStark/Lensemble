@@ -36,7 +36,6 @@ from lensemble.config import SEED_DERIVATION, LensembleConfig, load
 from lensemble.data.probe import (
     build_probe,
     load_probe,
-    probe_content_hash,
     probe_record,
     save_probe,
     verify_probe_pin,
@@ -52,7 +51,7 @@ if TYPE_CHECKING:
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="Lensemble: federated, end-to-end JEPA world models.",
+    help="Lensemble: research toolkit for federated JEPA-style world-model experiments.",
 )
 
 # Known encoder identities a warm-start release can name (02-public-api 1.1 / config schema).
@@ -823,23 +822,7 @@ def probe_pin(
 ) -> None:
     """Recompute and report the probe content hash (the pinned hash for RoundOpen)."""
     probe = load_probe(probe_path)
-    recomputed = probe_content_hash(probe.points, probe.landmark_idx)
-    typer.echo(recomputed.hex())
-    if recomputed != probe.content_hash:
-        typer.echo(
-            "warning: stored content_hash differs from recomputed; re-saving pin",
-            err=True,
-        )
-        save_probe(
-            type(probe)(
-                probe.points,
-                probe.landmark_idx,
-                probe.landmark_targets,
-                recomputed,
-                probe.probe_version,
-            ),
-            probe_path,
-        )
+    typer.echo(probe.content_hash.hex())
 
 
 @probe_app.command("verify")
@@ -850,9 +833,20 @@ def probe_verify(
     ),
 ) -> None:
     """Verify a held probe against a pinned hash (INV-PROBE-PIN). Exit 1 on mismatch/under-coverage."""
-    probe = load_probe(probe_path)
     try:
-        verify_probe_pin(probe, bytes.fromhex(against))
+        expected_hash = bytes.fromhex(against)
+    except ValueError as err:
+        typer.echo(f"probe_invalid: invalid --hash value: {against!r}", err=True)
+        raise typer.Exit(code=1) from err
+    if len(against) != 64 or len(expected_hash) != 32:
+        typer.echo(
+            "probe_invalid: --hash must be exactly 64 hexadecimal characters",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    try:
+        probe = load_probe(probe_path)
+        verify_probe_pin(probe, expected_hash)
     except LensembleError as err:
         typer.echo(f"{err.code.value}: {err}", err=True)
         raise typer.Exit(code=1) from err

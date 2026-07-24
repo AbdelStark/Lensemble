@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any, Literal
 import torch
 from torch import Tensor
 
-from lensemble.data.probe import probe_content_hash
+from lensemble.data.probe import verify_probe_content
 from lensemble.errors import FrameDriftExceeded, LensembleErrorCode, ProbeError
 from lensemble.gauge.procrustes import procrustes_align
 from lensemble.model.numerics import module_input_tensor
@@ -32,7 +32,7 @@ class FrameAnchor:
     """Variant A landmark frame anchor (RFC-0002 4). Constructed once per run from a pinned probe + f_ref.
 
     Args:
-        probe: the hash-pinned public probe (carries ``points`` and ``landmark_idx``).
+        probe: the hash-pinned public probe (points, landmark indices, and targets are all bound).
         ref_embeddings: the fixed landmark targets ``t_i = f_ref(p_i)``, shape ``(k, ...)`` aligned with
             ``probe.landmark_idx``; detached, never a gradient source (``INV-WARMSTART-T0``).
         variant: ``"landmark"`` (Variant B is a separate issue).
@@ -63,13 +63,19 @@ class FrameAnchor:
             err.d = d  # type: ignore[attr-defined]
             raise err
 
-        recomputed = probe_content_hash(probe.points, probe.landmark_idx).hex()
-        if recomputed != probe_hash:
+        try:
+            expected_hash = bytes.fromhex(probe_hash)
+        except ValueError as exc:
             raise ProbeError(
-                "probe content hash does not match the pinned hash; refusing to anchor",
+                "probe_hash must be the 64-hex v2 full PublicProbe commitment",
                 code=LensembleErrorCode.PROBE_INVALID,
-                remediation="anchor only against the pinned probe (INV-PROBE-PIN)",
-            )
+                remediation="supply the full hash over points, indices, and landmark targets",
+            ) from exc
+        recomputed = verify_probe_content(
+            probe,
+            expected_hash=expected_hash,
+            landmark_targets=ref_embeddings,
+        ).hex()
 
         self.probe = probe
         self.variant = variant

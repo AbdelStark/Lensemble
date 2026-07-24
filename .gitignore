@@ -30,8 +30,7 @@ data/raw/
 .tldr/
 .claude/
 
-# uv: we install via `uv pip install -e .[dev]` (not `uv sync`), so the lock is non-authoritative
-uv.lock
+# `uv.lock` is a tracked reproducibility input. Local environments remain ignored above.
 
 # Local run outputs (train_local / CLI --run-dir default)
 runs/

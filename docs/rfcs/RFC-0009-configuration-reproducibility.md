@@ -43,10 +43,12 @@ that selects, and the manifest that records, both.
 A federated, cross-silo training system makes reproducibility a correctness property rather than a
 convenience:
 
-- **The scientific claim depends on it.** The headline result — that anchored federation holds the latent
-  frame pinned where naive `FedAvg` rotates apart ([RFC-0002](RFC-0002-gauge-and-aggregation.md),
-  [RFC-0005 §2](RFC-0005-evaluation.md)) — is a *measurement*. A measurement that cannot be reproduced
-  from a recorded configuration and seed is not evidence. The ablation ladder ([RFC-0005 §6](RFC-0005-evaluation.md))
+- **The scientific test depends on it.** Whether anchored federation holds the
+  latent frame steadier than naive `FedAvg`
+  ([RFC-0002](RFC-0002-gauge-and-aggregation.md),
+  [RFC-0005 §2](RFC-0005-evaluation.md)) is an empirical question. A measurement
+  that cannot be reproduced from a recorded configuration and seed is not
+  evidence. The ablation ladder ([RFC-0005 §6](RFC-0005-evaluation.md))
   is realized as configuration overrides; each rung must differ from its neighbour by exactly one
   documented mechanism, and a reviewer must be able to re-run any rung from its manifest.
 

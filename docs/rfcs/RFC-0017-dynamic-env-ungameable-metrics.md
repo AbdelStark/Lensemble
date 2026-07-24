@@ -23,10 +23,13 @@ position `p=(x,y) in [0,1]^2`; a continuous 2-DOF action `a in [-1,1]^2` updates
 `(1, 3, H, W)` with float32 values in `[0,1]`.
 
 The MVP usefulness claim is bound to an external ground-truth target, not to the encoder's own latent
-space. The single binding gate is held-out `state_probe_r2`, a linear regression from resident latents
-to the true `(x,y)` state. Closed-loop latent-MPC success is reported against the environment's true
-`succeeded()` predicate but is non-binding because the planner still optimizes the gameable latent
-goal-energy.
+space. The only calibrated quantitative gate is held-out `state_probe_r2`, a linear regression from
+resident latents to the true `(x,y)` state. A positive full-model verdict also requires the held-out
+scale diagnostics `latent_std_mean` and `latent_rms`, plus inter-participant `frame_drift_deg`, to be
+present and reviewed. Their exact calibrated pass thresholds remain open, so they are mandatory
+diagnostics rather than new numeric gates. Closed-loop latent-MPC success is reported against the
+environment's true `succeeded()` predicate but is non-binding because the planner still optimizes the
+gameable latent goal-energy.
 
 ## Motivation
 
@@ -37,8 +40,9 @@ bug. On near-static video, "predict no change" is close to optimal for a JEPA pr
 
 The existing collapse guards do not catch this failure. `effective_rank` and `effective_dim` normalize
 the eigenspectrum by its sum, so they are scale-invariant: a magnitude-collapsed latent can look
-geometrically healthy while being useless for a downstream external target. The dynamic environment makes
-constant latents wrong, because held-out state changes are visible and action-conditioned.
+geometrically healthy while being useless for a downstream external target. Scale-sensitive diagnostics
+are therefore required alongside rank. The dynamic environment makes constant latents wrong, because
+held-out state changes are visible and action-conditioned.
 
 ## Environment Contract
 
@@ -102,19 +106,38 @@ contain only scalar metrics such as held-out R2, hashes, counts, and redacted ob
 
 ## Metrics Hierarchy
 
-The single binding usefulness metric is held-out `state_probe_r2`: a closed-form linear probe from the
-encoder latent to true `(x,y)`, using mean-pooled tokens, per-feature standardization, and a fixed
-train/held-out split. The MVP gate is a pinned `state_probe_r2 >= 0.5` and a pinned absolute margin over
-random-encoder, naive-FedAvg, and local-only controls, including the DP-on run.
+The only calibrated binding usefulness metric is held-out `state_probe_r2`: a closed-form linear probe
+from the encoder latent to true `(x,y)`, using mean-pooled tokens, per-feature standardization, and a
+fixed train/held-out split. The MVP gate is a pinned `state_probe_r2 >= 0.5` and a pinned absolute margin
+over random-encoder, naive-FedAvg, and local-only controls, including the configured-noise run. The
+current deterministic replay-noise path is not effective DP.
+
+Every positive full-model verdict must also record these diagnostics on the same held-out latent vectors
+used for the round evaluation:
+
+- `latent_std_mean`: flatten every leading window/token axis to an `(n,d)` matrix, compute each
+  coordinate's population standard deviation (correction `0`), then average the `d` values. It is
+  translation-invariant and falls linearly under uniform magnitude collapse.
+- `latent_rms`: `sqrt(mean(x**2))` over that full `(n,d)` matrix. It is uncentered and records absolute
+  latent scale, including a shared offset.
+- `frame_drift_deg`: inter-participant latent gauge rotation on the pinned public probe.
+
+These values must be present and interpreted jointly with matched controls and seeds; a healthy
+`effective_rank` does not override an observed magnitude-collapse or frame-drift warning. This RFC does
+not yet define calibrated pass/fail cutoffs for any of the three diagnostics. Until those cutoffs are
+established by claim-grade full-model runs, the diagnostics constrain claim review but must not be
+presented as thresholded benchmark wins.
 
 Closed-loop latent-MPC `success_rate` is reported against the true environment `succeeded()` predicate
 and compared to a random-action chance baseline. It is not a binding gate: the planner optimizes actions
 to reduce distance to the encoder's own goal latent, so the objective is still gameable by a degenerate
 latent representation.
 
-`skill_vs_identity`, latent goal-energy, `effective_rank`, and `effective_dim` are supporting signals
-only. `skill_vs_identity` and latent goal-energy target the encoder's own latent. `effective_rank` and
-`effective_dim` are scale-invariant and therefore blind to magnitude collapse.
+`skill_vs_identity`, latent goal-energy, `effective_rank`, `effective_dim`, `latent_std_mean`,
+`latent_rms`, and `frame_drift_deg` are supporting signals rather than substitutes for the external
+ground-truth gate. `skill_vs_identity` and latent goal-energy target the encoder's own latent.
+`effective_rank` and `effective_dim` are scale-invariant and therefore blind to magnitude collapse;
+the absolute-scale and drift diagnostics expose complementary failure modes.
 
 ## Unvalidated Regimes
 
@@ -142,4 +165,6 @@ target is in-browser inference plus environment simulation only.
   `(x,y)` labels.
 - The held-out `state_probe_r2` report is schema-versioned and binds every claim to checkpoint and
   control hashes.
+- Positive full-model evidence records `latent_std_mean`, `latent_rms`, and `frame_drift_deg` alongside
+  `state_probe_r2`; their numeric pass thresholds remain explicitly uncalibrated.
 - Docs, roadmap, model card, and evidence bundle carry the metric hierarchy and honest boundaries above.

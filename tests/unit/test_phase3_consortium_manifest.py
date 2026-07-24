@@ -32,6 +32,7 @@ def test_default_phase3_consortium_manifest_is_valid_for_every_actor() -> None:
     assert manifest.runtime.transport == "network"
     assert manifest.runtime.secure_aggregation_required is True
     assert manifest.runtime.dp_required is True
+    assert manifest.public_probe.hash_contract == "placeholder-unbound"
     assert len(manifest.participants) == 4
     assert validate_coordinator_run_agreement(manifest) == manifest
 
@@ -48,6 +49,15 @@ def test_consortium_manifest_round_trips_canonical_json(tmp_path: Path) -> None:
 
     assert load_consortium_manifest(path) == manifest
     assert json.loads(to_consortium_json(manifest)) == json.loads(path.read_text())
+
+
+def test_legacy_manifest_probe_digest_is_explicitly_unscoped() -> None:
+    raw = _raw()
+    del raw["public_probe"]["hash_contract"]
+
+    parsed = parse_consortium_manifest(raw)
+
+    assert parsed.public_probe.hash_contract == "legacy-unscoped"
 
 
 def test_parse_consortium_manifest_gates_future_schema_first() -> None:

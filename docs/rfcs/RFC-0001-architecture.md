@@ -16,13 +16,15 @@
 
 ## Summary
 
-Lensemble trains a single **action-conditioned JEPA** world model **end-to-end** — encoder
-$f_\theta$ and latent predictor $g_\phi$ co-trained, "Fork B" — across many mutually-distrusting
-participants. Raw interaction data never leaves a participant's boundary; only model deltas
-$\Delta_c$ cross, aggregated under privacy. This RFC specifies *what Lensemble builds*: the model
-and its parts, which parts are federated versus local versus never-crossing, the two-level training
-topology, the trust boundaries, the module map of the reference implementation, and the staged
-rollout A–E mapped to milestones v0.1–v1.0. Mechanisms are deferred to focused RFCs: the latent
+Lensemble implements a research path for jointly training an **action-conditioned JEPA** encoder
+$f_\theta$ and latent predictor $g_\phi$ ("Fork B") across participants. Raw interaction data remains
+inside a participant boundary and released model deltas $\Delta_c$ cross. The current coordinator
+commits from individually visible plaintext deltas; secure-sum-only aggregation and effective DP are
+target protocol properties, not claims about that optimizer path. The checked-in full-model evidence
+predates the corrected outer-update direction and target-bound probe contract, so it does not validate
+the current algorithm. This RFC specifies *what Lensemble builds*: the model and its parts, which parts
+are federated versus local versus never-crossing, the two-level training topology, trust boundaries,
+module map, and staged rollout A–E. Mechanisms are deferred to focused RFCs: the latent
 gauge to [RFC-0002](RFC-0002-gauge-and-aggregation.md), the wire protocol to
 [RFC-0003](RFC-0003-federated-protocol.md), data and sovereignty to
 [RFC-0004](RFC-0004-data-provenance.md), evaluation to [RFC-0005](RFC-0005-evaluation.md), and the
@@ -35,16 +37,16 @@ A foundation-scale world model wants diverse embodied experience — robot fleet
 driving stacks, egocentric video — but that data is siloed by IP, privacy, and safety and cannot be
 pooled. Federated training is the access strategy. The catch specific to JEPA: its self-supervised
 objective is invariant under O(d) rotations of the latent space (the **latent gauge**, argued in
-[RFC-0002 §2](RFC-0002-gauge-and-aggregation.md)), so independently-updated participants drift into
-mutually-rotated coordinate frames and naive weight-averaging is meaningless — a failure mode that
-anchored models (supervised nets, LLMs with a fixed vocabulary) never see.
+[RFC-0002 §2](RFC-0002-gauge-and-aggregation.md)), so independently-updated participants can drift
+into mutually-rotated coordinate frames and naive weight-averaging can combine incompatible
+parameterizations. Fixed-output bases in supervised networks and LLMs constrain this ambiguity.
 
-The architecture must therefore make four things simultaneously true: (1) the shared backbone is
-genuinely *one* model that averaging can combine; (2) the parts that legitimately differ per
-participant (action spaces) stay local; (3) nothing that crosses a boundary leaks private data; and
-(4) the aggregation path is disciplined enough that a Phase-2 proof of correct aggregation is cheap
-to construct. No single existing system delivers all four for an end-to-end JEPA, so the
-architecture is specified here as a coherent whole rather than assembled ad hoc.
+The target architecture therefore makes four requirements explicit: (1) the shared backbone has a
+compatible frame for aggregation; (2) parts that legitimately differ per participant (action spaces)
+stay local; (3) boundary releases pass through the specified privacy protocol; and (4) aggregation
+remains deterministic and hash-bound for audit and possible future proof integration. The current
+plaintext coordinator satisfies neither secure-sum-only visibility nor effective cumulative DP, and
+the future proof layer is not implemented.
 
 ## Goals
 
@@ -55,7 +57,8 @@ architecture is specified here as a coherent whole rather than assembled ad hoc.
   local-personalized, or never-crosses, with the reason.
 - Specify the **two-level training topology** — inner (intra-participant FSDP/TP, the only place
   large-model parallelism applies) and outer (inter-participant DiLoCo) — and make explicit that the
-  standard distributed stack is the inner loop, not the contribution.
+  standard distributed stack is inner-loop infrastructure rather than a
+  project-specific mechanism.
 - Specify the **trust boundaries** and name exactly what crosses and what never does, enforcing
   `INV-RESIDENCY`.
 - Specify the **module map** of the reference implementation ([conventions §1](../spec/conventions.md#1-repository-and-package-layout)) and its dependency layering,
@@ -68,10 +71,9 @@ architecture is specified here as a coherent whole rather than assembled ad hoc.
   accounting, data formats, the eval suite, or the proof system; those are owned by their RFCs and
   only referenced here.
 - Lensemble is not an LLM and not a frozen-encoder system by default (Fork A is the documented
-  degrade, not the target). It is not an incentive or payment system; economic/on-chain mechanisms
-  are out of scope (see [RFC-0006](RFC-0006-verifiable-contribution.md)).
+  degrade, not the target).
 - Stage E (own foundation-scale federated video pretraining from scratch) and the Stage-D
-  realized proofs are out of v1.0 scope ([conventions §12](../spec/conventions.md#12-milestones-and-stages)); only the proof-*ready* disciplines are in scope.
+  realized proofs are out of v1.0 scope ([conventions §12](../spec/conventions.md#12-milestones-and-stages)); only proof-oriented interfaces are in scope.
 
 ## Proposed Design
 
@@ -182,7 +184,7 @@ and the spec at ([01-architecture.md](../spec/01-architecture.md)) reproduce it.
 | SIGReg sketch matrix $A$ | **Shared per round** (broadcast seed $s_t$) | Objective consistency ([RFC-0002 §3](RFC-0002-gauge-and-aggregation.md)) | `INV-SKETCH-CONSISTENCY` |
 | Public probe $\mathcal{P}$ + landmark targets $\{t_i\}$ | **Shared, fixed, hash-pinned** | The manufactured frame anchor ([RFC-0002 §4](RFC-0002-gauge-and-aggregation.md)) | `INV-PROBE-PIN` |
 | Dataset Merkle root $R_c$ | **Crosses as a commitment** (not the data) | Provenance binding ([RFC-0014](RFC-0014-provenance-commitments.md)) | `INV-COMMIT-BINDING` |
-| Pseudo-gradient $\Delta_c$ | **Crosses, DP-clipped + masked** | The only learning signal that leaves a boundary | `INV-DP-BOUND` |
+| Pseudo-gradient $\Delta_c$ | **Target:** participant-aligned, clipped/noised, and masked. **Current:** clipped with replayable noise, visible individually to the coordinator | The only learning signal intended to leave a boundary | `INV-ALIGN-BEFORE-RELEASE`, `INV-DP-BOUND` |
 | Raw trajectories (obs/actions) | **Never leaves the boundary** | Sovereignty | `INV-RESIDENCY` |
 | Private embeddings $f_\theta(x)$ | **Never leaves the boundary** | Sovereignty | `INV-RESIDENCY` |
 
@@ -196,8 +198,8 @@ construction.
 
 ### 5. Training topology (two-level)
 
-A two-level nesting; this is where the standard "distributed training" stack is the *inner* loop,
-not the contribution.
+A two-level nesting; the standard "distributed training" stack is the *inner*
+loop, while the outer loop coordinates participant releases.
 
 - **Inner — intra-participant, for scale.** Within a participant, standard FSDP / tensor / context
   parallelism trains the warm-started 1.2B-class model. SIGReg projection statistics are reduced
@@ -208,13 +210,16 @@ not the contribution.
 - **Outer — inter-participant, for sovereignty.** DiLoCo: each participant runs $H$ local steps,
   then an outer **Nesterov** step synchronizes pseudo-gradients
   $\Delta_c = (\theta_c^{\text{local}},\phi_c^{\text{local}}) - (\theta_t,\phi_t)$
-  ([RFC-0003 §3](RFC-0003-federated-protocol.md)). Only $\Delta_c$ crosses the boundary, via secure
-  aggregation ([RFC-0011](RFC-0011-secure-aggregation.md)) + DP
-  ([RFC-0012](RFC-0012-differential-privacy.md)). The outer step is bitwise-deterministic given its
+  ([RFC-0003 §3](RFC-0003-federated-protocol.md)). Only released $\Delta_c$ values cross the boundary.
+  Secure aggregation ([RFC-0011](RFC-0011-secure-aggregation.md)) and effective DP
+  ([RFC-0012](RFC-0012-differential-privacy.md)) are the target protections for that release. The
+  current coordinator instead commits from individually visible deltas; its simulated/TEE result is a
+  post-commit equivalence check and its deterministic one-round replay accounting is non-effective and
+  non-cumulative. The outer step is bitwise-deterministic given its
   inputs (`INV-AGG-DETERMINISM`, [conventions §9](../spec/conventions.md#9-determinism-dtype-device)): fixed reduction order, fp32/fp64 with fixed summation
   order, no atomics. A determinism self-check runs each outer step; failure raises
   `NonDeterministicAggregation` and aborts the step (see Testing Strategy and
-  [RFC-0006 §3](RFC-0006-verifiable-contribution.md) for proof-readiness).
+  [RFC-0006 §3](RFC-0006-verifiable-contribution.md) for future proof-integration context).
 
 ### 6. Trust boundaries
 
@@ -225,10 +230,10 @@ not the contribution.
 │        ▼                        ▼                     │
 │  Merkle commitment R_c     pseudo-gradient Δ_c        │
 └───────────────│──────────────────│───────────────────┘
-                │                  │  (DP-clipped + noised)
+                │                  │  (target: participant-secret DP + mask)
                 ▼                  ▼
         ┌──────────── Coordinator / secure aggregator ─────────┐
-        │  Σ_c Δ_c  (individual Δ_c never revealed)             │
+        │  target: Σ_c Δ_c only; current: individual Δ_c visible │
         │  outer Nesterov step → θ^{global}_{t+1} (hash-committed)│
         │  frame re-alignment on public probe (recomputable)    │
         └───────────────────────────────────────────────────────┘
@@ -237,10 +242,12 @@ not the contribution.
 In prose: each participant is a sovereign trust domain. Raw trajectories and any private embedding
 $f_\theta(x)$ stay inside it and never cross (`INV-RESIDENCY`, enforced by `lensemble.data.residency`;
 an attempted crossing raises `ResidencyViolation`, which is fail-closed and never caught-and-ignored,
-[conventions §6](../spec/conventions.md#6-error-taxonomy)). What crosses a boundary: model deltas $\Delta_c$ (privacy-protected, DP-clipped then
-masked), dataset commitments $R_c$, and shared coordination state (the sketch seed $s_t$, the probe
-hash, the global-model hash). The coordinator/aggregator learns only $\sum_c \Delta_c$, never an
-individual $\Delta_c$ ([RFC-0011](RFC-0011-secure-aggregation.md)); for Phase 1 it is treated as
+[conventions §6](../spec/conventions.md#6-error-taxonomy)). What crosses a boundary: released model
+deltas $\Delta_c$, dataset commitments $R_c$, and shared coordination state (the sketch seed $s_t$, the
+probe hash, the global-model hash). In the target protocol the coordinator/aggregator learns only
+$\sum_c \Delta_c$, never an individual $\Delta_c$ ([RFC-0011](RFC-0011-secure-aggregation.md)). The
+current coordinator receives individual plaintext deltas and commits from them before its
+post-commit aggregation/privacy report; for Phase 1 it is treated as
 honest-but-curious and as a proving target in Phase 2
 ([RFC-0006](RFC-0006-verifiable-contribution.md)). The threat model in detail is at
 ([06-security.md](../spec/06-security.md)). The boundary-crossing message table is
@@ -248,7 +255,7 @@ honest-but-curious and as a proving target in Phase 2
 
 ### 7. Data-flow lifecycles
 
-**(a) A federated training round, end-to-end** (per round $t$;
+**(a) A federated training round, end-to-end (normative Stage-C target)** (per round $t$;
 [RFC-0003 §3](RFC-0003-federated-protocol.md), runtime in
 [RFC-0013](RFC-0013-coordinator-runtime.md)):
 
@@ -257,20 +264,31 @@ honest-but-curious and as a proving target in Phase 2
 2. Each participant validates the probe hash equals the committed hash (`INV-PROBE-PIN`; else
    `ProbeError`) and builds $A$ from $s_t$ (`INV-SKETCH-CONSISTENCY`).
 3. Each participant runs $H$ inner AdamW steps on the objective over local data only.
-4. Pseudo-gradient $\Delta_c = (\theta_c^{\text{local}},\phi_c^{\text{local}}) - (\theta_t,\phi_t)$.
-5. Privatize: clip to $C_{\text{clip}}$ then add Gaussian noise (`INV-DP-BOUND`;
-   [RFC-0012](RFC-0012-differential-privacy.md)). Budget exhaustion raises `PrivacyBudgetExceeded`
-   and stops training.
-6. Secure-aggregate: compute $\sum_c \Delta_c$ without revealing any individual $\Delta_c$
+4. Raw pseudo-gradient
+   $\Delta_c = (\theta_c^{\text{local}},\phi_c^{\text{local}}) - (\theta_t,\phi_t)$.
+5. Before any release transform, each participant evaluates the Layer-3 backstop on the public probe.
+   If it fires, it Procrustes-aligns the full local weights, conjugates the predictor I/O, and
+   re-differences against the broadcast global weights to obtain $\Delta'_c$; otherwise
+   $\Delta'_c=\Delta_c$ (`INV-ALIGN-BEFORE-RELEASE`;
+   [RFC-0002 §5](RFC-0002-gauge-and-aggregation.md)).
+6. Privatize $\Delta'_c$: clip to $C_{\text{clip}}$ then add Gaussian noise (`INV-DP-BOUND`;
+   [RFC-0012](RFC-0012-differential-privacy.md)). On the target path a persistent accountant checks
+   before release; budget exhaustion raises `PrivacyBudgetExceeded` and stops training. The current
+   report accounts one post-commit round with reconstructible replay noise and cannot enforce this stop.
+7. Optionally quantize, then encode and mask the final participant release.
+8. Secure-aggregate: compute $\sum_c \widetilde{\Delta'_c}$ without revealing any individual
+   $\widetilde{\Delta'_c}$
    ([RFC-0011](RFC-0011-secure-aggregation.md)); dropout below threshold raises
-   `SecureAggregationError`.
-7. Backstop align: Procrustes re-alignment on the public probe if drift exceeds threshold
-   ([RFC-0002 §5](RFC-0002-gauge-and-aggregation.md); `FrameDriftExceeded` triggers the backstop,
-   `DegenerateProcrustes` on a degenerate SVD).
-8. Outer Nesterov step:
-   $(\theta_{t+1},\phi_{t+1}) = (\theta_t,\phi_t) - \eta_{\text{out}}\,\mathrm{Nesterov}\big(\tfrac1C\sum_c\Delta_c\big)$;
-   the determinism self-check guards `INV-AGG-DETERMINISM`.
-9. Commit: hash-commit $(\theta_{t+1},\phi_{t+1})$ (`INV-CHECKPOINT-HASH`;
+   `SecureAggregationError`. A genuine secure-sum-only boundary cannot run a participant-specific
+   backstop after this point. The current optimizer does not consume this secure sum; its
+   coordinator-side backstop is a guarded plaintext research harness only.
+9. Outer Nesterov step:
+   $(\theta_{t+1},\phi_{t+1}) = (\theta_t,\phi_t) + \eta_{\text{out}}\,\mathrm{Nesterov}\big(\tfrac1C\sum_c\widetilde{\Delta'_c}\big)$.
+   The plus sign follows Lensemble's $\Delta_c=\text{local}-\text{global}$ displacement convention; it
+   is equivalent to subtracting DiLoCo's outer-gradient convention
+   $G_c=\text{global}-\text{local}=-\Delta_c$. The determinism self-check guards
+   `INV-AGG-DETERMINISM`.
+10. Commit: hash-commit $(\theta_{t+1},\phi_{t+1})$ (`INV-CHECKPOINT-HASH`;
    [RFC-0010](RFC-0010-artifact-checkpoint-format.md)) and emit `RoundClose`. Each released
    $\Delta_c$ is bound to exactly one $R_c$ (`INV-COMMIT-BINDING`;
    [RFC-0014](RFC-0014-provenance-commitments.md)); a mismatch raises `CommitmentMismatch` and the
@@ -316,7 +334,7 @@ never emitted (`INV-RESIDENCY`); only $R_c$ leaves the boundary.
 | Probe hash differs from committed | participant ingress | `ProbeError` | Reject round (`INV-PROBE-PIN`) |
 | Outer step nondeterministic | outer self-check | `NonDeterministicAggregation` | Abort + recompute (never swallowed) |
 | Update bound to wrong root | commitment check | `CommitmentMismatch` | Reject update (never swallowed) |
-| DP budget exhausted | `privacy.accountant` | `PrivacyBudgetExceeded` | Stop training |
+| DP budget exhausted (target persistent accountant) | `privacy.accountant` | `PrivacyBudgetExceeded` | Stop training; current one-round post-commit reporting cannot trigger this guard |
 | Checkpoint tampered | artifact load | `CheckpointIntegrityError` | Refuse load (`INV-CHECKPOINT-HASH`) |
 
 ## Alternatives Considered
@@ -325,11 +343,11 @@ never emitted (`INV-RESIDENCY`); only $R_c$ leaves the boundary.
 only).** Fork B co-trains $f_\theta$ and $g_\phi$; Fork A freezes a shared encoder and federates
 only $g_\phi$. Fork B is considered the lead because the open scientific question — can an
 end-to-end JEPA be federated at all, given the latent gauge — only exists when the encoder moves;
-freezing it dissolves the gauge and the contribution with it
+freezing it removes the moving-encoder gauge question
 ([RFC-0002 §7](RFC-0002-gauge-and-aggregation.md)). Fork A is *not* rejected: it is the documented
-safe-degrade. If Fork-B gauge control proves unstable at scale, Fork A recovers a clean federation
-and most of the sovereignty story, minus the end-to-end novelty. Both paths are supported and tested
-at v1.0 ([conventions §12](../spec/conventions.md#12-milestones-and-stages)).
+safe-degrade. If Fork-B gauge control proves unstable at scale, Fork A provides a simpler federation
+path but answers a narrower question. Support and tests for both paths are v1.0 milestone requirements,
+not current empirical claims ([conventions §12](../spec/conventions.md#12-milestones-and-stages)).
 
 **Two-level topology (inner FSDP + outer DiLoCo) vs flat synchronous all-reduce.** A flat all-reduce
 synchronizes every step across all participants. Considered for its simplicity and exact-averaging
@@ -360,8 +378,8 @@ representation. Per-embodiment heads $h_\psi^{(c)}$ stay local and are never agg
   trades frame stability against quality: too strong clamps quality to the reference encoder, too
   weak lets the frame drift. One scalar carries a disproportionate share of the system's behavior.
 - **Coordinator centralization in Phase 1.** The coordinator is a single point of failure and trust;
-  Phase 2 makes correct aggregation provable ([RFC-0006](RFC-0006-verifiable-contribution.md)) but
-  does not remove the central role in v1.0.
+  RFC-0006 sketches a possible future proof of aggregation correctness, but no such proof is
+  implemented and it would not remove the coordinator's central role.
 
 ## Migration / Rollout
 
@@ -370,14 +388,15 @@ The staged plan A–E is the rollout; each stage gates the next, mapped to miles
 | Stage | Milestone | Goal | Compute |
 |---|---|---|---|
 | **A** | v0.1 | Single-site, warm-started, ViT-L/~300M end-to-end SIGReg + AC predictor on pooled robot data. Centralized upper bound; validate objective + MPC eval. Plus foundational scaffolding (package, config, data layer, WMCP, model+objective, eval harness, observability, artifacts, errors, CI, packaging). | Handful of GPUs, days |
-| **B** | v0.2 | **Simulated federation** on one cluster: $C$ silos, non-IID partition, DiLoCo + frame anchor (Layers 1–4), Procrustes backstop, simulated secure aggregation + DP, the frame-drift diagnostic, the full ablation ladder and non-IID/scale sweeps. *The scientific core / the paper.* | Same hardware |
-| **C** | v0.3 | **Two real sovereign nodes** over a network boundary: real secure aggregation + DP, residency enforcement, fault tolerance/elasticity, the contribution ledger. The sovereignty demonstration. | Two small clusters |
-| **D** | (post-v1.0, Phase 2) | The realized **verifiable layer** ([RFC-0006](RFC-0006-verifiable-contribution.md)): aggregation STARK + provenance binding + TEE inner step. Out of v1.0 scope; only the proof-*ready* disciplines land earlier. | + prover |
+| **B** | v0.2 | **Simulated federation** on one cluster: $C$ silos, non-IID partition, DiLoCo + frame anchor (Layers 1–4), Procrustes backstop, aggregation/DP mechanism plumbing with explicit effectiveness status, the frame-drift diagnostic, the full ablation ladder and non-IID/scale sweeps. *The scientific core / the paper.* | Same hardware |
+| **C** | v0.3 | **Two independent nodes** over a network boundary: optimizer-consumed secure aggregation, effective DP, residency enforcement, fault tolerance/elasticity, and the contribution ledger. This is a target network-boundary validation, not current functionality. | Two small clusters |
+| **D** | (post-v1.0, Phase 2) | The realized **verifiable layer** ([RFC-0006](RFC-0006-verifiable-contribution.md)): aggregation STARK + provenance binding + TEE inner step. Out of v1.0 scope; only proof-oriented interfaces land earlier. | + prover |
 | **E** | (post-v1.0) | **Scale** to V-JEPA-2 class (1.2B); optionally federated encoder pretraining from scratch. Out of v1.0 scope. | INTELLECT-class program |
 
 v1.0 itself is the hardening milestone: frozen public API, complete docs + reproducibility package,
-release automation, the Fork A fallback supported and tested, and the proof-ready guarantees
-([RFC-0006 §3](RFC-0006-verifiable-contribution.md)) verified end-to-end ([conventions §12](../spec/conventions.md#12-milestones-and-stages)). Warm-starting
+release automation, the Fork A fallback supported and tested, and proof-integration seams exercised
+without claiming a cryptographic proof or no-rework guarantee
+([RFC-0006 §3](RFC-0006-verifiable-contribution.md); [conventions §12](../spec/conventions.md#12-milestones-and-stages)). Warm-starting
 keeps A–C modest and runnable; Stage E is the expensive frontier, off the Phase-1 / paper critical
 path. A stage may not begin until its predecessor's milestone exit criteria
 ([RFC-0005 §9](RFC-0005-evaluation.md)) are met.
@@ -387,9 +406,11 @@ path. A stage may not begin until its predecessor's milestone exit criteria
 The full pyramid is at ([07-testing-strategy.md](../spec/07-testing-strategy.md)); the architecture-owned tests are:
 
 - **Round-lifecycle integration test.** Wire the full round of §7(a) end-to-end on a toy CPU config
-  (a few synthetic silos, a tiny model, a tiny probe): `RoundOpen` → local steps → clip+noise →
-  simulated secure-agg → optional Procrustes backstop → deterministic outer step → hash commit →
-  `RoundClose`. Asserts the global hash advances and that two identical-seed runs produce identical
+  (a few synthetic silos, a tiny model, a tiny probe): `RoundOpen` → local steps → optional
+  participant-side Procrustes backstop and re-difference → clip+noise → optional quantization →
+  mask/secure-sum → deterministic outer step → hash commit → `RoundClose`. Asserts the global hash
+  advances, rejects any participant-specific alignment after the release boundary, and verifies that
+  two identical-seed runs produce identical
   `RunManifest` aggregation hashes (`INV-AGG-DETERMINISM`). Runs on CPU ([conventions §9](../spec/conventions.md#9-determinism-dtype-device)).
 - **Module-boundary import tests.** A test that imports each module in isolation and asserts the
   dependency DAG of §3 has no cycles (for example via an import-graph check), so the layering is
@@ -418,8 +439,8 @@ RISK: **SIGReg at video-WM scale** is demonstrated only to ViT-H on images; co-t
 at video scale is unproven and is precisely the regime that opens the gauge. Resolution plan: Stage A
 (v0.1) de-risks the objective + MPC eval centrally before any federation
 ([RFC-0008](RFC-0008-model-objective-numerics.md)); if it fails to converge at ViT-L scale, fall
-back to Fork A ([RFC-0002 §7](RFC-0002-gauge-and-aggregation.md)) and continue the sovereignty story
-without the end-to-end claim.
+back to Fork A ([RFC-0002 §7](RFC-0002-gauge-and-aggregation.md)) and narrow the
+study to predictor federation.
 
 RISK: **Anchor-strength instability.** `λ_anc` may have no setting that holds the frame without
 clamping quality at video scale. Resolution plan: the `λ_anc` sweep in Stage B
@@ -434,7 +455,7 @@ single $\lambda_{\text{anc}}$ suffices.
 - [RFC-0003 — Federated Training Protocol](RFC-0003-federated-protocol.md): round structure, DP, secure-agg pointer, message table, reference parameters.
 - [RFC-0004 — Data, Sovereignty & Provenance](RFC-0004-data-provenance.md): data layer, public probe, residency.
 - [RFC-0005 — Evaluation & Benchmark Protocol](RFC-0005-evaluation.md): claims, frame-drift diagnostic, ablation ladder, baselines, success criteria.
-- [RFC-0006 — Verifiable Contribution](RFC-0006-verifiable-contribution.md): Phase-2 layer; the proof-ready requirements Phase 1 must satisfy.
+- [RFC-0006 — Verifiable Contribution](RFC-0006-verifiable-contribution.md): deferred Phase-2 layer and the current interfaces it may consume.
 - [RFC-0007 — WMCP Latent Contract & Embodiment Adapters](RFC-0007-wmcp-latent-contract.md): the shared latent interface.
 - [RFC-0008 — Model, Objective & Numerical Contracts](RFC-0008-model-objective-numerics.md): encoder/predictor/objective and numerics.
 - [RFC-0013 — Coordinator & Participant Runtime](RFC-0013-coordinator-runtime.md): the round state machine and fault tolerance.

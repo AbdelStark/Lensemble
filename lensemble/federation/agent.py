@@ -306,11 +306,29 @@ class Phase3ParticipantAgent:
 
         participant = self._participant()
         probe = participant._pinned_probe()
-        if probe.content_hash.hex() != self.manifest.public_probe.content_hash:
+        from lensemble.data.probe import probe_source_hash, verify_probe_content
+
+        # Always verify the artifact's own full target-binding hash. The manifest may additionally carry
+        # the narrower pre-target source fingerprint, but its explicit contract must never be interpreted
+        # as the full PublicProbe commitment.
+        verified_full_hash = verify_probe_content(probe).hex()
+        probe_agreement = self.manifest.public_probe
+        if probe_agreement.hash_contract == "public-probe-v2":
+            agreement_hash = verified_full_hash
+        elif probe_agreement.hash_contract == "probe-source-v1":
+            agreement_hash = probe_source_hash(probe.points, probe.landmark_idx).hex()
+        else:
+            raise _fail(
+                "public_probe.hash_contract",
+                probe_agreement.hash_contract,
+                "public-probe-v2 or probe-source-v1",
+                "regenerate the legacy unscoped manifest with an explicit probe hash contract",
+            )
+        if agreement_hash != probe_agreement.content_hash:
             raise _fail(
                 "data.probe_path.content_hash",
-                probe.content_hash.hex(),
-                f"== manifest public_probe.content_hash ({self.manifest.public_probe.content_hash})",
+                agreement_hash,
+                f"== manifest public_probe.content_hash ({probe_agreement.content_hash})",
                 "pin the consortium public probe before joining",
             )
         if probe.probe_version != self.manifest.public_probe.version:

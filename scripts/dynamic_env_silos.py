@@ -91,6 +91,7 @@ def build_dynamic_env_manifest(
     probe = Phase3PublicProbe(
         probe_id="dynamic-env-public-probe-smoke",
         version=1,
+        hash_contract="placeholder-unbound",
         content_hash=_PROBE_HASH,
     )
     participants = []

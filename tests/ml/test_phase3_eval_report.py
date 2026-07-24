@@ -62,6 +62,9 @@ def _control_input(
 
 def _completed_controls() -> tuple[Phase3CompletedControlInput, ...]:
     return (
+        _control_input(
+            "anchored-federation", frame_drift_deg=48.9695, effective_rank=2.23
+        ),
         _control_input("naive-fedavg", frame_drift_deg=180.0, effective_rank=1.08),
         _control_input(
             "fork-a-frozen-encoder", frame_drift_deg=0.0, effective_rank=2.39
@@ -75,18 +78,33 @@ def test_phase3_eval_report_links_metrics_to_hashes_and_blockers() -> None:
 
     assert report.schema_version == PHASE3_EVAL_REPORT_SCHEMA_VERSION
     assert parse_phase3_eval_report(report.model_dump(mode="json")) == report
-    assert {row.control_role for row in report.metric_rows} == {"anchored-federation"}
+    assert {row.control_role for row in report.metric_rows} == {
+        "consortium-runtime-smoke"
+    }
     assert {
         "closed_round_completion_rate",
         "participant_submission_rate",
         "secure_sum_round_rate",
         "dp_accounted_round_rate",
     } == {row.metric for row in report.metric_rows}
-    assert all(row.value == 1.0 for row in report.metric_rows)
+    values = {row.metric: row.value for row in report.metric_rows}
+    assert values["secure_sum_round_rate"] == 0.0
+    assert values["closed_round_completion_rate"] == 1.0
+    assert values["participant_submission_rate"] == 1.0
+    assert values["dp_accounted_round_rate"] == 1.0
+    secure_row = next(
+        row for row in report.metric_rows if row.metric == "secure_sum_round_rate"
+    )
+    assert "optimizer consumed" in secure_row.notes
     assert all(row.task_env_id != "synthetic://toy" for row in report.metric_rows)
 
     blocked = {row.control_role for row in report.blocked_controls}
-    assert {"local-only", "naive-fedavg", "fork-a-frozen-encoder"} == blocked
+    assert {
+        "anchored-federation",
+        "local-only",
+        "naive-fedavg",
+        "fork-a-frozen-encoder",
+    } == blocked
     for row in report.metric_rows:
         assert len(row.checkpoint_hash) == 64
         assert len(row.config_hash) == 64
@@ -100,21 +118,22 @@ def test_phase3_eval_report_flips_controls_to_completed() -> None:
     )
 
     assert parse_phase3_eval_report(report.model_dump(mode="json")) == report
-    # All three previously-blocked controls are now completed; none remain blocked.
+    # All four matched controls are completed; the lifecycle smoke remains separate.
     assert report.blocked_controls == ()
     completed_roles = {row.control_role for row in report.metric_rows}
     assert completed_roles == {
+        "consortium-runtime-smoke",
         "anchored-federation",
         "naive-fedavg",
         "fork-a-frozen-encoder",
         "local-only",
     }
-    # 4 lifecycle rows for anchored + 2 gauge rows for each of 3 controls.
-    assert len(report.metric_rows) == 10
+    # 4 runtime rows plus 2 gauge rows for each of 4 controls.
+    assert len(report.metric_rows) == 12
 
     by_role: dict[str, dict[str, float]] = {}
     for row in report.metric_rows:
-        if row.control_role == "anchored-federation":
+        if row.control_role == "consortium-runtime-smoke":
             continue
         by_role.setdefault(row.control_role, {})[row.metric] = row.value
         assert len(row.checkpoint_hash) == 64
@@ -126,22 +145,32 @@ def test_phase3_eval_report_flips_controls_to_completed() -> None:
     assert by_role["naive-fedavg"]["latent_frame_drift_deg"] == 180.0
     assert by_role["fork-a-frozen-encoder"]["latent_frame_drift_deg"] == 0.0
     assert by_role["local-only"]["effective_rank"] == 120.32
-    # Each control contributes a source-artifact reference (1 smoke + 3 controls).
-    assert len(report.source_artifacts) == 4
+    # Each control contributes a source-artifact reference (1 smoke + 4 controls).
+    assert len(report.source_artifacts) == 5
 
 
-def test_phase3_eval_report_rejects_anchored_as_completed_control() -> None:
-    with pytest.raises(ConfigError):
-        build_phase3_eval_report(
-            _LONG_RUN_REPORT,
-            completed_controls=(
-                _control_input(
-                    "anchored-federation",
-                    frame_drift_deg=48.97,
-                    effective_rank=2.23,
-                ),
+def test_phase3_eval_report_requires_anchored_control_to_be_explicitly_bound() -> None:
+    report = build_phase3_eval_report(
+        _LONG_RUN_REPORT,
+        completed_controls=(
+            _control_input(
+                "anchored-federation",
+                frame_drift_deg=48.97,
+                effective_rank=2.23,
             ),
-        )
+        ),
+    )
+
+    assert {
+        row.metric
+        for row in report.metric_rows
+        if row.control_role == "anchored-federation"
+    } == {"latent_frame_drift_deg", "effective_rank"}
+    assert {
+        row.control_role
+        for row in report.metric_rows
+        if row.metric == "closed_round_completion_rate"
+    } == {"consortium-runtime-smoke"}
 
 
 def test_phase3_eval_report_rejects_duplicate_completed_control() -> None:
@@ -164,7 +193,10 @@ def test_phase3_eval_report_rejects_missing_required_control() -> None:
 def test_phase3_eval_report_model_card_text_preserves_claim_boundary() -> None:
     report = build_phase3_eval_report(_LONG_RUN_REPORT)
 
-    assert "Public task-scale SO-100 downstream evaluation remains blocked" in (
+    assert "Closed-loop task-scale SO-100 evaluation remains unrun" in (
+        report.model_card_eval_text
+    )
+    assert "no numeric gauge comparison is inferred from the lifecycle smoke" in (
         report.model_card_eval_text
     )
     assert "must not be described as completed robotics performance" in (
@@ -226,17 +258,28 @@ def test_checked_in_phase3_eval_report_is_schema_valid() -> None:
     path = Path("docs/evidence/phase3_eval_report.json")
     report = parse_phase3_eval_report(json.loads(path.read_text()))
 
-    # 4 anchored lifecycle rows + 2 gauge rows for each of the 3 flipped controls.
-    assert len(report.metric_rows) == 10
-    # All three previously-blocked controls are now completed; nothing remains blocked.
+    # 4 lifecycle rows + 2 gauge rows for each of the 4 matched controls.
+    assert len(report.metric_rows) == 12
+    # All four matched controls are completed; nothing remains blocked.
     assert report.blocked_controls == ()
     completed_roles = {row.control_role for row in report.metric_rows}
-    assert {"local-only", "naive-fedavg", "fork-a-frozen-encoder"} <= completed_roles
+    assert {
+        "anchored-federation",
+        "local-only",
+        "naive-fedavg",
+        "fork-a-frozen-encoder",
+        "consortium-runtime-smoke",
+    } == completed_roles
+    secure_rows = [
+        row for row in report.metric_rows if row.metric == "secure_sum_round_rate"
+    ]
+    assert secure_rows
+    assert all(row.value == 0.0 for row in secure_rows)
 
     # Each completed control gauge row is bound to a published source artifact.
     source_hashes = {artifact.sha256 for artifact in report.source_artifacts}
     for row in report.metric_rows:
-        if row.control_role == "anchored-federation":
+        if row.control_role == "consortium-runtime-smoke":
             continue
         assert row.metric in {"latent_frame_drift_deg", "effective_rank"}
         assert len(row.checkpoint_hash) == 64
@@ -245,6 +288,10 @@ def test_checked_in_phase3_eval_report_is_schema_valid() -> None:
         assert row.source_report_sha256 in source_hashes
 
     # The gauge contrast is stated honestly as the round-0 measurement.
-    assert "round-0 48.97 deg vs naive-FedAvg 180 deg" in report.model_card_eval_text
-    assert "collapses over rounds" in report.model_card_eval_text
+    assert (
+        "anchored round-0 frame drift 48.9695 deg versus naive-FedAvg 180 deg"
+        in report.model_card_eval_text
+    )
+    assert "collapsed over rounds" in report.model_card_eval_text
+    assert report.evidence_status == "historical_pre_correctness_fix"
     assert "paper-scale LeWorldModel performance" in report.claim_boundary

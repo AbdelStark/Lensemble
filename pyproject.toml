@@ -3,22 +3,22 @@
 # dependencies (V-JEPA 2 weights, LeJEPA/LeWM, stable-worldmodel/stable-pretraining) are vendored/recorded
 # per run in the RunManifest (RFC-0016), not PyPI runtime deps. See docs/spec/09-release-and-versioning.md.
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools==81.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "lensemble"
-description = "Federated, end-to-end JEPA world models — trained across sovereign data, verifiable by construction."
+description = "Research stack for reproducible federated training and evaluation of action-conditioned JEPA world models."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
+license-files = ["LICENSE", "LICENSE-docs", "LICENSE-data"]
 authors = [{ name = "Abdelhamid Bakhta" }]
 dynamic = ["version"]
 classifiers = [
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -53,22 +53,24 @@ dev = [
     "pyright",
     "build",
 ]
+# Tools used only to build/check/upload immutable release artifacts. They are
+# resolved in uv.lock and installed from locked constraints by release.yml.
+release = ["build>=1.3,<2", "twine>=6,<7"]
 # Phase-2 verifiable layer (Stwo / Circle-STARK prover, out-of-tree, RFC-0006). Declared, stubbed.
 verify = []
 # Documentation site (mkdocs-material) + generated API docs (mkdocstrings) — `mkdocs build` (RFC-0009, #77).
 docs = ["mkdocs>=1.6", "mkdocs-material", "mkdocstrings[python]"]
 
 [project.urls]
-Homepage = "https://github.com/AbdelStark/Lensemble"
+Homepage = "https://abdelstark.github.io/Lensemble/"
+Documentation = "https://abdelstark.github.io/Lensemble/"
+Repository = "https://github.com/AbdelStark/Lensemble"
+Issues = "https://github.com/AbdelStark/Lensemble/issues"
+Changelog = "https://github.com/AbdelStark/Lensemble/blob/main/CHANGELOG.md"
 Specification = "https://github.com/AbdelStark/Lensemble/blob/main/SPEC.md"
 
 [project.scripts]
 lensemble = "lensemble.cli:main"
-
-[tool.setuptools]
-# The code/docs/data license split (09 §7): every asset class ships its own license file, and all three
-# are bundled into the sdist/wheel metadata. LICENSE (Apache-2.0) is the code license named in [project].
-license-files = ["LICENSE", "LICENSE-docs", "LICENSE-data"]
 
 [tool.setuptools.dynamic]
 version = { attr = "lensemble.__version__" }

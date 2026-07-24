@@ -38,10 +38,11 @@ warm-started from V-JEPA 2 and co-trained under the objective (Fork B). It emits
 `LatentState` ([RFC-0001 §2](../rfcs/RFC-0001-architecture.md)).
 
 **Fork A / Fork B.** The two federation regimes. **Fork B** (the target) co-trains encoder *and*
-predictor end-to-end; this is the hard regime that opens the latent gauge and is the lead
-contribution. **Fork A** (the documented safe-degrade fallback) freezes the warm-started shared
+predictor end-to-end; this is the hard regime that opens the latent gauge and
+defines the full-model research path. **Fork A** (the documented safe-degrade fallback) freezes the warm-started shared
 encoder and federates only the predictor; the frozen encoder is itself a shared frame, so the gauge
-problem dissolves and the anchoring layers become unnecessary, at the cost of the end-to-end novelty
+problem dissolves and the anchoring layers become unnecessary, while the scope
+narrows to predictor federation
 ([RFC-0001 §7](../rfcs/RFC-0001-architecture.md);
 [RFC-0002 Fork A fallback](../rfcs/RFC-0002-gauge-and-aggregation.md#fork-a-fallback)).
 
@@ -160,18 +161,20 @@ re-anchoring event; the probe hash equals the hash committed in `RoundOpen` (`IN
 **Procrustes alignment.** The closed-form computation of the optimal orthogonal rotation $Q^\star$
 aligning one set of probe embeddings to a reference: from the SVD $E_{\text{ref}}^\top f_\theta(\mathcal{P})
 = U\Sigma V^\top$, the solution is $Q^\star = V U^\top$. It appears in three places — inside Variant B's
-anchor loss, as the Layer-3 aggregation backstop (re-aligning each participant before averaging when
-drift exceeds threshold), and as the per-pair frame-drift diagnostic. Because it is a deterministic
-function of public-probe data and committed weights, it is publicly recomputable and needs no proof. A
+anchor loss, as the Layer-3 backstop (re-aligning each participant's raw local full weights before
+release when drift exceeds threshold), and as the per-pair frame-drift diagnostic. Alignment of a
+committed model on the public probe is publicly recomputable. Applying a participant-specific
+pre-release backstop is not: it needs that participant's raw local weights and is assumed unless
+attested/proven or performed inside a trusted/MPC boundary (`INV-ALIGN-BEFORE-RELEASE`). A
 near-degenerate or ill-conditioned SVD raises `DegenerateProcrustes`; the public API exposes it as
 `procrustes_align(source, target) -> (Q*, residual)`
 ([RFC-0002 §5](../rfcs/RFC-0002-gauge-and-aggregation.md#5-layer-3--procrustes-re-alignment-at-aggregation-backstop)).
 
-**Frame drift.** The empirical quantity at the center of the paper: the inter-participant Procrustes
+**Frame drift.** An inter-participant Procrustes
 residual (or mean rotation angle) on the public probe over training, computed per participant pair and
-also against the global model. Naive `FedAvg` curves diverge as frames rotate apart; the anchored
-configuration holds them flat. This is, to our knowledge, the first measurement of latent frame-drift
-under federated self-supervision. When it exceeds the configured threshold the Layer-3 backstop fires;
+also against the global model. The gauge-control hypothesis predicts divergence
+under naive `FedAvg` and lower drift under an effective anchored configuration;
+the metric does not assume that outcome. When it exceeds the configured threshold the Layer-3 backstop fires;
 beyond a hard limit the system raises `FrameDriftExceeded` ([RFC-0002 §9](../rfcs/RFC-0002-gauge-and-aggregation.md#9-the-frame-drift-diagnostic-the-headline-measurement);
 [RFC-0005 §2](../rfcs/RFC-0005-evaluation.md#2-headline-diagnostic--latent-frame-drift); emission contract
 in [RFC-0015 design](../rfcs/RFC-0015-observability-diagnostics.md)).
@@ -181,13 +184,14 @@ in [RFC-0015 design](../rfcs/RFC-0015-observability-diagnostics.md)).
 **DiLoCo.** The low-communication outer/inner optimizer Lensemble builds on (Douillard et al.;
 OpenDiLoCo / INTELLECT, Prime Intellect). Each participant runs $H$ local inner steps, then a single
 outer step synchronizes the resulting pseudo-gradients; communication happens only every $H$ steps
-rather than every step. This is the engineering substrate for sovereignty, not the contribution
+rather than every step. This is the standard low-communication engineering
+substrate rather than a project-specific mechanism
 ([RFC-0001 §4](../rfcs/RFC-0001-architecture.md);
 [RFC-0003 §2](../rfcs/RFC-0003-federated-protocol.md#2-round-structure-diloco-outer-loop)).
 
 **Inner / outer loop.** The two-level training topology. The **inner loop** is intra-participant
 optimization (standard FSDP / tensor / context parallelism with AdamW) over local data only — the only
-place the large-model-parallelism playbook applies, and not the contribution. The **outer loop** is the
+place the large-model-parallelism playbook applies. The **outer loop** is the
 inter-participant DiLoCo step that aggregates pseudo-gradients across the federation
 ([RFC-0001 §4](../rfcs/RFC-0001-architecture.md);
 [RFC-0003 §2](../rfcs/RFC-0003-federated-protocol.md#2-round-structure-diloco-outer-loop)).
@@ -200,15 +204,18 @@ characterizing drift and tuned against the gauge ([RFC-0003 §2](../rfcs/RFC-000
 **Pseudo-gradient ($\Delta_c$).** Participant $c$'s contribution for a round: the difference between its
 post-inner-loop parameters and the round's global parameters,
 $\Delta_c = (\theta_c^{\text{local}}, \phi_c^{\text{local}}) - (\theta_t, \phi_t)$. DiLoCo treats the
-whole $H$-step local update as a single "gradient." Only $\Delta_c$ (clipped, noised, and masked)
-crosses the boundary; it carries its own L2 norm and is bound to exactly one dataset Merkle root
+whole $H$-step local update as a single "gradient." Only released $\Delta_c$ crosses the boundary; it
+carries its own L2 norm and is bound to exactly one dataset Merkle root. The current coordinator sees
+the released value individually; effective noising and masking are target protections
 (`INV-COMMIT-BINDING`) ([RFC-0003 §3](../rfcs/RFC-0003-federated-protocol.md#3-the-pseudogradient-contract);
 type in [03 — Data Model](03-data-model.md)).
 
 **Outer Nesterov step.** The outer-loop parameter update: Nesterov momentum applied to the averaged
-pseudo-gradient, $(\theta_{t+1}, \phi_{t+1}) = (\theta_t, \phi_t) - \eta_{\text{out}}\,
-\mathrm{Nesterov}(\tfrac1C \sum_c \Delta_c)$. This step is on the aggregation path and MUST be a pure,
-bitwise-reproducible function of the committed deltas, round seed, and prior global parameters
+pseudo-gradient, $(\theta_{t+1}, \phi_{t+1}) = (\theta_t, \phi_t) + \eta_{\text{out}}\,
+\mathrm{Nesterov}(\tfrac1C \sum_c \Delta_c)$. Lensemble's
+$\Delta_c=\text{local}-\text{global}$ is a displacement; equivalently, DiLoCo's outer gradient is
+$G_c=\text{global}-\text{local}=-\Delta_c$ and is subtracted. This step is on the aggregation path and
+MUST be a pure, bitwise-reproducible function of the committed deltas, round seed, and prior global parameters
 (`INV-AGG-DETERMINISM`); a non-deterministic reduction raises `NonDeterministicAggregation`
 ([RFC-0003 §2](../rfcs/RFC-0003-federated-protocol.md#2-round-structure-diloco-outer-loop)).
 
@@ -220,15 +227,17 @@ runtime in [RFC-0013 design](../rfcs/RFC-0013-coordinator-runtime.md)).
 
 **Participant.** The role that holds sovereign data, runs the local inner loop with intra-participant
 parallelism, and emits pseudo-gradients. Raw data never leaves a participant boundary
-(`INV-RESIDENCY`); only the privatized, masked $\Delta_c$ and the dataset commitment cross
+(`INV-RESIDENCY`); only the released $\Delta_c$ and the dataset commitment cross. The current
+coordinator sees that $\Delta_c$ individually; privatization and masking are target protections
 ([RFC-0003 §1](../rfcs/RFC-0003-federated-protocol.md#1-roles);
 runtime in [RFC-0013 design](../rfcs/RFC-0013-coordinator-runtime.md)).
 
 **Round.** One outer iteration of the protocol, progressing through the state machine
 `OPEN -> COLLECTING -> AGGREGATING -> ALIGNING -> COMMITTING -> CLOSED` (with an `ABORTED` path):
-broadcast of global parameters / sketch seed / probe hash, local optimization, privatized
-pseudo-gradient release, secure aggregation, optional Procrustes backstop, the outer Nesterov step, and
-the hash-commit of the new global model. Bounded by the `RoundOpen` and `RoundClose` messages; round
+broadcast of global parameters / sketch seed / probe hash, local optimization, pseudo-gradient release,
+participant-side optional Procrustes backstop before release, aggregation, the outer Nesterov step, and the hash-commit of the new
+global model. The target path makes that release private and securely aggregated; the current path does
+not. Bounded by the `RoundOpen` and `RoundClose` messages; round
 faults raise `RoundError` / `FaultToleranceExceeded`
 ([RFC-0003 §2, §7](../rfcs/RFC-0003-federated-protocol.md#2-round-structure-diloco-outer-loop);
 state machine in [RFC-0013 design](../rfcs/RFC-0013-coordinator-runtime.md)).
@@ -241,21 +250,27 @@ reference design is pairwise-mask secure aggregation (Bonawitz-style) with thres
 dropout robustness; a TEE-based aggregator is a supported alternative. Falling below the dropout
 threshold raises `SecureAggregationError`; masking must not introduce nondeterminism in the revealed sum
 ([RFC-0003 §5](../rfcs/RFC-0003-federated-protocol.md#5-secure-aggregation-requirement);
-[RFC-0011](../rfcs/RFC-0011-secure-aggregation.md)).
+[RFC-0011](../rfcs/RFC-0011-secure-aggregation.md)). This defines the target protocol. The current
+optimizer receives individual plaintext deltas; simulated/TEE sums are post-commit equivalence checks
+and masking records fallback, so none provides live coordinator confidentiality.
 
-**Differential privacy (DP).** The per-participant guarantee on a released pseudo-gradient: clip
-$\Delta_c$ to a fixed norm, then add calibrated Gaussian noise, so a participant's contribution to a
+**Differential privacy (DP).** The per-participant guarantee on a released pseudo-gradient: after any
+required gauge alignment/re-difference, clip $\Delta'_c$ to a fixed norm, then add calibrated Gaussian
+noise, so a participant's contribution to a
 round is privacy-bounded. The unit of privacy is a participant's per-round contribution (update-level
 DP), not per-example DP-SGD inside the inner loop. The mechanism interacts with SIGReg variance and the
 anchor term; joint calibration is a Stage-B experiment, not a default
 ([RFC-0003 §4](../rfcs/RFC-0003-federated-protocol.md#4-differential-privacy-protocol-level);
-[RFC-0012](../rfcs/RFC-0012-differential-privacy.md)).
+[RFC-0012](../rfcs/RFC-0012-differential-privacy.md)). The current deterministic replay seed is
+reconstructible and therefore not claim-grade DP (`effective_dp=false`).
 
 **$(\varepsilon, \delta)$.** The differential-privacy budget: $\varepsilon$ bounds the privacy loss and
 $\delta$ the probability of exceeding it, accumulated over the planned number of rounds by the
 accountant. When the budget is spent, training stops and the system raises `PrivacyBudgetExceeded`
 ([RFC-0003 §4](../rfcs/RFC-0003-federated-protocol.md#4-differential-privacy-protocol-level);
-accounting in [RFC-0012 design](../rfcs/RFC-0012-differential-privacy.md)).
+accounting in [RFC-0012 design](../rfcs/RFC-0012-differential-privacy.md)). This is the target
+persistent-accountant behavior. Current reports independently account one post-commit round and do not
+compose or enforce a run budget.
 
 **Clip norm ($C_{\text{clip}}$).** The fixed L2 bound to which each pseudo-gradient is clipped before
 noising: $\Delta_c \leftarrow \Delta_c \cdot \min(1, C_{\text{clip}}/\lVert\Delta_c\rVert)$. After
@@ -271,7 +286,9 @@ $\lambda_{\text{sig}}$, $\lambda_{\text{anc}}$, and $C_{\text{clip}}$ in Stage B
 
 **Honest-but-curious.** The Phase-1 trust assumption on the coordinator and aggregator: they follow the
 protocol faithfully but may try to infer information from what they legitimately observe. Secure
-aggregation and DP protect raw data under this model. Phase 2 strengthens the model to detect a
+aggregation and effective DP are the target protections for released updates under this model; raw data
+residency is enforced separately. The current plaintext/replay path provides neither update
+confidentiality nor a DP guarantee. Phase 2 strengthens the model to detect a
 *malicious* coordinator and misreporting participants
 ([RFC-0006 §1](../rfcs/RFC-0006-verifiable-contribution.md#1-trust-model);
 threat model in [06 — Security](06-security.md)).

@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
-"""Generate or validate the Phase 3 downstream latent-MPC eval report (#245).
+"""Generate or validate the historical Phase 3 downstream latent-MPC report.
 
 The only prior downstream number was a ``synthetic://toy``, 1-sample,
 ``success_rate=0.5`` placeholder. This generator produces an honest, bounded
 Phase 3 downstream eval report that:
 
-1. Goes beyond ``synthetic://toy`` by binding the REAL held-out SO-100 latent
-   metrics (the final-round ``effective_rank``/``val_pred`` computed by the
-   headline consortium run on the disjoint held-out split
-   ``phase3-so100-silo4.h5``, #242).
+1. Preserves the non-synthetic held-out SO-100 latent metrics recorded by the
+   archived consortium run on ``phase3-so100-silo4.h5`` (#242).
 2. Records a NON-TOY latent-MPC planner budget (icem, horizon 16, 512
    planning samples, 8 iterations, 20 episodes, action_dim 6) — the budget a
    closed-loop run WOULD use — without executing a planner.
 3. Documents the two specific blockers on a real closed-loop task-success
    number: the unvendored ``stable-worldmodel`` suite (#96) and the collapsing
    federated checkpoints (#244). It does NOT fabricate a task-success pass.
+
+The values predate the outer-update direction and public-probe-v2
+target-binding fixes. They are audit history, not corrected-runtime evidence;
+issue #335 tracks the replacement run.
 """
 
 from __future__ import annotations
@@ -44,12 +46,14 @@ _HELD_OUT_WINDOWS = 1216
 _WINDOW_STEPS = 4
 
 _CLAIM_BOUNDARY = (
-    "Corrected held-out SO-100 latent evidence only: final-round val_pred/effective_rank "
-    "were measured on the held-out split, but effective_rank is scale-invariant "
-    "and blind to held-out magnitude collapse (~7.5e-6 latent variance; "
-    "thoughts/collapse_fix_probe.py). The central ceiling probe "
-    "(thoughts/central_ceiling_probe.py) shows the checkpoint does not clear a "
-    "downstream usefulness ceiling. Closed-loop physical task-success is "
+    "Historical held-out SO-100 latent evidence only: these final-round "
+    "val_pred/effective_rank values predate the outer-update direction correction "
+    "and public-probe-v2 target-binding contract. They are retained for audit "
+    "history and do not validate the corrected runtime; GitHub issue #335 tracks "
+    "the replacement run. effective_rank is scale-invariant and blind to the "
+    "historical magnitude collapse diagnostic (~7.5e-6 latent variance). The "
+    "associated central ceiling diagnostic did not establish downstream usefulness. "
+    "Closed-loop physical task-success is "
     "DEFERRED, not claimed: it requires the unvendored stable-worldmodel suite "
     "(#96), and it requires a genuinely useful non-collapsed checkpoint (#244). "
     "This report is a correction of the prior SO-100 overclaim, not a success "
@@ -97,11 +101,10 @@ def _blockers() -> tuple[Phase3TaskSuccessBlocker, ...]:
                 "Latent-MPC planning success would be uninformative on the published "
                 "federated checkpoints because they do not show downstream usefulness "
                 "(#244): the held-out representation has magnitude collapse "
-                "(~7.5e-6 latent variance; thoughts/collapse_fix_probe.py), "
-                "effective_rank is scale-invariant and blind to that collapse, and the "
-                "central ceiling probe (thoughts/central_ceiling_probe.py) shows this "
-                "checkpoint would not reflect a usable world model despite the recorded "
-                "val_pred/effective_rank scalars."
+                "(~7.5e-6 latent variance), effective_rank is scale-invariant and blind "
+                "to that collapse, and the associated central ceiling diagnostic did "
+                "not establish that this checkpoint is a usable world model despite "
+                "the recorded val_pred/effective_rank scalars."
             ),
         ),
     )
@@ -114,8 +117,8 @@ def _args() -> argparse.Namespace:
         type=Path,
         default=Path("docs/evidence/phase3_consortium_run_report.json"),
         help=(
-            "Headline Phase 3 consortium run report whose final round carries the "
-            "real held-out SO-100 latent metrics (effective_rank / val_pred)."
+            "Archived Phase 3 consortium report whose final round carries the "
+            "legacy held-out SO-100 metrics (effective_rank / val_pred)."
         ),
     )
     parser.add_argument(
@@ -169,7 +172,8 @@ def main() -> None:
         f"wrote {path}: held_out effective_rank="
         f"{report.held_out_latent_metrics.effective_rank}, "
         f"val_pred={report.held_out_latent_metrics.val_pred}, "
-        f"task_success={report.task_success.status}"
+        f"task_success={report.task_success.status}, "
+        f"evidence_status={report.evidence_status}"
     )
 
 

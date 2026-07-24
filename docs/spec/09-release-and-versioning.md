@@ -27,14 +27,17 @@ public-API contract.
 | MINOR | `Y` | Backward-compatible feature addition; pre-1.0 a minor tracks a milestone. |
 | PATCH | `Z` | Backward-compatible bug fix; no public-API change. |
 
-Pre-1.0 minor-tracks-milestone schedule (canonical, from the [conventions §12](conventions.md#12-milestones-and-stages) milestone table):
+Pre-1.0 target milestone schedule (from the
+[conventions §12](conventions.md#12-milestones-and-stages) milestone table).
+These rows describe intended release content, not achieved empirical results or
+current privacy guarantees:
 
 | Version | Milestone | Stage | Released content |
 |---|---|---|---|
 | `0.1.z` | v0.1 | A | Single-site warm-started end-to-end SIGReg + AC predictor; latent-MPC eval; full foundational scaffolding (package skeleton, config system, data layer, WMCP contract, model + objective, eval harness, observability, artifact format, error taxonomy, CI, packaging). |
-| `0.2.z` | v0.2 | B | Simulated federation on one cluster: DiLoCo outer loop, frame anchor (Layers 1–4), Procrustes backstop, simulated secure aggregation + DP, the frame-drift diagnostic, the ablation ladder, non-IID and scale sweeps. |
+| `0.2.z` | v0.2 | B | Simulated federation on one cluster: DiLoCo outer loop, frame anchor (Layers 1–4), Procrustes backstop, aggregation/DP mechanism plumbing with explicit effectiveness status, the frame-drift diagnostic, the ablation ladder, non-IID and scale sweeps. |
 | `0.3.z` | v0.3 | C | Two real sovereign nodes over a network boundary: real secure aggregation + DP, residency enforcement, fault tolerance / elasticity, contribution ledger. |
-| `1.0.z` | v1.0 | — | Hardening: frozen public API, complete docs + reproducibility package, release automation, Fork A fallback supported and tested, proof-ready guarantees verified end-to-end (RFC-0006 §3). |
+| `1.0.z` | v1.0 | — | Hardening: frozen public API, complete docs + reproducibility package, release automation, Fork A fallback supported and tested, and the deterministic/provenance disciplines in RFC-0006 §3 verified end-to-end. |
 
 Pre-1.0 (`0.y.z`) semantics: under SemVer, `0.y` makes no compatibility promise on `y` bumps. Lensemble
 narrows this with the explicit policy below — a `0.y` minor MAY change the public surface, but only with

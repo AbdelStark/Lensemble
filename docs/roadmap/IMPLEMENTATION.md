@@ -15,19 +15,37 @@ The scaled empirical evidence stream closed in
 [#200](https://github.com/AbdelStark/Lensemble/issues/200) and
 [PHASE2.md](PHASE2.md). It covers GPU-backed HF Jobs, larger participant silos,
 downstream eval, baselines/ablations, performance curves, and the model-card
-evidence bundle.
+evidence bundle. Those runs predate the outer-update direction correction and
+are historical execution/artifact evidence, not validation of the corrected
+runtime. [Issue #335](https://github.com/AbdelStark/Lensemble/issues/335)
+tracks the clean replacement run.
 
-The final operational consortium-training stream is
+The historical operational consortium-training evidence stream is
 [#220](https://github.com/AbdelStark/Lensemble/issues/220) and
 [PHASE3.md](PHASE3.md). It covers governed multi-party training with separate
-participant agents, a networked coordinator, secure aggregation and DP runtime
-controls, downstream evaluation, lifecycle reporting, and a final evidence
+participant agents, a coordinator service, secure-sum and DP reporting
+cross-checks, downstream evaluation, lifecycle reporting, and a final evidence
 bundle. It explicitly excludes the provenance ledger and RFC-0006
-cryptographic-proof implementation.
+cryptographic-proof implementation. Closing that evidence epic did not complete
+the end-to-end privacy contracts.
+
+### Privacy integration status (live checkout, 2026-07-24)
+
+| Surface | Tested/live component | End-to-end blocker |
+|---|---|---|
+| Participant DP transform | `Participant.local_round()` clips and adds Gaussian noise before constructing the released update; mechanism tests cover clipping and noise scale | Noise is derived from the shared, manifest-recorded root seed plus round and participant id. The coordinator can reconstruct and subtract it. Claim-grade mode needs participant-secret CSPRNG entropy and must keep deterministic replay explicitly non-private. |
+| DP accounting | RDP/PRV accountants are stateful primitives with direct tests | The Phase 3 report constructs a fresh accountant after each commit, accounts one step (`rounds_accounted=1`), and discards it. No persistent pre-release check or cumulative hard stop is wired. |
+| Secure aggregation | Pairwise-mask/dropout primitives, fixed-point sum harnesses, and the software TEE path have direct tests | The coordinator accepts unmasked per-participant deltas and commits from them before the service computes a secure-sum equivalence report. The reported sum is not optimizer input; masking selection remains an explicit fallback. |
+| Historical Phase 3 privacy rows | Ten `secure_sum` rows, ten DP-accounted rows, and per-round epsilon near `5.30` were recorded by the evidence run | Read them as post-commit secure-sum cross-checks and independent one-round accountant snapshots, not as coordinator confidentiality, a composed ten-round epsilon, or run-budget enforcement. |
+
+These blockers remain implementation work even though the historical evidence
+epic is closed. The accepted RFCs preserve the target protocol; they do not
+describe the current service as satisfying it.
 
 > **The `Status` column below is the 2026-06-02 generation snapshot, not a live field.**
-> The evidence-track epics above (#190, #200, #220) closed the work across v0.1 through
-> v1.0; authoritative per-issue state lives on the GitHub tracker, not in this column.
+> The evidence-track epics above (#190, #200, #220) closed their historical evidence streams; that does
+> not close the privacy integration blockers listed above. Authoritative per-issue state lives on the
+> GitHub tracker, not in this column.
 
 ## Milestone: v0.1 (Stage A — single-site upper bound + scaffolding)
 

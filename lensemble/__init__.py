@@ -1,9 +1,9 @@
-"""Lensemble: federated, end-to-end JEPA world models.
+"""Lensemble: research toolkit for federated JEPA-style world-model experiments.
 
 Entry point for the public Python surface. See ``SPEC.md`` and
 ``docs/rfcs/RFC-0001-architecture.md`` for the architecture, and
-``docs/spec/02-public-api.md`` / ``docs/spec/conventions.md`` (5) for the frozen
-public surface re-exported here.
+``docs/spec/02-public-api.md`` for the current pre-1.0 convenience surface
+re-exported here.
 
 The public names are re-exported **lazily** (PEP 562 ``__getattr__``) so that
 ``import lensemble`` does not pull heavy optional dependencies (``torch``, ``lance``)
@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 __version__ = "0.1.0"
 
-# Public name -> owning submodule (conventions 5 / 02-public-api 1). Frozen at 1.0.
+# Public name -> owning submodule (conventions 5 / 02-public-api 1). Current pre-1.0 surface.
 _EXPORTS: dict[str, str] = {
     "LensembleConfig": "lensemble.config",
     "RunManifest": "lensemble.config",

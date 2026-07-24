@@ -1,19 +1,22 @@
-"""Phase 3 downstream latent-MPC eval report (GitHub issue #245).
+"""Historical Phase 3 downstream latent-MPC eval report (GitHub issue #245).
 
 The only prior downstream number was a ``synthetic://toy``, single-sample,
 ``success_rate=0.5`` placeholder. This module produces an honest, bounded Phase
 3 downstream eval report that:
 
-1. Goes beyond ``synthetic://toy`` by citing the REAL held-out SO-100 latent
-   metrics (final-round ``effective_rank`` / ``val_pred``) computed by the
-   headline consortium run on the disjoint held-out split
-   ``phase3-so100-silo4.h5`` (#242).
+1. Preserves the non-synthetic held-out SO-100 latent metrics (final-round
+   ``effective_rank`` / ``val_pred``) recorded by the archived consortium run
+   on the disjoint held-out split ``phase3-so100-silo4.h5`` (#242).
 2. Records a NON-TOY latent-MPC planner budget — the budget a closed-loop run
    WOULD use — without executing a planner.
-3. Honestly documents the two specific blockers that make a real closed-loop
-   task-success number infeasible right now: the unvendored
+3. Documents the two specific blockers that prevented a real closed-loop
+   task-success number: the unvendored
    ``stable-worldmodel`` suite (#96) and the collapsing federated checkpoints
    (#244). It does NOT fabricate a task-success pass.
+
+The values predate the outer-update direction correction and the
+``public-probe-v2`` target-binding contract. They are historical audit evidence,
+not validation of the corrected runtime; issue #335 tracks the replacement run.
 
 The report mirrors :class:`lensemble.eval.phase2_downstream.Phase2DownstreamEvalReport`
 (checkpoint ref + planner budget + claim boundary) but is residency-safe: it
@@ -33,7 +36,14 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from lensemble.errors import ConfigError, LensembleErrorCode, SchemaVersionMismatch
 
-PHASE3_DOWNSTREAM_REPORT_SCHEMA_VERSION = 1
+PHASE3_DOWNSTREAM_REPORT_SCHEMA_VERSION = 2
+PHASE3_DOWNSTREAM_HISTORICAL_EVIDENCE_STATUS = "historical_pre_correctness_fix"
+PHASE3_DOWNSTREAM_HISTORICAL_SUPERSEDED_REASON = (
+    "These SO-100 downstream values predate the correction of the outer-update "
+    "direction and the public-probe-v2 target-binding contract. They are retained "
+    "for audit history only and do not validate the corrected runtime; GitHub "
+    "issue #335 tracks the replacement run."
+)
 
 # The synthetic placeholder values the real held-out latent metrics must NOT be.
 _SYNTHETIC_TOY_ENV_ID = "synthetic://toy"
@@ -57,12 +67,12 @@ class Phase3DownstreamCheckpointRef(BaseModel):
 
 
 class Phase3HeldOutLatentMetrics(BaseModel):
-    """Real held-out SO-100 latent metrics measured on the disjoint eval split.
+    """Archived SO-100 latent metrics recorded on the disjoint eval split.
 
     These are NOT synthetic://toy placeholders: ``effective_rank`` and
-    ``val_pred`` are the FINAL-round values computed by the headline consortium
-    run on the held-out SO-100 split ``phase3-so100-silo4.h5`` (#242), the split
-    disjoint from every participant's training silo.
+    ``val_pred`` are the final-round values from the legacy consortium run on
+    ``phase3-so100-silo4.h5`` (#242), disjoint from every participant training
+    silo. The run predates the v2 target-binding contract.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -198,6 +208,8 @@ class Phase3DownstreamEvalReport(BaseModel):
 
     schema_version: int
     generated_at: datetime
+    evidence_status: Literal["historical_pre_correctness_fix"]
+    superseded_reason: str = Field(min_length=1)
     checkpoint: Phase3DownstreamCheckpointRef
     task_env_id: str = Field(min_length=1)
     held_out_data_ref: str = Field(min_length=1)
@@ -216,6 +228,29 @@ class Phase3DownstreamEvalReport(BaseModel):
                 f"exceeds reader max {PHASE3_DOWNSTREAM_REPORT_SCHEMA_VERSION}",
                 code=LensembleErrorCode.SCHEMA_VERSION_MISMATCH,
                 remediation="read with a build supporting this phase3 downstream report schema",
+            )
+        if "#335" not in self.superseded_reason:
+            raise ConfigError(
+                "historical Phase 3 downstream evidence must cite replacement-run tracker #335",
+                code=LensembleErrorCode.CONFIG_INVALID,
+                remediation="state why the archived values do not validate the corrected runtime",
+            )
+        required_supersession_phrases = (
+            "outer-update direction",
+            "public-probe-v2 target-binding",
+            "do not validate the corrected runtime",
+        )
+        missing_supersession = [
+            phrase
+            for phrase in required_supersession_phrases
+            if phrase not in self.superseded_reason
+        ]
+        if missing_supersession:
+            raise ConfigError(
+                "historical Phase 3 downstream superseded_reason is incomplete: "
+                + ", ".join(missing_supersession),
+                code=LensembleErrorCode.CONFIG_INVALID,
+                remediation="bind both correctness fixes and the corrected-runtime non-claim",
             )
         if self.task_env_id == _SYNTHETIC_TOY_ENV_ID:
             raise ConfigError(
@@ -360,11 +395,11 @@ def build_phase3_downstream_eval_report(
     window_steps: int,
     generated_at: datetime | None = None,
 ) -> Phase3DownstreamEvalReport:
-    """Build the Phase 3 downstream eval report from the headline run report.
+    """Build the historical downstream report from the archived run report.
 
-    The held-out latent metrics are read from the FINAL closed round of the
-    headline consortium run report — the real held-out SO-100 latent signal,
-    not a synthetic placeholder.
+    The latent metrics are copied from the final closed round of the legacy
+    consortium report. They are non-synthetic archived values, not validation
+    of the corrected target-binding and outer-update contracts.
     """
 
     run_report = json.loads(
@@ -392,18 +427,20 @@ def build_phase3_downstream_eval_report(
         window_steps=window_steps,
         measured_on=held_out_data_ref,
         note=(
-            "Corrected SO-100 latent metrics: final-round effective_rank and "
-            "val_pred were computed on the disjoint held-out split "
-            "phase3-so100-silo4.h5 (#242), but effective_rank is "
-            "scale-invariant and blind to held-out magnitude collapse "
-            "(~7.5e-6 latent variance; thoughts/collapse_fix_probe.py). "
-            "The central ceiling probe (thoughts/central_ceiling_probe.py) "
-            "keeps this from being a downstream usefulness claim."
+            "Historical SO-100 latent metrics: the archived run records final-round "
+            "effective_rank and val_pred on the disjoint held-out split "
+            "phase3-so100-silo4.h5 (#242). The values predate the public-probe-v2 "
+            "target-binding contract and do not validate the corrected runtime. "
+            "effective_rank is scale-invariant and blind to the historical magnitude "
+            "collapse diagnostic (~7.5e-6 latent variance); the associated central "
+            "ceiling diagnostic did not establish downstream usefulness."
         ),
     )
     return Phase3DownstreamEvalReport(
         schema_version=PHASE3_DOWNSTREAM_REPORT_SCHEMA_VERSION,
         generated_at=generated_at or datetime.now(timezone.utc),
+        evidence_status=PHASE3_DOWNSTREAM_HISTORICAL_EVIDENCE_STATUS,
+        superseded_reason=PHASE3_DOWNSTREAM_HISTORICAL_SUPERSEDED_REASON,
         checkpoint=checkpoint,
         task_env_id=task_env_id,
         held_out_data_ref=held_out_data_ref,

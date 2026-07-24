@@ -46,6 +46,7 @@ from lensemble.errors import (
     CommitmentMismatch,
     LensembleErrorCode,
     ResidencyViolation,
+    RoundError,
     SchemaVersionMismatch,
 )
 from lensemble.federation import (
@@ -185,8 +186,17 @@ def test_parse_control_message_round_trips_each_kind() -> None:
     commit_msg = Commitment(
         participant_id="p0", round_index=0, dataset_root=_ROOT.hex()
     )
+    update_msg = Update(
+        participant_id="p0",
+        round_index=0,
+        dataset_root=_ROOT.hex(),
+        delta=(0.0,),
+        l2_norm=0.0,
+        clipped=False,
+        quantized=True,
+    )
     close_msg = RoundClose(round_index=0, global_model_hash="e" * 64)
-    for original in (open_msg, commit_msg, close_msg):
+    for original in (open_msg, commit_msg, update_msg, close_msg):
         parsed = parse_control_message(original.model_dump())
         assert parsed == original
         assert type(parsed) is type(original)
@@ -225,16 +235,52 @@ def test_malformed_update_extra_field_raises() -> None:
 
 def test_update_round_trips_through_pseudogradient() -> None:
     cfg = _cfg()
-    pg = _toy_update(cfg, round_index=0, seed=100)
+    pg = dataclasses.replace(
+        _toy_update(cfg, round_index=0, seed=100),
+        clipped=False,
+        quantized=True,
+    )
     update = from_pseudogradient(pg, participant_id="p0")
+    assert update.schema_version == CONTROL_MESSAGE_SCHEMA_VERSION == 2
     assert update.participant_id == "p0"
     assert update.round_index == 0
     assert update.dataset_root == _ROOT.hex()
-    # the masked Δ_c crosses as a JSON-native finite list of floats — never a tensor
+    assert update.clipped is False
+    assert update.quantized is True
+    # The released Δ_c crosses as JSON-native finite floats — never a tensor.
     assert isinstance(update.delta, tuple)
     assert all(isinstance(x, float) for x in update.delta)
+    parsed = parse_control_message(update.model_dump())
+    assert isinstance(parsed, Update)
+    assert parsed.clipped is pg.clipped
+    assert parsed.quantized is pg.quantized
     recovered = to_delta_tensor(update)
     assert torch.allclose(recovered, pg.delta, atol=1e-6)
+
+
+def test_parse_schema_v1_update_uses_historical_release_flag_defaults() -> None:
+    pg = _toy_update(_cfg(), round_index=0, seed=100)
+    raw = from_pseudogradient(pg, participant_id="p0").model_dump()
+    raw["schema_version"] = 1
+    raw.pop("clipped")
+    raw.pop("quantized")
+
+    parsed = parse_control_message(raw)
+
+    assert isinstance(parsed, Update)
+    assert parsed.schema_version == 1
+    assert parsed.clipped is True
+    assert parsed.quantized is False
+
+
+@pytest.mark.parametrize("missing_flag", ["clipped", "quantized"])
+def test_parse_schema_v2_update_requires_release_flags(missing_flag: str) -> None:
+    pg = _toy_update(_cfg(), round_index=0, seed=100)
+    raw = from_pseudogradient(pg, participant_id="p0").model_dump()
+    raw.pop(missing_flag)
+
+    with pytest.raises(ValidationError):
+        parse_control_message(raw)
 
 
 def test_update_delta_must_be_finite() -> None:
@@ -245,6 +291,8 @@ def test_update_delta_must_be_finite() -> None:
             dataset_root=_ROOT.hex(),
             delta=(float("nan"), 0.0),
             l2_norm=0.0,
+            clipped=True,
+            quantized=False,
         )
 
 
@@ -275,6 +323,8 @@ def test_serialized_update_carries_no_tensor() -> None:
     # model_dump_json must succeed (pure JSON-native scalars/lists) and carry no tensor.
     payload = json.loads(update.model_dump_json())
     assert isinstance(payload["delta"], list)
+    assert payload["clipped"] is pg.clipped
+    assert payload["quantized"] is pg.quantized
     assert "Tensor" not in update.model_dump_json()
 
 
@@ -424,6 +474,19 @@ def test_malformed_update_at_ingress_does_not_advance_state() -> None:
         coord.run(1)
     # the round did not advance: the committed global hash is unchanged.
     assert coord.global_state_hash() == h_before
+    assert coord.round_state() is RoundState.ABORTED
+
+    # The bad wire item was consumed, and ABORTED is the supported same-round retry state. Supplying the
+    # missing valid participant must close round 0 rather than fail on COLLECTING -> COLLECTING.
+    net_transport.commit_root(participant_id="c1", round_index=0, root=_ROOT)
+    net_transport.submit_update(
+        participant_id="c1",
+        round_index=0,
+        update=_toy_update(cfg, round_index=0, seed=101),
+    )
+    coord.run(1)
+    assert coord.round_state() is RoundState.CLOSED
+    assert coord.global_state_hash() != h_before
 
 
 def test_too_new_schema_version_at_ingress_raises_and_does_not_advance() -> None:
@@ -444,6 +507,7 @@ def test_too_new_schema_version_at_ingress_raises_and_does_not_advance() -> None
     with pytest.raises(SchemaVersionMismatch):
         coord.run(1)
     assert coord.global_state_hash() == h_before
+    assert coord.round_state() is RoundState.ABORTED
 
 
 # --- ACCEPTANCE: Δ_c not bound to a valid R_c → CommitmentMismatch (never swallowed) ---
@@ -469,6 +533,7 @@ def test_unbound_delta_raises_commitment_mismatch() -> None:
         coord.run(1)
     assert exc.value.code == LensembleErrorCode.COMMITMENT_MISMATCH
     assert coord.global_state_hash() == h_before
+    assert coord.round_state() is RoundState.ABORTED
 
 
 def test_uncommitted_participant_update_raises_commitment_mismatch() -> None:
@@ -500,8 +565,114 @@ def test_collect_updates_only_returns_matching_round() -> None:
     assert set(collected) == set(pids)
     for pid in pids:
         assert torch.allclose(collected[pid].delta, staged[pid].delta, atol=1e-6)
+        assert collected[pid].clipped is staged[pid].clipped
+        assert collected[pid].quantized is staged[pid].quantized
+    collected_again = net_transport.collect_updates(0)
+    assert set(collected_again) == set(pids)
+    for pid in pids:
+        assert torch.equal(collected_again[pid].delta, collected[pid].delta)
+        assert collected_again[pid].clipped is collected[pid].clipped
+        assert collected_again[pid].quantized is collected[pid].quantized
+        assert collected_again[pid] is not collected[pid]
+        assert collected_again[pid].delta.data_ptr() != collected[pid].delta.data_ptr()
     # a round with no submitted updates collects nothing
     assert dict(net_transport.collect_updates(5)) == {}
+
+
+def test_collect_updates_snapshot_is_isolated_from_caller_tensor_mutation() -> None:
+    cfg = _cfg()
+    mesh = LoopbackChannel.connected_mesh(_COORD, "c0")
+    net_transport = NetworkedTransport(channel=mesh[_COORD], coordinator_id=_COORD)
+    staged = _participant_submits(
+        net_transport, cfg, participant_ids=["c0"], round_index=0
+    )
+
+    first = net_transport.collect_updates(0)
+    first["c0"].delta.zero_()
+    second = net_transport.collect_updates(0)
+
+    assert torch.count_nonzero(first["c0"].delta) == 0
+    assert torch.equal(second["c0"].delta, staged["c0"].delta)
+    assert second["c0"].delta.data_ptr() != first["c0"].delta.data_ptr()
+
+
+def test_inprocess_submit_and_collect_snapshot_mutable_tensor_storage() -> None:
+    cfg = _cfg()
+    transport = InProcessTransport()
+    update = _toy_update(cfg, round_index=0, seed=100)
+    expected = update.delta.clone()
+
+    transport.submit_update(participant_id="c0", round_index=0, update=update)
+    update.delta.zero_()  # frozen dataclass != frozen Tensor storage
+    first = transport.collect_updates(0)
+    first["c0"].delta.fill_(99.0)
+    second = transport.collect_updates(0)
+
+    assert torch.equal(second["c0"].delta, expected)
+    assert second["c0"].delta.data_ptr() != update.delta.data_ptr()
+    assert second["c0"].delta.data_ptr() != first["c0"].delta.data_ptr()
+
+
+def test_transports_reject_operation_envelope_round_mismatch() -> None:
+    cfg = _cfg()
+    update = _toy_update(cfg, round_index=1, seed=100)
+    mesh = LoopbackChannel.connected_mesh(_COORD, "c0")
+    transports = (
+        InProcessTransport(),
+        NetworkedTransport(channel=mesh[_COORD], coordinator_id=_COORD),
+    )
+
+    for transport in transports:
+        with pytest.raises(RoundError, match="refusing to retarget"):
+            transport.submit_update(
+                participant_id="c0",
+                round_index=0,
+                update=update,
+            )
+        assert dict(transport.collect_updates(0)) == {}
+
+
+def test_networked_transport_preserves_release_flags_end_to_end() -> None:
+    cfg = _cfg()
+    mesh = LoopbackChannel.connected_mesh(_COORD, "c0")
+    net_transport = NetworkedTransport(channel=mesh[_COORD], coordinator_id=_COORD)
+    update = dataclasses.replace(
+        _toy_update(cfg, round_index=0, seed=100),
+        clipped=False,
+        quantized=True,
+    )
+    net_transport.commit_root(
+        participant_id="c0", round_index=0, root=update.dataset_root
+    )
+    net_transport.submit_update(participant_id="c0", round_index=0, update=update)
+
+    collected = net_transport.collect_updates(0)["c0"]
+    collected_again = net_transport.collect_updates(0)["c0"]
+
+    assert collected.clipped is False
+    assert collected.quantized is True
+    assert collected_again.clipped is False
+    assert collected_again.quantized is True
+
+
+def test_networked_transport_accepts_schema_v1_update_with_historical_flags() -> None:
+    cfg = _cfg()
+    mesh = LoopbackChannel.connected_mesh(_COORD, "c0")
+    net_transport = NetworkedTransport(channel=mesh[_COORD], coordinator_id=_COORD)
+    update = _toy_update(cfg, round_index=0, seed=100)
+    raw = from_pseudogradient(update, participant_id="c0").model_dump()
+    raw["schema_version"] = 1
+    raw.pop("clipped")
+    raw.pop("quantized")
+    net_transport.commit_root(
+        participant_id="c0", round_index=0, root=update.dataset_root
+    )
+    mesh["c0"].send(_COORD, _RawDictMessage(raw))  # type: ignore[arg-type]
+
+    collected = net_transport.collect_updates(0)["c0"]
+
+    assert collected.clipped is True
+    assert collected.quantized is False
 
 
 def test_full_commitment_then_update_wire_handshake() -> None:
@@ -554,8 +725,10 @@ def test_collect_skips_update_for_a_different_round() -> None:
         _COORD, Commitment(participant_id="c0", round_index=1, dataset_root=_ROOT.hex())
     )
     mesh["c0"].send(_COORD, from_pseudogradient(pg, participant_id="c0"))
-    # collecting round 0 sees the Commitment but skips the round-1 Update (different round).
+    # Collecting round 0 ingests but excludes the round-1 Update from this round's snapshot.
     assert dict(net_transport.collect_updates(0)) == {}
+    # The validated update remains available from its own round after the inbox was drained.
+    assert set(net_transport.collect_updates(1)) == {"c0"}
 
 
 def test_unknown_peer_send_raises_key_error() -> None:
@@ -632,6 +805,8 @@ def test_commitment_and_update_reject_malformed_root() -> None:
             dataset_root="zz",
             delta=(0.0,),
             l2_norm=0.0,
+            clipped=True,
+            quantized=False,
         )
 
 
@@ -643,6 +818,8 @@ def test_update_rejects_non_finite_l2_norm() -> None:
             dataset_root=_ROOT.hex(),
             delta=(1.0,),
             l2_norm=float("inf"),
+            clipped=True,
+            quantized=False,
         )
 
 

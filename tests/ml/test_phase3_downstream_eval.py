@@ -43,6 +43,11 @@ def _load() -> Phase3DownstreamEvalReport:
 def test_checked_in_phase3_downstream_report_is_schema_valid() -> None:
     report = _load()
     assert report.schema_version == PHASE3_DOWNSTREAM_REPORT_SCHEMA_VERSION
+    assert report.evidence_status == "historical_pre_correctness_fix"
+    assert "#335" in report.superseded_reason
+    assert "outer-update direction" in report.superseded_reason
+    assert "public-probe-v2 target-binding" in report.superseded_reason
+    assert "do not validate the corrected runtime" in report.superseded_reason
     # Round-trips through the parser identically.
     assert parse_phase3_downstream_eval_report(report.model_dump(mode="json")) == report
 
@@ -119,6 +124,24 @@ def test_report_claim_boundary_distinguishes_from_cryptographic_proof() -> None:
     assert "#244" in boundary
     assert "paper-scale" in boundary
     assert "cryptographic proof" in boundary
+    assert "do not validate the corrected runtime" in boundary
+    assert "#335" in boundary
+
+
+def test_report_is_self_contained_public_evidence() -> None:
+    report = _load()
+    public_surface = "\n".join(
+        (
+            report.superseded_reason,
+            report.claim_boundary,
+            report.held_out_latent_metrics.note,
+            *(blocker.reason for blocker in report.task_success.blockers),
+        )
+    )
+    assert "thoughts/" not in public_surface
+    assert "magnitude collapse" in public_surface
+    assert "~7.5e-6" in public_surface
+    assert "central ceiling" in public_surface
 
 
 def test_report_is_residency_safe() -> None:
@@ -207,6 +230,8 @@ def test_generator_script_generates_and_validates(tmp_path: Path) -> None:
         _FINAL_EFFECTIVE_RANK
     )
     assert report.task_success.status == "blocked"
+    assert report.evidence_status == "historical_pre_correctness_fix"
+    assert "#335" in report.superseded_reason
 
     validate = subprocess.run(
         [

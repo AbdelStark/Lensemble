@@ -1,10 +1,11 @@
-"""Participant local round — the H-step inner loop that emits a privatized, bound PseudoGradient (#43).
+"""Participant local round — the H-step inner loop that emits a released, bound PseudoGradient (#43).
 
 Covers the RFC-0013 §1 acceptance criteria on a tiny CPU V-JEPA config: INV-PROBE-PIN (a probe-hash
 mismatch raises ProbeError), INV-WARMSTART-T0 (a round-0 encoder-hash mismatch raises GaugeError — the
 #43 criterion pins GaugeError, vs SPEC 03 §7's CheckpointIntegrityError), INV-SKETCH-CONSISTENCY
 (round_seed != sketch_seed raises GaugeError), the released PseudoGradient (encoder/predictor groups only,
-one 32-byte dataset_root, l2_norm == ||delta||, clipped, finite, INV-DP-BOUND held), the join() rejoiner
+one 32-byte dataset_root, l2_norm == ||delta||, clip-mechanism flag, finite, INV-DP-BOUND held), the join()
+rejoiner
 path (committed GlobalState returned; a tampered θ ref raises CheckpointIntegrityError), and INV-RESIDENCY
 (delta is the only tensor field reachable on the carrier).
 
@@ -123,7 +124,7 @@ def _build_probe(seed: int = 0) -> PublicProbe:
         points=points,
         landmark_idx=landmark_idx,
         landmark_targets=targets,
-        content_hash=probe_content_hash(points, landmark_idx),
+        content_hash=probe_content_hash(points, landmark_idx, targets),
         probe_version=1,
     )
 
@@ -284,6 +285,29 @@ def test_local_round_rejects_probe_hash_mismatch() -> None:
     assert exc.value.remediation
 
 
+def test_local_round_rejects_targets_tampered_under_stored_hash() -> None:
+    cfg = _cfg()
+    probe = _build_probe()
+    transport, gs, _, _ = _seed_transport(cfg, probe, sketch_seed=7)
+    tampered = PublicProbe(
+        points=probe.points,
+        landmark_idx=probe.landmark_idx,
+        landmark_targets=probe.landmark_targets + 1.0,
+        content_hash=probe.content_hash,
+        probe_version=probe.probe_version,
+    )
+    participant = _TestParticipant(
+        cfg,
+        participant_id="c0",
+        transport=transport,
+        probe=tampered,
+        windows=_build_windows(),
+    )
+
+    with pytest.raises(ProbeError, match="stored content_hash"):
+        participant.local_round(gs, round_seed=7)
+
+
 # --- INV-WARMSTART-T0: a round-0 encoder hash that differs from the pinned warm-start raises GaugeError ---
 
 
@@ -395,7 +419,9 @@ def test_local_round_accepts_bfloat16_probe_points() -> None:
         points=probe_points,
         landmark_idx=base_probe.landmark_idx,
         landmark_targets=base_probe.landmark_targets,
-        content_hash=probe_content_hash(probe_points, base_probe.landmark_idx),
+        content_hash=probe_content_hash(
+            probe_points, base_probe.landmark_idx, base_probe.landmark_targets
+        ),
         probe_version=base_probe.probe_version,
     )
     transport, gs, _, _ = _seed_transport(cfg, probe, sketch_seed=7)
@@ -586,7 +612,8 @@ def test_local_round_with_dp_disabled_releases_unclipped_norm() -> None:
     pg = p.local_round(
         gs, round_seed=7
     )  # the INV-DP-BOUND assert is skipped when DP is off
-    assert pg.clipped is True  # the carrier still records the gauge/clip flag
+    # `clipped` records that the clip mechanism ran, not whether the norm saturated.
+    assert pg.clipped is False
     assert pg.l2_norm == pytest.approx(float(pg.delta.norm()))
 
 
@@ -670,7 +697,14 @@ def test_transport_coordinator_side_round_trip() -> None:
     transport.submit_update(participant_id="c0", round_index=gs.round_index, update=pg)
     collected = transport.collect_updates(gs.round_index)
     assert set(collected) == {"c0"}
-    assert collected["c0"] is pg
+    received = collected["c0"]
+    assert received is not pg
+    assert received.delta.data_ptr() != pg.delta.data_ptr()
+    assert torch.equal(received.delta, pg.delta)
+    assert received.dataset_root == pg.dataset_root
+    assert received.round_index == pg.round_index
+    assert received.clipped is pg.clipped
+    assert received.quantized is pg.quantized
     assert transport.collect_updates(999) == {}  # no updates for an unknown round
 
 

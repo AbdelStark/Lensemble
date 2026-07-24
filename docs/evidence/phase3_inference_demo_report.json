@@ -1,4 +1,8 @@
 {
+  "blocker_refs": [
+    "#96",
+    "#244"
+  ],
   "controls": [
     {
       "label": "converged-federated",
@@ -13,7 +17,7 @@
         "planning_samples": 128,
         "success_rate": 0.0
       },
-      "metric_boundary": "Corrected SO-100 proxy audit: skill_vs_identity is gameable; effective_rank is scale-invariant; latent-MPC success_rate=0.0 is a negative result, not a near-static-video success story; held-out magnitude collapse (~7.5e-6 latent variance; thoughts/collapse_fix_probe.py) and the central ceiling probe (thoughts/central_ceiling_probe.py) show this is not downstream usefulness.",
+      "metric_boundary": "Historical SO-100 proxy audit: these metrics predate the outer-update direction and public-probe-v2 target-binding fixes and do not validate the corrected runtime (#335). skill_vs_identity is gameable; effective_rank is scale-invariant; latent-MPC success_rate=0.0 is a negative result, not a near-static-video success story. A historical diagnostic measured magnitude collapse at ~7.5e-6 latent variance, and an associated central ceiling diagnostic did not establish downstream usefulness (#244).",
       "model_repo": "abdelstark/lensemble-phase3-converged-checkpoint",
       "multistep_prediction": {
         "effective_rank": 2.208156108856201,
@@ -39,7 +43,7 @@
         "planning_samples": 128,
         "success_rate": 0.0
       },
-      "metric_boundary": "Corrected SO-100 proxy audit: skill_vs_identity is gameable; effective_rank is scale-invariant; latent-MPC success_rate=0.0 is a negative result, not a near-static-video success story; held-out magnitude collapse (~7.5e-6 latent variance; thoughts/collapse_fix_probe.py) and the central ceiling probe (thoughts/central_ceiling_probe.py) show this is not downstream usefulness.",
+      "metric_boundary": "Historical SO-100 proxy audit: these metrics predate the outer-update direction and public-probe-v2 target-binding fixes and do not validate the corrected runtime (#335). skill_vs_identity is gameable; effective_rank is scale-invariant; latent-MPC success_rate=0.0 is a negative result, not a near-static-video success story. A historical diagnostic measured magnitude collapse at ~7.5e-6 latent variance, and an associated central ceiling diagnostic did not establish downstream usefulness (#244).",
       "model_repo": "abdelstark/lensemble-phase3-naive-control",
       "multistep_prediction": {
         "effective_rank": 1.009084939956665,
@@ -53,10 +57,12 @@
       "revision": "cd8481c4c041d610008491f13e64bf092d3bc94d"
     }
   ],
+  "evidence_status": "historical_pre_correctness_fix",
   "held_out_data_ref": "abdelstark/lensemble-phase3-so100-silos/phase3-so100-silo4.h5",
-  "honest_boundary": "Corrected SO-100 proxy audit on real held-out data: skill_vs_identity is gameable, effective_rank is scale-invariant, and latent-MPC success_rate=0.0 is a negative result, not a near-static-video success story. Held-out magnitude collapse (~7.5e-6 latent variance; thoughts/collapse_fix_probe.py) plus the central ceiling probe (thoughts/central_ceiling_probe.py) show this checkpoint is not downstream-useful. Closed-loop physical task-success is NOT claimed here; it stays gated on the unvendored stable-worldmodel simulator (#96). Not a cryptographic honest-computation proof.",
+  "honest_boundary": "Historical SO-100 proxy audit on real held-out data: these values predate the outer-update direction correction and public-probe-v2 target-binding contract, so they do not validate the corrected runtime; GitHub issue #335 tracks the replacement run. skill_vs_identity is gameable, effective_rank is scale-invariant, and latent-MPC success_rate=0.0 is a negative result, not a near-static-video success story. A historical diagnostic measured magnitude collapse at ~7.5e-6 latent variance, and an associated central ceiling diagnostic did not establish downstream usefulness. Closed-loop physical task-success is NOT claimed: the unvendored stable-worldmodel simulator (#96) and a genuinely useful non-collapsed checkpoint (#244) remain blockers. Not a cryptographic honest-computation proof.",
   "horizon": 8,
-  "schema_version": 1,
+  "schema_version": 2,
+  "superseded_reason": "These SO-100 inference values predate the correction of the outer-update direction and the public-probe-v2 target-binding contract. They are retained for audit history only and do not validate the corrected runtime; GitHub issue #335 tracks the replacement run.",
   "task_env_id": "held-out-so100://phase3-so100-silo4",
   "windows_available": 1176
 }

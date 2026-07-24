@@ -25,25 +25,19 @@ Per-round lifecycle (RFC-0013 §1/§2), all on the single coordinator thread in 
   dropped participant reconciles by contributing at the NEXT round.
 - **AGGREGATING** — the determinism self-check (``INV-AGG-DETERMINISM``, RFC-0013 §4): the reduction
   ``(1/C)·Σ_c Δ_c`` is re-run under the canonical participant-id-sorted order and compared bitwise via
-  :func:`~lensemble.aggregation.determinism.assert_outer_step_deterministic` (a FRESH optimizer per call
-  inside the thunk → pure). A mismatch raises :class:`~lensemble.errors.NonDeterministicAggregation`
-  (security-critical, never swallowed) and the round → ``ABORTED``. Arrival order does not matter — the
-  reduction is over the total order on ``participant_id``.
-- **ALIGNING** — frame drift is measured on the probe when per-participant embeddings are available, AND
-  the Layer-3 Procrustes backstop (RFC-0002 §5, #18) is applied when BOTH per-participant embeddings and a
-  reference frame ``E_ref`` are wired (the ``_probe_embeddings``/``_reference_embeddings`` #18/#22 seam):
-  each participant whose drift exceeds ``cfg.gauge.frame_drift_threshold_deg`` has its PREDICTOR delta
-  conjugated by ``Q_c* = procrustes_align(f_c(P), E_ref)`` as a PURE LINEAR operation
-  (``g_phi -> Q g_phi Q^T``, applied to the released delta). The ENCODER delta is left UNCHANGED — the
-  activation-space realization of the recorded #18 decision: the encoder ends in a ``LayerNorm`` with no
-  terminal ``(d, d)`` linear to fold ``Q`` into, so the encoder-frame component is bounded by the Layer-2
-  anchor (RFC-0002 §4) and lives in activation space, NOT in the committed weights (which is why
-  ``recompute_alignment`` (#62) measures residual encoder drift rather than verifying a weight-fold — the
-  #18/#62 verifiability tradeoff). The backstop is a deterministic pre-step feeding the SAME outer reduction
-  (``INV-AGG-DETERMINISM``). With nothing wired (the default) ALIGNING is a byte-identical MEASURED
-  PASS-THROUGH and does not mutate θ/φ. With the masking secure-aggregation backend the coordinator sees
-  only the summed update (no per-participant deltas), so the backstop is a Stage-B / simulated-backend
-  operation; the hooks are the seam.
+  :func:`~lensemble.aggregation.determinism.assert_outer_step_deterministic`. Its pure thunk previews the
+  persistent optimizer twice from the current Nesterov velocity, so round ``t >= 1`` verifies the exact
+  stateful computation that ``COMMITTING`` will apply without advancing momentum during verification. A
+  mismatch raises :class:`~lensemble.errors.NonDeterministicAggregation` (security-critical, never
+  swallowed) and the round → ``ABORTED``. Arrival order does not matter — the reduction is over the total
+  order on ``participant_id``.
+- **ALIGNING** — frame drift is measured when per-participant embeddings are available. The optional
+  coordinator-side Layer-3 backstop is an explicitly raw-plaintext research harness: with a pinned probe,
+  privacy and quantization disabled, and the simulated backend, it reconstructs each local full weight,
+  applies ``Q_c*``, and re-differences exactly once before the determinism preview. It fails closed on
+  release-transformed updates or a sum-only backend (``INV-ALIGN-BEFORE-RELEASE``). The target secure path
+  performs participant-specific alignment before clip/noise/quantization/masking; after reveal this state
+  can run only aggregate/committed-model diagnostics.
 - **COMMITTING** — the PERSISTENT :class:`~lensemble.federation.outer_optimizer.OuterOptimizer.step` folds the
   averaged delta into the global params → ``θ_{t+1}⊕φ_{t+1}`` (covers ONLY θ/φ; the deltas are
   ``PseudoGradient`` s that by construction carry no action head, ``INV-ACTIONHEAD-LOCAL``). The flat
@@ -58,7 +52,7 @@ Per-round lifecycle (RFC-0013 §1/§2), all on the single coordinator thread in 
 
 The averaging denominator is the actual contributing count ``C_t`` (recorded in the ``ContributionRecord``;
 :class:`~lensemble.federation.outer_optimizer.OuterOptimizer.average_deltas` divides by ``len(deltas)``), so the
-outer step is reproducible from recorded inputs.
+outer step is reproducible within the live run from the carried optimizer velocity and recorded inputs.
 
 #22/#04 BOUNDARY (probe pin). When ``cfg.data.probe_path`` is set the pinned probe is loaded and hashed
 into ``GlobalState.probe_hash``; otherwise a fixed 32-byte placeholder is used (a participant pinning a
@@ -81,11 +75,17 @@ from lensemble.config.manifest import config_hash
 from lensemble.config.seed import round_sketch_seed
 from lensemble.data.probe import load_probe
 from lensemble.errors import (
+    ConfigError,
     FaultToleranceExceeded,
+    LensembleError,
     LensembleErrorCode,
     NonDeterministicAggregation,
+    RoundError,
 )
-from lensemble.federation.outer_optimizer import OuterOptimizer
+from lensemble.federation.outer_optimizer import (
+    OuterOptimizer,
+    assert_bitwise_reproducible,
+)
 from lensemble.federation.pseudogradient import PseudoGradient, build_pseudogradient
 from lensemble.federation.round import RoundDriver, RoundState
 from lensemble.federation.state import GlobalState, ParamRef
@@ -147,13 +147,14 @@ class Coordinator:
     ) -> None:
         self.config = config
         self.transport = transport
-        # #262: the LIVE Layer-3 Procrustes backstop. When enabled AND a real probe is pinned
-        # (cfg.data.probe_path), the coordinator drives the public probe through each released-delta-
-        # reconstructed encoder to measure f_c(P), aligns each over-threshold participant's ENCODER frame
-        # + predictor I/O to the shared round-0 reference E_ref before the outer step (RFC-0002 §5), and
-        # fires the same drift diagnostic. Default OFF — the base coordinator stays the byte-identical
-        # measured pass-through every existing test relies on.
+        # #262: the coordinator-side Layer-3 Procrustes backstop is an explicitly PLAINTEXT research
+        # harness. It needs each raw, individually keyed local-minus-global delta so it can reconstruct
+        # full local weights, align them, and re-difference before the outer step. A real participant-side
+        # privacy/quantization/masking boundary must instead apply alignment BEFORE those release
+        # transforms (INV-ALIGN-BEFORE-RELEASE); a sum-only coordinator cannot recover this information.
+        # Default OFF — the base coordinator stays the byte-identical measured pass-through.
         self._enable_backstop = bool(enable_backstop)
+        self._validate_coordinator_backstop_mode(config)
         self._round_updates: dict[str, PseudoGradient] = {}
 
         cfg = config
@@ -197,9 +198,9 @@ class Coordinator:
             theta_weights, phi_weights
         )
 
-        # The PERSISTENT outer optimizer (carries the Nesterov velocity across rounds, RFC-0003 §7). The
-        # AGGREGATING determinism self-check reconstructs a FRESH optimizer per call so its velocity is not
-        # advanced twice (assert_outer_step_deterministic invokes the thunk twice).
+        # The PERSISTENT outer optimizer carries Nesterov velocity across rounds (RFC-0003 §7).
+        # AGGREGATING calls its pure preview_step twice, verifying the exact stateful computation without
+        # advancing velocity; COMMITTING then calls step once to commit that same computation.
         self._optimizer = OuterOptimizer(
             lr=cfg.federation.outer_lr,
             momentum=cfg.federation.outer_nesterov_momentum,
@@ -401,7 +402,21 @@ class Coordinator:
         # of the fault-tolerance floor and the secure-aggregation reveal threshold t_agg (RFC-0013 §3):
         # below t_agg the masking sum cannot be unblinded, so the higher of the two gates the round.
         self._driver.to(RoundState.COLLECTING)
-        updates = dict(self.transport.collect_updates(t))
+        try:
+            collected = dict(self.transport.collect_updates(t))
+        except Exception:
+            # Network ingress validation/binding failures can surface as either typed Lensemble errors or
+            # the wire validator's native exception. Preserve that exact error while terminating the
+            # in-flight round; otherwise a retry is wedged in COLLECTING and its next transition is illegal.
+            self._driver.state = RoundState.ABORTED
+            raise
+        try:
+            updates = self._validate_updates(t, collected)
+        except RoundError as exc:
+            # A malformed/stale update is an in-flight round failure, not a Python broadcasting rule.
+            # Abort before quorum/aggregation so the canonical hash and optimizer state stay untouched.
+            self._driver.abort(exc)
+            raise  # defensive: abort always raises
         self._last_contributing = len(updates)
         quorum = self._quorum()
         if len(updates) < quorum:
@@ -424,57 +439,147 @@ class Coordinator:
         embeddings = self._probe_embeddings(t)
         e_ref = self._reference_embeddings(t)
 
-        # 2. AGGREGATING — the determinism self-check (INV-AGG-DETERMINISM). assert_outer_step_deterministic
-        # re-runs the PURE thunk twice (a FRESH optimizer each call, so its velocity is not advanced) and
-        # compares the two reductions bitwise; a mismatch raises NonDeterministicAggregation and aborts. The
-        # thunk reduces the SAME (possibly backstop-aligned) deltas COMMITTING commits — the backstop is a
-        # pure linear pre-step, so the self-check verifies exactly the committed reduction.
+        # 2. AGGREGATING — materialize the plaintext research-harness alignment ONCE, then run the
+        # determinism self-check (INV-AGG-DETERMINISM) and the eventual commit from that exact mapping.
+        # A participant-side production path supplies already-aligned releases here, so this call is the
+        # identity. Recomputing a participant-specific alignment inside the preview thunk would verify two
+        # previews but not necessarily the third mapping consumed by COMMITTING.
+        # assert_outer_step_deterministic calls the PERSISTENT optimizer's PURE preview twice: both use its
+        # current carried velocity without advancing it, so round 1+ verifies the exact Nesterov computation
+        # COMMITTING will apply.
         self._driver.to(RoundState.AGGREGATING)
         prior_params = self._global_params
-        lr = self.config.federation.outer_lr
-        momentum = self.config.federation.outer_nesterov_momentum
         try:
+            aligned_updates = self._align_updates(updates, embeddings, e_ref)
             assert_outer_step_deterministic(
-                lambda: OuterOptimizer(lr=lr, momentum=momentum).step(
-                    prior_params, self._align_updates(updates, embeddings, e_ref)
-                ),
+                lambda: self._optimizer.preview_step(prior_params, aligned_updates),
                 round_index=t,
             )
-        except NonDeterministicAggregation as exc:
-            # Security-critical: the reduction was not bitwise-reproducible. Drive the round to ABORTED
-            # (the global hash is left unchanged — no partial commit) and re-raise; NEVER swallowed.
+        except (ConfigError, NonDeterministicAggregation) as exc:
+            # Invalid information-flow ordering or a non-reproducible reduction is fail-closed. Drive the
+            # round to ABORTED (the global hash is left unchanged — no partial commit) and re-raise.
             self._driver.abort(exc)  # → ABORTED, re-raises
             raise  # defensive: abort always raises (this line is unreachable, keeps types total)
 
-        # 3. ALIGNING — measure frame drift on the probe AND apply the Layer-3 Procrustes backstop (#18) when
-        # per-participant embeddings + a reference E_ref are wired (the #18/#22 seam). The backstop conjugates
-        # each over-threshold participant's PREDICTOR delta by Q_c* as a PURE LINEAR operation (RFC-0002 §5);
-        # the encoder delta is left UNCHANGED (the activation-space decision — a LayerNorm-terminated encoder
-        # has no terminal linear to fold Q into). With nothing wired this is the measured pass-through it was:
-        # the aligned updates are byte-identical to `updates`, so every existing coordinator test stays green.
+        # 3. ALIGNING — measure frame drift. In the coordinator-side plaintext research harness the aligned
+        # mapping was materialized immediately above so the determinism preview and commit share one exact
+        # input. On the target secure path, participant-specific alignment already happened before release;
+        # this coordinator state is therefore diagnostic/verification only.
         self._driver.to(RoundState.ALIGNING)
         self._measure_drift(t, embeddings)
-        aligned_updates = self._align_updates(updates, embeddings, e_ref)
 
         # 4. COMMITTING — the PERSISTENT outer step folds the averaged (aligned) delta into the global params
         # (only θ/φ); un-flatten via the manifest; hash-commit; append the ContributionRecord; advance hash.
         self._driver.to(RoundState.COMMITTING)
-        new_params = self._optimizer.step(prior_params, aligned_updates)
+        # Prepare the exact candidate without advancing Nesterov velocity. Checkpoint/ledger writes are
+        # fallible; committing optimizer state before either succeeds makes a failed round alter the next
+        # retry even though its canonical model hash stayed unchanged.
+        new_params = self._optimizer.preview_step(prior_params, aligned_updates)
         theta_weights, phi_weights = _unflatten_groups(self._param_manifest, new_params)
-        new_hash = self._commit_checkpoint(
-            theta_weights,
-            phi_weights,
-            round_index=t + 1,
-            parent_hash=self._driver.global_hash,
-        )
-        self._append_contribution(t, updates, new_hash)
+        try:
+            new_hash = self._commit_checkpoint(
+                theta_weights,
+                phi_weights,
+                round_index=t + 1,
+                parent_hash=self._driver.global_hash,
+            )
+            self._append_contribution(t, updates, new_hash)
+        except LensembleError as exc:
+            self._driver.abort(exc)
+            raise  # defensive: abort always raises
+        except Exception:
+            # Preserve the original I/O/runtime exception while still making the retry state explicit.
+            # No optimizer/global-model mutation has happened: only the pure preview ran.
+            self._driver.state = RoundState.ABORTED
+            raise
+
+        # All fallible commit surfaces succeeded. Commit the previously previewed velocity now and assert
+        # that the stateful step reproduces the artifact candidate before advancing the canonical hash.
+        committed_params = self._optimizer.step(prior_params, aligned_updates)
+        assert_bitwise_reproducible(new_params, committed_params)
         self._driver.commit(new_hash)  # → CLOSED, advances the canonical global hash
 
         # Update the canonical state for round t+1 (the broadcast for t+1 happens at the next OPEN).
-        self._global_params = new_params
+        self._global_params = committed_params
         self._theta_weights = theta_weights
         self._phi_weights = phi_weights
         return RoundState.CLOSED
+
+    def _validate_updates(
+        self, t: int, updates: "dict[str, PseudoGradient]"
+    ) -> "dict[str, PseudoGradient]":
+        """Validate and snapshot exact flat parameter vectors before quorum/aggregation.
+
+        A length-one delta otherwise broadcasts across every global parameter under PyTorch addition;
+        a stale update can likewise be stored under a different transport round. Both are malformed
+        round inputs, never valid optimizer semantics. Returned carriers own their storage and are
+        normalized to the canonical global device so wire-decoded CPU updates work with a CUDA coordinator.
+        """
+        expected_numel = self._global_params.numel()
+        expected_device = self._global_params.device
+        validated: dict[str, PseudoGradient] = {}
+        for participant_id, update in updates.items():
+            if not isinstance(participant_id, str) or not participant_id:
+                raise RoundError(
+                    f"round {t} contains an update with an invalid participant id "
+                    f"{participant_id!r}",
+                    code=LensembleErrorCode.ROUND_FAILED,
+                    remediation="key every update by one non-empty registered participant id",
+                )
+            if not isinstance(update, PseudoGradient):
+                raise RoundError(
+                    f"participant {participant_id!r} supplied {type(update).__name__}, "
+                    "not a PseudoGradient",
+                    code=LensembleErrorCode.ROUND_FAILED,
+                    remediation="submit a validated released PseudoGradient carrier",
+                )
+            if update.round_index != t:
+                raise RoundError(
+                    f"participant {participant_id!r} update targets round "
+                    f"{update.round_index}, but the coordinator is collecting round {t}",
+                    code=LensembleErrorCode.ROUND_FAILED,
+                    remediation="discard stale/future updates and recompute from the current RoundOpen",
+                )
+            if update.delta.ndim != 1 or update.delta.numel() != expected_numel:
+                raise RoundError(
+                    f"participant {participant_id!r} delta shape "
+                    f"{tuple(update.delta.shape)} does not match the canonical flat parameter "
+                    f"length {expected_numel}",
+                    code=LensembleErrorCode.ROUND_FAILED,
+                    remediation="flatten encoder then predictor deltas using the current parameter manifest",
+                )
+            # Reconstruct once against the original metadata to catch an in-place mutation of a nominally
+            # frozen carrier (Tensor storage is mutable), then take a coordinator-owned device-local copy.
+            try:
+                PseudoGradient(
+                    delta=update.delta,
+                    l2_norm=update.l2_norm,
+                    dataset_root=update.dataset_root,
+                    round_index=update.round_index,
+                    clipped=update.clipped,
+                    quantized=update.quantized,
+                )
+            except ValueError as exc:
+                raise RoundError(
+                    f"participant {participant_id!r} update metadata is inconsistent: {exc}",
+                    code=LensembleErrorCode.ROUND_FAILED,
+                    remediation="rebuild the PseudoGradient from the released delta before submission",
+                ) from exc
+            delta = (
+                update.delta.detach()
+                .to(device=expected_device, dtype=torch.float32)
+                .contiguous()
+                .clone()
+            )
+            validated[participant_id] = PseudoGradient(
+                delta=delta,
+                l2_norm=float(delta.norm()),
+                dataset_root=update.dataset_root,
+                round_index=update.round_index,
+                clipped=update.clipped,
+                quantized=update.quantized,
+            )
+        return validated
 
     def _quorum(self) -> int:
         """The round quorum ``K = max(fault_tolerance_min_participants, secure_agg_threshold)`` (§3).
@@ -621,20 +726,20 @@ class Coordinator:
         ``build_pseudogradient`` order, element-wise aligned with the global params). A participant without a
         wired embedding is passed through unchanged.
 
-        With nothing wired (the default — ``embeddings``/``e_ref`` are ``None``) this is the IDENTITY: the
-        returned mapping IS ``updates`` (the same objects), so ALIGNING stays the byte-identical pass-through
-        and every existing coordinator test commits the same hash. The backstop is a pure linear operation on
-        the released deltas, so the result feeds the SAME ``OuterOptimizer.step`` and a re-run with identical
-        inputs commits the identical hash (``INV-AGG-DETERMINISM``).
+        The coordinator passes its current grouped global weights so the backstop reconstructs each local
+        gauge-bearing weight, aligns the full weight, and re-differences from that same global baseline.
+        With nothing wired (the default — ``embeddings``/``e_ref`` are ``None``), this is the IDENTITY: the
+        returned mapping IS ``updates``. The result feeds the SAME ``OuterOptimizer.step`` and a re-run with
+        identical inputs commits the identical hash (``INV-AGG-DETERMINISM``).
 
-        With the masking secure-aggregation backend the coordinator sees ONLY the masked sum (no
-        per-participant deltas), so the backstop is a Stage-B / simulated-backend operation; ``embeddings`` /
-        ``e_ref`` are the seam that makes it observable.
+        This is a raw-plaintext research harness. It cannot follow clipping/noise, quantization, or a
+        sum-only secure-aggregation boundary. The target path applies the same full-weight transform and
+        re-difference participant-side before all release transforms (``INV-ALIGN-BEFORE-RELEASE``).
         """
         if embeddings is None or e_ref is None:
             return updates  # identity pass-through (the default; no backstop wired)
 
-        # Un-flatten each contributing delta into its grouped encoder.*/predictor.* form (the backstop input).
+        # Un-flatten each contributing delta into grouped encoder.*/predictor.* form.
         grouped: dict[str, dict[str, Tensor]] = {}
         backstop_ids: list[str] = []
         for pid in updates:
@@ -649,17 +754,48 @@ class Coordinator:
                 updates  # no participant had a wired embedding — pass through unchanged
             )
 
+        release_transformed = sorted(
+            pid
+            for pid in backstop_ids
+            if updates[pid].clipped or updates[pid].quantized
+        )
+        if release_transformed:
+            raise ConfigError(
+                "coordinator-side Procrustes alignment received release-transformed "
+                f"updates from {release_transformed}; participant-specific alignment "
+                "cannot run after clipping/noise or quantization "
+                "(INV-ALIGN-BEFORE-RELEASE)",
+                code=LensembleErrorCode.CONFIG_INVALID,
+                remediation=(
+                    "apply the full-weight gauge transform and re-difference on each "
+                    "participant before clipping, noise, quantization, and masking; "
+                    "otherwise use a trusted/MPC boundary that can perform that order"
+                ),
+            )
+
+        global_grouped = {
+            f"{_ENCODER_GROUP}.{name}": tensor
+            for name, tensor in self._theta_weights.items()
+        }
+        global_grouped.update(
+            {
+                f"{_PREDICTOR_GROUP}.{name}": tensor
+                for name, tensor in self._phi_weights.items()
+            }
+        )
         aligned_grouped = procrustes_backstop(
             grouped,
             {pid: embeddings[pid] for pid in grouped},
             e_ref,
+            global_weights=global_grouped,
             threshold_deg=self.config.gauge.frame_drift_threshold_deg,
             singular_floor=self.config.gauge.procrustes_singular_floor,
         )
 
-        # Re-flatten the aligned grouped deltas into PseudoGradients in the SAME canonical order, preserving
-        # each PseudoGradient's binding metadata (dataset_root / round_index / clipped). Participants without a
-        # wired embedding keep their original PseudoGradient.
+        # Re-flatten the aligned grouped deltas into PseudoGradients in the SAME canonical order. Only raw
+        # plaintext updates may reach this research harness, so release-transform metadata remains false.
+        # Dataset binding and round binding are preserved. Participants without a wired embedding keep
+        # their original PseudoGradient.
         aligned: dict[str, PseudoGradient] = dict(updates)
         for pid in backstop_ids:
             original = updates[pid]
@@ -667,9 +803,44 @@ class Coordinator:
                 aligned_grouped[pid],
                 dataset_root=original.dataset_root,
                 round_index=original.round_index,
-                clipped=original.clipped,
+                clipped=False,
             )
         return aligned
+
+    def _validate_coordinator_backstop_mode(self, cfg: "LensembleConfig") -> None:
+        """Fail closed when the plaintext backstop is combined with a release boundary.
+
+        The guard is active only when a probe is pinned and the backstop can actually fire. Keeping
+        ``enable_backstop=True`` inert when no probe exists preserves the diagnostic pass-through contract.
+        """
+        if not self._enable_backstop or getattr(cfg.data, "probe_path", None) is None:
+            return
+
+        incompatible: list[str] = []
+        if cfg.privacy.enabled:
+            incompatible.append("privacy.enabled=True")
+        if cfg.federation.quantize_pseudo_gradient:
+            incompatible.append("federation.quantize_pseudo_gradient=True")
+        if cfg.federation.aggregation_backend != "simulated":
+            incompatible.append(
+                f"federation.aggregation_backend={cfg.federation.aggregation_backend!r}"
+            )
+        if not incompatible:
+            return
+
+        raise ConfigError(
+            "coordinator-side Procrustes alignment requires raw, individually "
+            "visible updates in the plaintext simulated harness; incompatible "
+            f"settings: {', '.join(incompatible)} "
+            "(INV-ALIGN-BEFORE-RELEASE)",
+            code=LensembleErrorCode.CONFIG_INVALID,
+            remediation=(
+                "disable the coordinator backstop, or run the explicit plaintext "
+                "research harness with privacy and quantization disabled; a secure "
+                "deployment must align and re-difference participant-side before "
+                "clipping, noise, quantization, and masking, or use a trusted/MPC boundary"
+            ),
+        )
 
     def _setup_backstop(self, cfg: "LensembleConfig", encoder: object) -> None:
         """#262: load the pinned probe + compute the round-0 reference frame ``E_ref = f_ref(P)``.
@@ -700,8 +871,8 @@ class Coordinator:
     ) -> "dict[str, Tensor] | None":
         """Per-participant probe embeddings ``f_c(P)`` for ALIGNING (the #18/#22/#262 boundary).
 
-        With the live backstop wired (#262), reconstructs each contributing participant's encoder from the
-        current global ``θ_t`` plus its released encoder delta (``θ_c = θ_t + Δ_enc``) and forwards it on the
+        With the plaintext backstop harness wired (#262), reconstructs each contributing participant's
+        encoder from the current global ``θ_t`` plus its raw encoder delta (``θ_c = θ_t + Δ_enc``) and forwards it on the
         pinned probe landmarks to ``f_c(P)`` ``(k*N, d)`` — the trained frame the drift diagnostic measures
         and the Procrustes backstop aligns. Computed ONCE per round (reused by the determinism self-check and
         the committed reduction). Reconstruction uses the SAME canonical un-flatten as the outer step, so the
@@ -741,8 +912,8 @@ class Coordinator:
         Returns the round-0 ``E_ref = f_ref(P)`` computed at construction when the live backstop is wired,
         else ``None`` (the byte-identical pass-through). The Layer-3 Procrustes backstop fires only when BOTH
         this and :meth:`_probe_embeddings` return non-``None``: each over-threshold participant's encoder
-        terminal frame + predictor I/O are conjugated by ``Q_c* = procrustes_align(f_c(P), E_ref)`` before the
-        outer step (RFC-0002 §5).
+        terminal frame + predictor I/O are reconstructed from global + delta, aligned by the row-space
+        ``Q_c* = procrustes_align(f_c(P), E_ref)``, and re-differenced before the outer step (RFC-0002 §5).
         """
         if not self._enable_backstop:
             return None

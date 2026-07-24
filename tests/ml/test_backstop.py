@@ -1,11 +1,10 @@
-"""Layer-3 Procrustes re-alignment backstop — the activation-space realization (RFC-0002 §5). Issue #18.
+"""Layer-3 full-weight Procrustes re-alignment backstop (RFC-0002 §5). Issue #18.
 
-The backstop, immediately before the outer step, conjugates each over-threshold participant's predictor
-delta by ``Q_c* = procrustes_align(f_c(P), E_ref)`` as a PURE LINEAR operation, leaving the encoder delta
-byte-identical (the maintainer's recorded activation-space decision: a LayerNorm-terminated encoder has no
-terminal linear to absorb ``Q`` into). Below threshold the delta is byte-identical; a degenerate (k < d)
-embedding triggers the clamp-and-skip path (the unaligned delta survives) with a WARN log; the backstop is
-order-independent and dtype-preserving.
+For row-space ``Q*`` satisfying ``f_c(P) @ Q* ~= E_ref``, the backstop reconstructs each over-threshold
+participant's full local encoder terminal/predictor I/O weights from global + delta, transforms them into
+the reference frame, and re-differences from the nonzero global baseline. Below threshold the delta is
+byte-identical; a degenerate embedding triggers clamp-and-skip with a WARN; the path is order-independent
+and dtype-preserving.
 """
 
 from __future__ import annotations
@@ -15,6 +14,7 @@ import math
 
 import pytest
 import torch
+from torch.nn import functional as F
 
 from lensemble.gauge import (
     procrustes_backstop,
@@ -79,7 +79,90 @@ def _e_ref() -> torch.Tensor:
     return torch.randn(_N, _D, generator=g)
 
 
-# --- realign_predictor_delta: the weight-expressible conjugation g_phi -> Q g_phi Q^T ---
+def test_nonzero_global_alignment_reconstructs_coordinate_equivalent_local_model() -> (
+    None
+):
+    e_ref = _e_ref()
+    q_expected = _rot(30.0)
+    global_weights = _toy_grouped_delta(seed=40)
+    deltas = {"c0": _toy_grouped_delta(seed=41)}
+    embeddings = {"c0": e_ref @ q_expected.T}  # source @ q_expected == target
+
+    aligned = procrustes_backstop(
+        deltas,
+        embeddings,
+        e_ref,
+        global_weights=global_weights,
+        threshold_deg=_THRESHOLD_DEG,
+        singular_floor=1e-6,
+    )["c0"]
+    q_star, _ = procrustes_align(embeddings["c0"], e_ref)
+    local = {name: global_weights[name] + delta for name, delta in deltas["c0"].items()}
+    aligned_local = {
+        name: global_weights[name] + delta for name, delta in aligned.items()
+    }
+
+    assert torch.allclose(
+        aligned_local["encoder.frame_proj.weight"],
+        q_star.T @ local["encoder.frame_proj.weight"],
+    )
+    assert torch.allclose(
+        aligned_local["predictor.in_proj.weight"],
+        local["predictor.in_proj.weight"] @ q_star,
+    )
+    assert torch.allclose(
+        aligned_local["predictor.out_proj.weight"],
+        q_star.T @ local["predictor.out_proj.weight"],
+    )
+    assert torch.allclose(
+        aligned_local["predictor.out_proj.bias"],
+        q_star.T @ local["predictor.out_proj.bias"],
+    )
+
+    hidden = torch.randn(7, _D, generator=torch.Generator().manual_seed(42))
+    encoded_local = F.linear(hidden, local["encoder.frame_proj.weight"])
+    encoded_aligned = F.linear(hidden, aligned_local["encoder.frame_proj.weight"])
+    assert torch.allclose(encoded_aligned, encoded_local @ q_star, atol=1e-5)
+
+    z_ref = torch.randn(7, _D, generator=torch.Generator().manual_seed(43))
+    hidden_local = F.linear(
+        z_ref @ q_star.T,
+        local["predictor.in_proj.weight"],
+        local["predictor.in_proj.bias"],
+    )
+    hidden_aligned = F.linear(
+        z_ref,
+        aligned_local["predictor.in_proj.weight"],
+        aligned_local["predictor.in_proj.bias"],
+    )
+    assert torch.allclose(hidden_aligned, hidden_local, atol=1e-5)
+    predicted_local = F.linear(
+        torch.tanh(hidden_local),
+        local["predictor.out_proj.weight"],
+        local["predictor.out_proj.bias"],
+    )
+    predicted_aligned = F.linear(
+        torch.tanh(hidden_aligned),
+        aligned_local["predictor.out_proj.weight"],
+        aligned_local["predictor.out_proj.bias"],
+    )
+    assert torch.allclose(predicted_aligned, predicted_local @ q_star, atol=1e-5)
+
+    for name in (
+        "encoder.patch_embed.weight",
+        "encoder.norm.weight",
+        "encoder.norm.bias",
+        "predictor.in_proj.bias",
+        "predictor.cond_proj.weight",
+        "predictor.cond_proj.bias",
+        "predictor.pos_embed",
+        "predictor.norm.weight",
+        "predictor.norm.bias",
+    ):
+        assert torch.equal(aligned[name], deltas["c0"][name])
+
+
+# --- predictor I/O: align reconstructed full local weights, then re-difference ---
 
 
 def test_realign_predictor_delta_rotates_exactly_three_params() -> None:
@@ -87,15 +170,15 @@ def test_realign_predictor_delta_rotates_exactly_three_params() -> None:
     delta = _toy_predictor_delta(seed=1)
     out = realign_predictor_delta(delta, q)
 
-    # The three conjugated params match the exact closed forms (RFC-0002 §5).
+    # Q maps row-space local latents to the reference frame: z_local @ Q = z_ref.
     assert torch.allclose(
-        out["predictor.in_proj.weight"], delta["predictor.in_proj.weight"] @ q.T
+        out["predictor.in_proj.weight"], delta["predictor.in_proj.weight"] @ q
     )
     assert torch.allclose(
-        out["predictor.out_proj.weight"], q @ delta["predictor.out_proj.weight"]
+        out["predictor.out_proj.weight"], q.T @ delta["predictor.out_proj.weight"]
     )
     assert torch.allclose(
-        out["predictor.out_proj.bias"], q @ delta["predictor.out_proj.bias"]
+        out["predictor.out_proj.bias"], q.T @ delta["predictor.out_proj.bias"]
     )
 
     # The three are ACTUALLY changed (a non-trivial rotation moved them).
@@ -150,7 +233,7 @@ def test_realign_predictor_delta_rejects_non_square_q() -> None:
         realign_predictor_delta(_toy_predictor_delta(), torch.randn(_D, _D + 1))
 
 
-# --- realign_encoder_frame_delta: the encoder terminal-frame conjugation Δ <- Q @ Δ (#262) ---
+# --- realign_encoder_frame_delta: row-space Q gives W_aligned = Q.T @ W_local (#262) ---
 
 
 def test_realign_encoder_frame_delta_rotates_only_frame_proj() -> None:
@@ -164,9 +247,9 @@ def test_realign_encoder_frame_delta_rotates_only_frame_proj() -> None:
         "encoder.frame_proj.weight": torch.randn(_D, _D),
     }
     out = realign_encoder_frame_delta(delta, q)
-    # The terminal frame surface is conjugated by Δ <- Q @ Δ (rotate the d output rows).
+    # nn.Linear emits x @ W.T, so right-multiplying row outputs by Q requires W_aligned = Q.T @ W.
     assert torch.allclose(
-        out["encoder.frame_proj.weight"], q @ delta["encoder.frame_proj.weight"]
+        out["encoder.frame_proj.weight"], q.T @ delta["encoder.frame_proj.weight"]
     )
     assert not torch.equal(
         out["encoder.frame_proj.weight"], delta["encoder.frame_proj.weight"]
@@ -200,10 +283,10 @@ def test_realign_encoder_frame_delta_missing_frame_proj_passes_through() -> None
         assert torch.equal(out[name], tensor)
 
 
-# --- procrustes_backstop: fires above threshold, byte-identical below, encoder always untouched ---
+# --- procrustes_backstop: transforms both gauge surfaces above threshold, byte-identical below ---
 
 
-def test_above_threshold_conjugates_both_gauge_surfaces() -> None:
+def test_above_threshold_transforms_both_gauge_surfaces() -> None:
     e_ref = _e_ref()
     q_c = _rot(30.0)  # 30 deg > 15 deg threshold -> the backstop FIRES
     deltas = {"c0": _toy_grouped_delta(seed=5)}
@@ -220,16 +303,16 @@ def test_above_threshold_conjugates_both_gauge_surfaces() -> None:
     q_star, _ = procrustes_align(embeddings["c0"], e_ref)
     assert abs(_rotation_angle_deg(q_star) - 30.0) < 1.0
 
-    # The encoder terminal frame surface IS conjugated (Δ <- Q @ Δ), #262.
+    # The encoder terminal frame surface is transformed in the row-space convention, #262.
     assert not torch.equal(
         aligned["encoder.frame_proj.weight"], original["encoder.frame_proj.weight"]
     )
     assert torch.allclose(
         aligned["encoder.frame_proj.weight"],
-        q_star @ original["encoder.frame_proj.weight"],
+        q_star.T @ original["encoder.frame_proj.weight"],
     )
 
-    # The three predictor params ARE conjugated.
+    # The three predictor I/O params ARE transformed.
     assert not torch.equal(
         aligned["predictor.in_proj.weight"], original["predictor.in_proj.weight"]
     )
@@ -241,11 +324,11 @@ def test_above_threshold_conjugates_both_gauge_surfaces() -> None:
     )
     assert torch.allclose(
         aligned["predictor.in_proj.weight"],
-        original["predictor.in_proj.weight"] @ q_star.T,
+        original["predictor.in_proj.weight"] @ q_star,
     )
     assert torch.allclose(
         aligned["predictor.out_proj.weight"],
-        q_star @ original["predictor.out_proj.weight"],
+        q_star.T @ original["predictor.out_proj.weight"],
     )
 
     # The NON-gauge encoder params (patch_embed/norm) are byte-identical — only the terminal frame folds.
@@ -329,10 +412,11 @@ def test_backstop_preserves_encoder_rank_where_unaligned_mean_collapses() -> Non
     the committed frame's rank, where the unaligned mean collapses it.
 
     Each participant carries the SAME high-rank terminal-frame signal ``B`` but expressed in a different
-    output gauge ``R_c`` (``encoder.frame_proj.weight`` delta = ``R_c @ B``), and its probe frame is
-    ``E_ref @ R_c`` so the backstop recovers ``Q_c* = R_c^T``. Conjugating (``Δ <- Q_c* @ Δ``) maps every
-    participant's frame delta back to ``B``, so the MEAN is ``B`` (full rank). Without the backstop the mean
-    is ``(mean_c R_c) @ B`` — averaging mutually-rotated frames cancels and collapses the rank (RFC-0002 §2.1).
+    output gauge ``R_c`` (``encoder.frame_proj.weight`` delta = ``R_c.T @ B``), and its probe frame is
+    ``E_ref @ R_c`` so the backstop recovers ``Q_c* = R_c.T``. Applying
+    ``W_aligned = Q_c*.T @ W_local`` maps every participant's frame back to ``B``, so the MEAN is ``B``
+    (full rank). Without the backstop the mean is ``(mean_c R_c.T) @ B`` — averaging mutually-rotated
+    frames cancels and collapses the rank (RFC-0002 §2.1).
     """
     from lensemble.eval.jepa_metrics import effective_rank
 
@@ -356,7 +440,7 @@ def test_backstop_preserves_encoder_rank_where_unaligned_mean_collapses() -> Non
     # gauge (random SO(d) rotations, all far above the 15-deg threshold).
     rotations = {f"c{i}": _rand_so(100 + i) for i in range(6)}
     deltas = {
-        pid: {"encoder.frame_proj.weight": r @ base} for pid, r in rotations.items()
+        pid: {"encoder.frame_proj.weight": r.T @ base} for pid, r in rotations.items()
     }
     embeddings = {pid: e_ref @ r for pid, r in rotations.items()}
 
@@ -478,7 +562,7 @@ def test_degenerate_retry_succeeds_when_relaxed_floor_admits() -> None:
         threshold_deg=_THRESHOLD_DEG,
         singular_floor=1e-3,  # strict floor the first pass trips; relaxed retry (1e-6) admits
     )
-    # The retry produced a valid Q*; the predictor delta was conjugated (the round stayed alive).
+    # The retry produced a valid Q*; the predictor delta was transformed (the round stayed alive).
     assert not torch.equal(
         out["c0"]["predictor.out_proj.weight"],
         deltas["c0"]["predictor.out_proj.weight"],

@@ -27,6 +27,12 @@ DataFormatName = Literal["lance", "hdf5", "lerobot", "lerobot-h5", "synthetic-dy
 TransportMode = Literal["in_process", "network"]
 SecureAggregationBackendName = Literal["simulated", "masking", "tee"]
 DPAccountantName = Literal["rdp", "prv"]
+Phase3ProbeHashContract = Literal[
+    "public-probe-v2",
+    "probe-source-v1",
+    "placeholder-unbound",
+    "legacy-unscoped",
+]
 
 _HEX64_LEN = 64
 
@@ -161,12 +167,19 @@ class Phase3ObservationContract(BaseModel):
 
 
 class Phase3PublicProbe(BaseModel):
-    """Pinned public-probe agreement for frame anchoring."""
+    """Phase-3 probe agreement with an explicit digest scope.
+
+    ``public-probe-v2`` binds points, landmark indices, and targets and may satisfy ``INV-PROBE-PIN``.
+    ``probe-source-v1`` is the narrower pre-target points/index fingerprint. ``placeholder-unbound`` is
+    explicit non-admission smoke metadata. ``legacy-unscoped`` exists only so checked-in schema-v1
+    registries can be read without pretending their old digest has a scope.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     probe_id: str = Field(min_length=1)
     version: int = Field(ge=1)
+    hash_contract: Phase3ProbeHashContract = "legacy-unscoped"
     content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
@@ -587,6 +600,7 @@ def default_phase3_consortium_manifest(
     probe = Phase3PublicProbe(
         probe_id="phase3-public-probe-smoke",
         version=1,
+        hash_contract="placeholder-unbound",
         content_hash="1" * 64,
     )
     participants = tuple(

@@ -38,19 +38,39 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
+          version: "0.9.18"
           enable-cache: true
-          cache-dependency-glob: pyproject.toml
+          cache-dependency-glob: uv.lock
 
       - name: Create the project venv
         run: |
           uv venv .venv --python ${{ matrix.python-version }}
           echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
+      - name: Verify and export locked dependencies
+        run: |
+          uv lock --check
+          uv export --locked --extra dev --no-emit-project --no-hashes \
+            --output-file "$RUNNER_TEMP/lensemble-constraints.txt"
+          # The lock pins the public torch version; blocking Linux jobs use its matching official
+          # `+cpu` local-version wheel so no CUDA packages enter the environment.
+          sed -i -E 's/^torch==([^ ;]+)/torch==\1+cpu/' \
+            "$RUNNER_TEMP/lensemble-constraints.txt"
+          grep -Eq '^torch==[^ ;]+\+cpu($|[ ;])' \
+            "$RUNNER_TEMP/lensemble-constraints.txt"
+
       - name: Install torch (CPU wheel — no CUDA on a blocking gate)
-        run: uv pip install "torch>=2.4,<3" --index-url https://download.pytorch.org/whl/cpu
+        run: |
+          uv pip install "torch>=2.4,<3" \
+            --constraint "$RUNNER_TEMP/lensemble-constraints.txt" \
+            --find-links https://download.pytorch.org/whl/cpu/torch/
 
       - name: Install lensemble + dev tools
-        run: uv pip install -e ".[dev]"
+        run: |
+          uv pip install -e ".[dev]" \
+            --constraint "$RUNNER_TEMP/lensemble-constraints.txt" \
+            --build-constraint "$RUNNER_TEMP/lensemble-constraints.txt" \
+            --find-links https://download.pytorch.org/whl/cpu/torch/
 
       # --- Gate 1: lint (07 §8.1) — zero findings ---
       - name: Lint — ruff check
