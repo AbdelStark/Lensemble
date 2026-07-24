@@ -17,6 +17,8 @@ import pytest
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT = _REPO_ROOT / "scripts" / "release_gates.py"
 _WORKFLOW = _REPO_ROOT / ".github" / "workflows" / "release.yml"
+_WORKFLOW_DIR = _REPO_ROOT / ".github" / "workflows"
+_USES_DIRECTIVE = re.compile(r"(?m)^\s*(?:-\s+)?uses:\s+['\"]?([^'\"\s#]+)")
 
 
 def _load():
@@ -82,6 +84,26 @@ def test_tag_workflow_materializes_all_gates_before_build() -> None:
     assert build_job is not None
     assert "needs: release-gates" in build_job.group("body")
     assert "uv lock --check" in text
+
+
+def test_external_workflow_actions_are_pinned_to_full_commit_shas() -> None:
+    failures: list[str] = []
+    matched = 0
+    workflow_paths = sorted(
+        [*_WORKFLOW_DIR.glob("*.yml"), *_WORKFLOW_DIR.glob("*.yaml")]
+    )
+
+    for path in workflow_paths:
+        for target in _USES_DIRECTIVE.findall(path.read_text(encoding="utf-8")):
+            if target.startswith(("./", "docker://")):
+                continue
+            matched += 1
+            _, separator, ref = target.rpartition("@")
+            if separator != "@" or re.fullmatch(r"[0-9a-f]{40}", ref) is None:
+                failures.append(f"{path.relative_to(_REPO_ROOT)}: {target}")
+
+    assert matched > 0
+    assert not failures, "unpinned external workflow actions:\n" + "\n".join(failures)
 
 
 def test_manual_dispatch_cannot_publish_and_secret_is_upload_scoped() -> None:

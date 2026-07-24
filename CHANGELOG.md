@@ -82,6 +82,9 @@ At release the maintainer retitles `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD
 
 ### Security
 
+- `area:ci`/`area:security`: pin every third-party GitHub Action to a verified
+  full commit SHA and refresh the workflows to Node 24-compatible official
+  releases.
 - `area:protocol`: carry participant `clipped` and `quantized` claims through
   control-message schema v2, preserve them across network transport, and
   classify deterministic replay noise and post-commit sum comparisons
