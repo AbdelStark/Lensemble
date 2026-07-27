@@ -32,7 +32,7 @@ dependencies = [
     "hydra-core>=1.3",
     "omegaconf>=2.3",
     "pydantic>=2,<3",
-    "blake3>=0.4",
+    "blake3>=1.0.9",
     "typer",
     "rich",
 ]
